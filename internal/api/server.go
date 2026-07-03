@@ -11,6 +11,7 @@ import (
 
 	"github.com/flowguard/flowguard/internal/config"
 	"github.com/flowguard/flowguard/internal/collector"
+	"github.com/flowguard/flowguard/internal/storage"
 )
 
 // CollectorProvider defines the contract for fetching collector stats and exporters.
@@ -25,6 +26,7 @@ type APIServer struct {
 	cfg       *config.Config
 	logger    *slog.Logger
 	collector CollectorProvider
+	repo      storage.FlowRepository
 }
 
 // HealthResponse represents the structure of health check outputs.
@@ -37,12 +39,13 @@ type HealthResponse struct {
 }
 
 // NewAPIServer creates and configures a new APIServer instance.
-func NewAPIServer(cfg *config.Config, logger *slog.Logger, coll CollectorProvider) *APIServer {
+func NewAPIServer(cfg *config.Config, logger *slog.Logger, coll CollectorProvider, repo storage.FlowRepository) *APIServer {
 	mux := http.NewServeMux()
 	s := &APIServer{
 		cfg:       cfg,
 		logger:    logger,
 		collector: coll,
+		repo:      repo,
 		server: &http.Server{
 			Addr:         ":" + cfg.Port,
 			Handler:      mux,

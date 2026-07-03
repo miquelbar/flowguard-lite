@@ -35,7 +35,7 @@ func TestHandleHealth(t *testing.T) {
 			DecodeErrors:    1,
 		},
 	}
-	server := NewAPIServer(cfg, logger, mockColl)
+	server := NewAPIServer(cfg, logger, mockColl, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
@@ -76,7 +76,7 @@ func TestHandleHealth(t *testing.T) {
 func TestHandleHealth_InvalidMethod(t *testing.T) {
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := NewAPIServer(cfg, logger, nil)
+	server := NewAPIServer(cfg, logger, nil, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/health", nil)
 	w := httptest.NewRecorder()
@@ -100,7 +100,7 @@ func TestHandleExporters(t *testing.T) {
 			{IP: "192.168.1.1", LastSeen: now, PacketCount: 100},
 		},
 	}
-	server := NewAPIServer(cfg, logger, mockColl)
+	server := NewAPIServer(cfg, logger, mockColl, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/exporters", nil)
 	w := httptest.NewRecorder()

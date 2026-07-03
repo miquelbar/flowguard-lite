@@ -20,3 +20,11 @@ type FlowEvent struct {
 type FlowProcessor interface {
 	Process(event *FlowEvent)
 }
+
+// TopResult represents an aggregated statistics result for Top Talkers dashboards.
+type TopResult struct {
+	Key     string `json:"key"` // e.g. IP address or port number
+	Bytes   uint64 `json:"bytes"`
+	Packets uint64 `json:"packets"`
+	Flows   uint64 `json:"flows"`
+}

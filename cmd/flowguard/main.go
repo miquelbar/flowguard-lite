@@ -12,22 +12,9 @@ import (
 	"github.com/flowguard/flowguard/internal/api"
 	"github.com/flowguard/flowguard/internal/collector"
 	"github.com/flowguard/flowguard/internal/config"
-	"github.com/flowguard/flowguard/internal/flow"
 	"github.com/flowguard/flowguard/internal/logger"
+	"github.com/flowguard/flowguard/internal/storage"
 )
-
-// LogProcessor is a temporary FlowProcessor that logs normalized flows at debug level.
-type LogProcessor struct {
-	logger *slog.Logger
-}
-
-func (p *LogProcessor) Process(event *flow.FlowEvent) {
-	p.logger.Debug("Processed flow event",
-		slog.String("src", event.SrcIP),
-		slog.String("dst", event.DstIP),
-		slog.Int("port", event.DstPort),
-		slog.Uint64("bytes", event.Bytes))
-}
 
 func main() {
 	// 1. Define and parse command line flags
@@ -45,20 +32,37 @@ func main() {
 	log := logger.InitLogger(cfg.LogLevel, cfg.Environment)
 	log.Info("Starting FlowGuard Lite daemon...", slog.String("env", cfg.Environment), slog.String("log_level", cfg.LogLevel))
 
-	// 4. Initialize Flow Collector with temporary log processor
-	proc := &LogProcessor{logger: log}
-	coll := collector.NewFlowCollector(cfg, log, proc)
-
-	// 5. Start Flow Collector
-	if err := coll.Start(); err != nil {
-		log.Error("Failed to start Flow Collector daemon", slog.String("error", err.Error()))
+	// 4. Initialize storage repository
+	repo, err := storage.NewSQLiteRepository(cfg.StorageDir, log)
+	if err != nil {
+		log.Error("Failed to initialize SQLite repository", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
-	// 6. Initialize API HTTP server
-	server := api.NewAPIServer(cfg, log, coll)
+	// Run storage retention cleanup once on startup (7-day default limit)
+	if err := repo.CleanupRetention(7); err != nil {
+		log.Warn("Failed to execute initial retention cleanup", slog.String("error", err.Error()))
+	}
 
-	// 7. Run HTTP server in a separate goroutine so we can trap signals concurrently
+	// 5. Initialize Flow Aggregator with transactional SQLite repository
+	agg := storage.NewFlowAggregator(repo, log, 15*time.Second)
+	agg.Start()
+
+	// 6. Initialize Flow Collector, using the Aggregator as the flow processor
+	coll := collector.NewFlowCollector(cfg, log, agg)
+
+	// 7. Start Flow Collector daemon
+	if err := coll.Start(); err != nil {
+		log.Error("Failed to start Flow Collector daemon", slog.String("error", err.Error()))
+		agg.Shutdown()
+		repo.Close()
+		os.Exit(1)
+	}
+
+	// 8. Initialize API HTTP server
+	server := api.NewAPIServer(cfg, log, coll, repo)
+
+	// 9. Run HTTP server in a separate goroutine so we can trap signals concurrently
 	serverErrChan := make(chan error, 1)
 	go func() {
 		if err := server.Start(); err != nil {
@@ -66,15 +70,17 @@ func main() {
 		}
 	}()
 
-	// 8. Setup signal trapping for graceful shutdown
+	// 10. Setup signal trapping for graceful shutdown
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
-	// 9. Wait for termination signal or server start failure
+	// 11. Wait for termination signal or server start failure
 	select {
 	case err := <-serverErrChan:
 		log.Error("HTTP server stopped unexpectedly", slog.String("error", err.Error()))
 		coll.Shutdown()
+		agg.Shutdown()
+		repo.Close()
 		os.Exit(1)
 
 	case sig := <-signalChan:
@@ -94,6 +100,15 @@ func main() {
 
 		// Shutdown the Flow Collector
 		coll.Shutdown()
+
+		// Shutdown the Flow Aggregator (flushes remaining in-memory states to database)
+		agg.Shutdown()
+
+		// Close SQLite repository connections
+		if err := repo.Close(); err != nil {
+			log.Error("Failed to close SQLite repository connections cleanly", slog.String("error", err.Error()))
+			shutdownFailed = true
+		}
 
 		if shutdownFailed {
 			log.Warn("Graceful shutdown finished with errors.")
