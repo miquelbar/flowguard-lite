@@ -109,6 +109,41 @@ body {
     -webkit-text-fill-color: transparent;
 }
 
+/* Navigation Links in Header */
+.nav-links {
+    display: flex;
+    gap: 0.5rem;
+    background-color: rgba(255, 255, 255, 0.03);
+    padding: 4px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.nav-link {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    padding: 0.5rem 1.25rem;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.nav-link:hover {
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+.nav-link.active {
+    background-color: rgba(99, 102, 241, 0.15);
+    color: #818cf8;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.1);
+}
+
 .controls-area {
     display: flex;
     align-items: center;
@@ -154,13 +189,31 @@ body {
     transform: translateY(-1px);
 }
 
-.btn-primary:active {
-    transform: translateY(0);
+.btn-secondary {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
 }
 
-.icon {
-    width: 16px;
-    height: 16px;
+.btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* View Views management */
+.view-content {
+    display: none;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.view-content.active {
+    display: flex;
 }
 
 /* Stats Cards */
@@ -273,6 +326,10 @@ body {
     min-height: 480px;
 }
 
+.full-width-panel {
+    width: 100%;
+}
+
 .panel-header {
     padding: 1.25rem;
     border-bottom: 1px solid var(--border-color);
@@ -281,6 +338,11 @@ body {
 .panel-header h2 {
     font-size: 1.125rem;
     font-weight: 600;
+}
+
+.panel-subtitle {
+    font-size: 0.813rem;
+    margin-top: 0.25rem;
 }
 
 .flex-header {
@@ -326,6 +388,10 @@ body {
 .form-control:focus {
     border-color: var(--primary-color);
     background-color: rgba(255,255,255,0.06);
+}
+
+.width-full {
+    width: 100%;
 }
 
 .tab-buttons {
@@ -401,6 +467,24 @@ tr:hover td {
     text-align: center;
 }
 
+.font-semibold {
+    font-weight: 600;
+}
+
+/* Device Labeling Styles */
+.badge {
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.badge-label {
+    background-color: rgba(99, 102, 241, 0.12);
+    color: #a5b4fc;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
 /* Volume Progress Bars */
 .width-progress {
     width: 120px;
@@ -439,4 +523,98 @@ tr:hover td {
 
 .table-container::-webkit-scrollbar-thumb:hover {
     background: rgba(255,255,255,0.2);
+}
+
+/* Glassmorphic Edit Dialog Modal */
+.dialog-glass {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border: 1px solid var(--border-color);
+    background: rgba(18, 22, 33, 0.9);
+    backdrop-filter: blur(20px);
+    border-radius: 16px;
+    color: var(--text-primary);
+    padding: 2rem;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+    outline: none;
+}
+
+.dialog-glass::backdrop {
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(8px);
+}
+
+.dialog-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.dialog-form h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.dialog-ip {
+    font-family: monospace;
+    color: var(--primary-color);
+    font-size: 0.938rem;
+    margin-top: -0.5rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.form-group label {
+    font-size: 0.813rem;
+    color: var(--text-secondary);
+}
+
+.dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+/* Toast Container */
+#toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 9999;
+}
+
+.toast {
+    background: rgba(22, 26, 37, 0.9);
+    border-left: 4px solid var(--primary-color);
+    border-top: 1px solid var(--border-color);
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    color: #fff;
+    padding: 0.875rem 1.25rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+    backdrop-filter: blur(8px);
+    animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toast.success {
+    border-left-color: var(--success-color);
+}
+
+@keyframes slideIn {
+    from { transform: translateX(120%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
 }

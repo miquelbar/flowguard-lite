@@ -3,29 +3,32 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
 // Config represents the application configuration.
 type Config struct {
-	Port         string `yaml:"port"`
-	NetflowPort  int    `yaml:"netflow_port"`
-	SflowPort    int    `yaml:"sflow_port"`
-	StorageDir   string `yaml:"storage_dir"`
-	LogLevel     string `yaml:"log_level"`
-	Environment  string `yaml:"environment"`
+	Port         string   `yaml:"port"`
+	NetflowPort  int      `yaml:"netflow_port"`
+	SflowPort    int      `yaml:"sflow_port"`
+	StorageDir   string   `yaml:"storage_dir"`
+	LogLevel     string   `yaml:"log_level"`
+	Environment  string   `yaml:"environment"`
+	LocalSubnets []string `yaml:"local_subnets"`
 }
 
 // DefaultConfig returns the default configuration settings.
 func DefaultConfig() *Config {
 	return &Config{
-		Port:        "8080",
-		NetflowPort: 2055,
-		SflowPort:   6343,
-		StorageDir:  "/data",
-		LogLevel:    "info",
-		Environment: "production",
+		Port:         "8080",
+		NetflowPort:  2055,
+		SflowPort:    6343,
+		StorageDir:   "/data",
+		LogLevel:     "info",
+		Environment:  "production",
+		LocalSubnets: []string{"192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12"},
 	}
 }
 
@@ -66,6 +69,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if val := os.Getenv("FLOWGUARD_ENV"); val != "" {
 		cfg.Environment = val
+	}
+	if val := os.Getenv("FLOWGUARD_LOCAL_SUBNETS"); val != "" {
+		cfg.LocalSubnets = strings.Split(val, ",")
 	}
 
 	return cfg, nil

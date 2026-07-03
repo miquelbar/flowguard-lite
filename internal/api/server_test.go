@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/flowguard/flowguard/internal/collector"
 	"github.com/flowguard/flowguard/internal/config"
 	"github.com/flowguard/flowguard/internal/flow"
+	"github.com/flowguard/flowguard/internal/storage"
 )
 
 type MockCollector struct {
@@ -38,7 +40,7 @@ func TestHandleHealth(t *testing.T) {
 			DecodeErrors:    1,
 		},
 	}
-	server := NewAPIServer(cfg, logger, mockColl, nil)
+	server := NewAPIServer(cfg, logger, mockColl, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
@@ -79,7 +81,7 @@ func TestHandleHealth(t *testing.T) {
 func TestHandleHealth_InvalidMethod(t *testing.T) {
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := NewAPIServer(cfg, logger, nil, nil)
+	server := NewAPIServer(cfg, logger, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/health", nil)
 	w := httptest.NewRecorder()
@@ -103,7 +105,7 @@ func TestHandleExporters(t *testing.T) {
 			{IP: "192.168.1.1", LastSeen: now, PacketCount: 100},
 		},
 	}
-	server := NewAPIServer(cfg, logger, mockColl, nil)
+	server := NewAPIServer(cfg, logger, mockColl, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/exporters", nil)
 	w := httptest.NewRecorder()
@@ -154,6 +156,27 @@ func (m *MockFlowRepository) GetTopDestinations(ctx context.Context, start, end 
 
 func (m *MockFlowRepository) GetTopPorts(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error) {
 	return m.Ports, m.Err
+}
+
+func (m *MockFlowRepository) UpsertDevice(ctx context.Context, ip string, hostname string, lastSeen time.Time) error {
+	return nil
+}
+
+func (m *MockFlowRepository) UpdateDeviceLabel(ctx context.Context, ip string, label string) error {
+	if ip == "192.168.1.10" {
+		return m.Err
+	}
+	return errors.New("device not found")
+}
+
+func (m *MockFlowRepository) GetDevice(ctx context.Context, ip string) (*storage.Device, error) {
+	return nil, m.Err
+}
+
+func (m *MockFlowRepository) ListDevices(ctx context.Context) ([]storage.Device, error) {
+	return []storage.Device{
+		{IP: "192.168.1.10", Label: "Discovered Device", Hostname: "test.local"},
+	}, m.Err
 }
 
 func TestParseQueryParams_Valid(t *testing.T) {
@@ -212,7 +235,7 @@ func TestHandleTopTalkers(t *testing.T) {
 		},
 	}
 
-	server := NewAPIServer(cfg, logger, nil, mockRepo)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo)
 
 	// 1. Sources check
 	req := httptest.NewRequest(http.MethodGet, "/api/top/sources", nil)
@@ -263,7 +286,7 @@ func TestHandleTopTalkers(t *testing.T) {
 func TestHandleUI(t *testing.T) {
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := NewAPIServer(cfg, logger, nil, nil)
+	server := NewAPIServer(cfg, logger, nil, nil, nil)
 
 	// Fetch root "/"
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -297,3 +320,48 @@ func TestHandleUI(t *testing.T) {
 		t.Errorf("expected OK (200) for app.js, got %d", w.Code)
 	}
 }
+
+func TestHandleDevices(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockRepo := &MockFlowRepository{}
+
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo)
+
+	// 1. GET /api/devices
+	req := httptest.NewRequest(http.MethodGet, "/api/devices", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status OK, got %d", w.Code)
+	}
+
+	var devices []storage.Device
+	if err := json.Unmarshal(w.Body.Bytes(), &devices); err != nil {
+		t.Fatalf("failed decoding devices: %v", err)
+	}
+	if len(devices) != 1 || devices[0].IP != "192.168.1.10" {
+		t.Errorf("unexpected devices result: %v", devices)
+	}
+
+	// 2. PUT /api/devices/192.168.1.10/label (valid)
+	bodyStr := `{"label": "My Router"}`
+	req = httptest.NewRequest(http.MethodPut, "/api/devices/192.168.1.10/label", strings.NewReader(bodyStr))
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status OK, got %d", w.Code)
+	}
+
+	// 3. PUT /api/devices/1.1.1.1/label (not found)
+	req = httptest.NewRequest(http.MethodPut, "/api/devices/1.1.1.1/label", strings.NewReader(bodyStr))
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status NotFound (404), got %d", w.Code)
+	}
+}
+

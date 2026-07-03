@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -16,10 +17,13 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// SQLiteRepository manages Daily SQLite Shards for aggregated flow data.
+// SQLiteRepository manages Daily SQLite Shards for aggregated flow data and metadata.
 type SQLiteRepository struct {
 	dataDir string
 	logger  *slog.Logger
+
+	// Persistent Metadata Database
+	metaDB *sql.DB
 
 	mu     sync.RWMutex
 	shards map[string]*sql.DB
@@ -33,9 +37,46 @@ func NewSQLiteRepository(dataDir string, logger *slog.Logger) (*SQLiteRepository
 		return nil, fmt.Errorf("failed to create flows storage dir: %w", err)
 	}
 
+	// 1. Initialize persistent metadata database
+	metaPath := filepath.Join(dataDir, "metadata.sqlite")
+	metaDB, err := sql.Open("sqlite", metaPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open metadata database: %w", err)
+	}
+
+	// 2. Optimize metadata database performance
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL;",
+		"PRAGMA synchronous=NORMAL;",
+		"PRAGMA busy_timeout=5000;",
+	}
+	for _, p := range pragmas {
+		if _, err := metaDB.Exec(p); err != nil {
+			metaDB.Close()
+			return nil, fmt.Errorf("failed pragma for metadata: %s, err: %w", p, err)
+		}
+	}
+
+	// 3. Create persistent tables
+	_, err = metaDB.Exec(`
+		CREATE TABLE IF NOT EXISTS devices (
+			ip TEXT PRIMARY KEY,
+			label TEXT NOT NULL DEFAULT '',
+			hostname TEXT NOT NULL DEFAULT '',
+			vendor TEXT NOT NULL DEFAULT '',
+			first_seen DATETIME NOT NULL,
+			last_seen DATETIME NOT NULL
+		);
+	`)
+	if err != nil {
+		metaDB.Close()
+		return nil, fmt.Errorf("failed schema metadata setup: %w", err)
+	}
+
 	return &SQLiteRepository{
 		dataDir: flowsDir,
 		logger:  logger,
+		metaDB:  metaDB,
 		shards:  make(map[string]*sql.DB),
 	}, nil
 }
@@ -46,6 +87,8 @@ func (r *SQLiteRepository) Close() error {
 	defer r.mu.Unlock()
 
 	var firstErr error
+
+	// Close shards
 	for date, db := range r.shards {
 		r.logger.Debug("Closing SQLite shard connection", slog.String("date", date))
 		if err := db.Close(); err != nil && firstErr == nil {
@@ -53,6 +96,15 @@ func (r *SQLiteRepository) Close() error {
 		}
 	}
 	r.shards = make(map[string]*sql.DB)
+
+	// Close metadata database
+	if r.metaDB != nil {
+		r.logger.Debug("Closing SQLite metadata database connection")
+		if err := r.metaDB.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+
 	return firstErr
 }
 
@@ -128,7 +180,6 @@ func (r *SQLiteRepository) SaveAggregates(ctx context.Context, ts time.Time, agg
 	defer stmt.Close()
 
 	for _, agg := range aggregates {
-		// Convert time to unix timestamp
 		unixTs := agg.Timestamp.Unix()
 		_, err := stmt.ExecContext(ctx,
 			unixTs,
@@ -138,7 +189,7 @@ func (r *SQLiteRepository) SaveAggregates(ctx context.Context, ts time.Time, agg
 			agg.Protocol,
 			agg.Bytes,
 			agg.Packets,
-			agg.Packets, // Flow count initially matches packet count or is 1 for aggregates
+			agg.Packets,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to write flow record: %w", err)
@@ -159,7 +210,6 @@ func (r *SQLiteRepository) GetTopSources(ctx context.Context, start, end time.Ti
 		return nil, err
 	}
 
-	// Query each shard, combine results in memory
 	merged := make(map[string]*flow.TopResult)
 	startUnix := start.Unix()
 	endUnix := end.Unix()
@@ -234,6 +284,124 @@ func (r *SQLiteRepository) GetTopPorts(ctx context.Context, start, end time.Time
 	return sortAndLimit(merged, limit), nil
 }
 
+// === DeviceRepository Implementation ===
+
+// UpsertDevice registers or updates a device's last-seen status and hostname.
+func (r *SQLiteRepository) UpsertDevice(ctx context.Context, ip string, hostname string, lastSeen time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	lastSeenUnix := lastSeen.Format(time.RFC3339)
+
+	// If hostname is empty, we don't want to overwrite an existing hostname with an empty string!
+	// We handle this conditionally using CASE WHEN.
+	_, err := r.metaDB.ExecContext(ctx, `
+		INSERT INTO devices (ip, hostname, first_seen, last_seen)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(ip) DO UPDATE SET
+			last_seen = ?,
+			hostname = CASE WHEN ? != '' THEN ? ELSE hostname END
+	`, ip, hostname, lastSeenUnix, lastSeenUnix, lastSeenUnix, hostname, hostname)
+	if err != nil {
+		return fmt.Errorf("failed to upsert device IP %s: %w", ip, err)
+	}
+	return nil
+}
+
+// UpdateDeviceLabel manually sets the descriptive label for a device.
+func (r *SQLiteRepository) UpdateDeviceLabel(ctx context.Context, ip string, label string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	res, err := r.metaDB.ExecContext(ctx, `
+		UPDATE devices SET label = ? WHERE ip = ?
+	`, label, ip)
+	if err != nil {
+		return fmt.Errorf("failed to update device label: %w", err)
+	}
+
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return errors.New("device not found")
+	}
+	return nil
+}
+
+// GetDevice fetches details of a single device.
+func (r *SQLiteRepository) GetDevice(ctx context.Context, ip string) (*Device, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var d Device
+	var firstSeenStr, lastSeenStr string
+
+	err := r.metaDB.QueryRowContext(ctx, `
+		SELECT ip, label, hostname, vendor, first_seen, last_seen
+		FROM devices
+		WHERE ip = ?
+	`, ip).Scan(&d.IP, &d.Label, &d.Hostname, &d.Vendor, &firstSeenStr, &lastSeenStr)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil // Return nil, nil when device is not found
+		}
+		return nil, fmt.Errorf("failed to query device %s: %w", ip, err)
+	}
+
+	// Parse timestamps
+	if t, err := time.Parse(time.RFC3339, firstSeenStr); err == nil {
+		d.FirstSeen = t
+	}
+	if t, err := time.Parse(time.RFC3339, lastSeenStr); err == nil {
+		d.LastSeen = t
+	}
+
+	return &d, nil
+}
+
+// ListDevices lists all discovered network devices.
+func (r *SQLiteRepository) ListDevices(ctx context.Context) ([]Device, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	rows, err := r.metaDB.QueryContext(ctx, `
+		SELECT ip, label, hostname, vendor, first_seen, last_seen
+		FROM devices
+		ORDER BY last_seen DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query devices: %w", err)
+	}
+	defer rows.Close()
+
+	var devices []Device
+	for rows.Next() {
+		var d Device
+		var firstSeenStr, lastSeenStr string
+
+		if err := rows.Scan(&d.IP, &d.Label, &d.Hostname, &d.Vendor, &firstSeenStr, &lastSeenStr); err != nil {
+			return nil, fmt.Errorf("failed to scan device: %w", err)
+		}
+
+		if t, err := time.Parse(time.RFC3339, firstSeenStr); err == nil {
+			d.FirstSeen = t
+		}
+		if t, err := time.Parse(time.RFC3339, lastSeenStr); err == nil {
+			d.LastSeen = t
+		}
+
+		devices = append(devices, d)
+	}
+
+	if devices == nil {
+		devices = []Device{}
+	}
+	return devices, nil
+}
+
 // Helper: Open / cache daily SQLite shards and verify table schema.
 func (r *SQLiteRepository) getOrCreateShard(dateStr string) (*sql.DB, error) {
 	r.mu.Lock()
@@ -249,7 +417,6 @@ func (r *SQLiteRepository) getOrCreateShard(dateStr string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	// 1. Optimize SQLite performance for high aggregates writes
 	pragmas := []string{
 		"PRAGMA journal_mode=WAL;",
 		"PRAGMA synchronous=NORMAL;",
@@ -262,7 +429,6 @@ func (r *SQLiteRepository) getOrCreateShard(dateStr string) (*sql.DB, error) {
 		}
 	}
 
-	// 2. Initialize schema tables
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS flow_aggregates (
 			bucket_ts INTEGER NOT NULL,
@@ -292,7 +458,6 @@ func (r *SQLiteRepository) getOrCreateShard(dateStr string) (*sql.DB, error) {
 func (r *SQLiteRepository) getShardsInRange(start, end time.Time) ([]*sql.DB, error) {
 	var res []*sql.DB
 
-	// Iterate daily step from start date to end date
 	curr := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
 	limit := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, end.Location())
 
@@ -300,7 +465,6 @@ func (r *SQLiteRepository) getShardsInRange(start, end time.Time) ([]*sql.DB, er
 		dateStr := curr.Format("2006-01-02")
 		path := filepath.Join(r.dataDir, dateStr+".sqlite")
 
-		// Only query if the file exists on disk, or is already cached
 		exists := false
 		r.mu.RLock()
 		_, cached := r.shards[dateStr]
@@ -338,7 +502,6 @@ func (r *SQLiteRepository) mergeRows(rows *sql.Rows, merged map[string]*flow.Top
 			continue
 		}
 
-		// Convert key (can be string or int) to string key representation
 		var key string
 		switch v := keyRaw.(type) {
 		case string:
@@ -370,15 +533,11 @@ func sortAndLimit(m map[string]*flow.TopResult, limit int) []flow.TopResult {
 		return []flow.TopResult{}
 	}
 
-	// Map values to slice
 	slice := make([]flow.TopResult, 0, len(m))
 	for _, val := range m {
 		slice = append(slice, *val)
 	}
 
-	// Bubble sort or sort package. Bubble/Selection sort here or custom sort to avoid import overhead.
-	// Go standard sorting is simple:
-	// We can use slices.SortFunc or a simple sorting loop. Let's do a simple sort:
 	for i := 0; i < len(slice); i++ {
 		for j := i + 1; j < len(slice); j++ {
 			if slice[i].Bytes < slice[j].Bytes {

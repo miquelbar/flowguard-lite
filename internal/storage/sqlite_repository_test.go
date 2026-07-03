@@ -176,6 +176,66 @@ func TestSQLiteRepository_Retention(t *testing.T) {
 	repo.Close()
 }
 
+func TestSQLiteRepository_Devices(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sqlite_devices_test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo, err := NewSQLiteRepository(tmpDir, logger)
+	if err != nil {
+		t.Fatalf("failed to create repo: %v", err)
+	}
+	defer repo.Close()
+
+	ctx := context.Background()
+	now := time.Now().Truncate(time.Second) // SQLite string conversion accuracy
+
+	// 1. Upsert a new device
+	err = repo.UpsertDevice(ctx, "192.168.1.50", "printer.local", now)
+	if err != nil {
+		t.Fatalf("failed to upsert: %v", err)
+	}
+
+	// 2. Fetch it
+	dev, err := repo.GetDevice(ctx, "192.168.1.50")
+	if err != nil {
+		t.Fatalf("failed to get: %v", err)
+	}
+	if dev == nil {
+		t.Fatal("expected device to be found, got nil")
+	}
+	if dev.IP != "192.168.1.50" || dev.Hostname != "printer.local" || dev.Label != "" {
+		t.Errorf("unexpected device values: %+v", dev)
+	}
+
+	// 3. Update manual label
+	err = repo.UpdateDeviceLabel(ctx, "192.168.1.50", "Office Printer")
+	if err != nil {
+		t.Fatalf("failed to update label: %v", err)
+	}
+
+	// 4. Verify update
+	dev, err = repo.GetDevice(ctx, "192.168.1.50")
+	if err != nil {
+		t.Fatalf("failed to get: %v", err)
+	}
+	if dev.Label != "Office Printer" {
+		t.Errorf("expected label 'Office Printer', got '%s'", dev.Label)
+	}
+
+	// 5. List devices
+	devices, err := repo.ListDevices(ctx)
+	if err != nil {
+		t.Fatalf("failed to list: %v", err)
+	}
+	if len(devices) != 1 || devices[0].IP != "192.168.1.50" {
+		t.Errorf("unexpected devices list: %v", devices)
+	}
+}
+
 func BenchmarkSQLiteRepository_SaveAggregates(b *testing.B) {
 	tmpDir, err := os.MkdirTemp("", "sqlite_bench")
 	if err != nil {

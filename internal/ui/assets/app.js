@@ -1,20 +1,44 @@
 // FlowGuard Lite Dashboard Logic Engine
 document.addEventListener("DOMContentLoaded", () => {
+    let activeView = "dashboard";
     let activeTab = "sources";
     let autoRefreshTimer = null;
+    
+    // In-memory data states
     let talkersData = [];
     let exportersData = [];
+    let devicesData = [];
+
+    // Navigation elements
+    const navDashboard = document.getElementById("nav-dashboard");
+    const navDevices = document.getElementById("nav-devices");
+    const viewDashboard = document.getElementById("view-dashboard");
+    const viewDevices = document.getElementById("view-devices");
 
     // Elements
     const btnRefresh = document.getElementById("btn-refresh");
     const inputSearch = document.getElementById("input-search");
+    const inputDeviceSearch = document.getElementById("input-device-search");
+    
+    // Stats elements
     const valPackets = document.getElementById("val-packets");
     const valDrops = document.getElementById("val-drops");
     const valErrors = document.getElementById("val-errors");
     const valQueue = document.getElementById("val-queue");
+
+    // Table elements
     const tblExporters = document.getElementById("tbl-exporters").querySelector("tbody");
     const tblTopTalkers = document.getElementById("tbl-top-talkers").querySelector("tbody");
+    const tblDevices = document.getElementById("tbl-devices").querySelector("tbody");
     const tabButtons = document.querySelectorAll(".tab-btn");
+
+    // Modal dialog elements
+    const dialogLabel = document.getElementById("dialog-label");
+    const dialogIpLabel = document.getElementById("dialog-ip-label");
+    const inputLabelVal = document.getElementById("input-label-val");
+    const btnDialogCancel = document.getElementById("btn-dialog-cancel");
+    const toastContainer = document.getElementById("toast-container");
+    let currentEditIP = "";
 
     // Helper: format bytes into human-readable representation
     function formatBytes(bytes) {
@@ -34,7 +58,20 @@ document.addEventListener("DOMContentLoaded", () => {
     function formatTime(isoStr) {
         if (!isoStr) return "-";
         const date = new Date(isoStr);
-        return date.toLocaleTimeString();
+        return date.toLocaleTimeString() + " " + date.toLocaleDateString();
+    }
+
+    // Helper: show toast notification
+    function showToast(message, type = "success") {
+        const toast = document.createElement("div");
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        toastContainer.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.opacity = "0";
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
     }
 
     // Fetch Stats & Health counters
@@ -79,6 +116,18 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Fetch Device Inventory list
+    async function fetchDevices() {
+        try {
+            const resp = await fetch("/api/devices");
+            if (!resp.ok) throw new Error("Devices query failed");
+            devicesData = await resp.json();
+            renderDevices();
+        } catch (err) {
+            console.error("Error fetching devices: ", err);
+        }
+    }
+
     // Render Exporters to table
     function renderExporters() {
         if (!exportersData || exportersData.length === 0) {
@@ -98,18 +147,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // Render Top Talkers to table with progress bars
     function renderTopTalkers() {
         const query = inputSearch.value.trim().toLowerCase();
-        
-        // Apply search filter locally
-        const filtered = talkersData.filter(item => {
-            return item.key.toLowerCase().includes(query);
-        });
+        const filtered = talkersData.filter(item => item.key.toLowerCase().includes(query));
 
         if (filtered.length === 0) {
             tblTopTalkers.innerHTML = `<tr><td colspan="5" class="text-center text-muted">No records match the active filters.</td></tr>`;
             return;
         }
 
-        // Find max byte volume for progress bar calculation
         const maxBytes = Math.max(...filtered.map(i => i.bytes), 1);
 
         tblTopTalkers.innerHTML = filtered.map(item => {
@@ -130,14 +174,78 @@ document.addEventListener("DOMContentLoaded", () => {
         }).join('');
     }
 
+    // Render Device list to table
+    function renderDevices() {
+        const query = inputDeviceSearch.value.trim().toLowerCase();
+        const filtered = devicesData.filter(dev => {
+            return dev.ip.toLowerCase().includes(query) || 
+                   (dev.hostname && dev.hostname.toLowerCase().includes(query)) ||
+                   (dev.label && dev.label.toLowerCase().includes(query));
+        });
+
+        if (filtered.length === 0) {
+            tblDevices.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No devices match active search filters.</td></tr>`;
+            return;
+        }
+
+        tblDevices.innerHTML = filtered.map(dev => `
+            <tr data-ip="${dev.ip}">
+                <td class="font-semibold">${dev.ip}</td>
+                <td class="text-muted">${dev.hostname || "<i>Unresolved</i>"}</td>
+                <td>${dev.label ? `<span class="badge badge-label">${dev.label}</span>` : "<span class="text-muted">-</span>"}</td>
+                <td>${formatTime(dev.first_seen)}</td>
+                <td>${formatTime(dev.last_seen)}</td>
+                <td class="text-center">
+                    <button class="btn-secondary btn-edit-label" data-ip="${dev.ip}" data-label="${dev.label || ""}">Edit</button>
+                </td>
+            </tr>
+        `).join('');
+
+        // Attach listeners to newly created Edit buttons
+        tblDevices.querySelectorAll(".btn-edit-label").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                currentEditIP = e.target.getAttribute("data-ip");
+                const currentLabel = e.target.getAttribute("data-label");
+                dialogIpLabel.textContent = `IP: ${currentEditIP}`;
+                inputLabelVal.value = currentLabel;
+                dialogLabel.showModal();
+            });
+        });
+    }
+
     // Perform full page data fetch
     async function loadData() {
-        await Promise.all([
-            fetchHealth(),
-            fetchExporters(),
-            fetchTopTalkers()
-        ]);
+        if (activeView === "dashboard") {
+            await Promise.all([
+                fetchHealth(),
+                fetchExporters(),
+                fetchTopTalkers()
+            ]);
+        } else if (activeView === "devices") {
+            await fetchDevices();
+        }
     }
+
+    // Switch between SPA views
+    function switchView(viewName) {
+        activeView = viewName;
+        if (viewName === "dashboard") {
+            navDashboard.classList.add("active");
+            navDevices.classList.remove("active");
+            viewDashboard.classList.add("active");
+            viewDevices.classList.remove("active");
+        } else {
+            navDashboard.classList.remove("active");
+            navDevices.classList.add("active");
+            viewDashboard.classList.remove("active");
+            viewDevices.classList.add("active");
+        }
+        loadData();
+    }
+
+    // Navigation Button Listeners
+    navDashboard.addEventListener("click", () => switchView("dashboard"));
+    navDevices.addEventListener("click", () => switchView("devices"));
 
     // Handle Manual Refresh
     btnRefresh.addEventListener("click", () => {
@@ -145,20 +253,46 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Handle Search input filtering
-    inputSearch.addEventListener("input", () => {
-        renderTopTalkers();
-    });
+    inputSearch.addEventListener("input", () => renderTopTalkers());
+    inputDeviceSearch.addEventListener("input", () => renderDevices());
 
-    // Handle Tab buttons click
+    // Handle Tab buttons click for Top Talkers
     tabButtons.forEach(btn => {
         btn.addEventListener("click", (e) => {
             tabButtons.forEach(b => b.classList.remove("active"));
             e.target.classList.add("active");
             activeTab = e.target.getAttribute("data-tab");
-            
-            // Reload Top Talkers for the new tab selection
             fetchTopTalkers();
         });
+    });
+
+    // Modal dialog cancel action
+    btnDialogCancel.addEventListener("click", () => {
+        dialogLabel.close();
+    });
+
+    // Save label submission
+    dialogLabel.querySelector("form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const newLabel = inputLabelVal.value.trim();
+
+        try {
+            const resp = await fetch(`/api/devices/${currentEditIP}/label`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ label: newLabel })
+            });
+
+            if (!resp.ok) throw new Error("Failed to save device label");
+
+            showToast(`Label for ${currentEditIP} updated successfully!`);
+            dialogLabel.close();
+            fetchDevices(); // Reload device list
+        } catch (err) {
+            showToast(err.message, "error");
+        }
     });
 
     // Initial Load & Auto-Refresh Setup (every 5 seconds)

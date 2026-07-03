@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -164,3 +165,72 @@ func (s *APIServer) handleTopPorts(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("Failed to encode top ports response", slog.String("error", err.Error()))
 	}
 }
+
+// handleListDevices returns the list of discovered devices.
+func (s *APIServer) handleListDevices(w http.ResponseWriter, r *http.Request) {
+	if s.deviceRepo == nil {
+		writeError(w, s.logger, http.StatusInternalServerError, "device metadata repository is not configured")
+		return
+	}
+
+	devices, err := s.deviceRepo.ListDevices(r.Context())
+	if err != nil {
+		s.logger.Error("Failed to list discovered devices", slog.String("error", err.Error()))
+		writeError(w, s.logger, http.StatusInternalServerError, "internal database error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(devices); err != nil {
+		s.logger.Error("Failed to encode devices list response", slog.String("error", err.Error()))
+	}
+}
+
+// handleUpdateDeviceLabel updates the manual label of a device.
+func (s *APIServer) handleUpdateDeviceLabel(w http.ResponseWriter, r *http.Request) {
+	if s.deviceRepo == nil {
+		writeError(w, s.logger, http.StatusInternalServerError, "device metadata repository is not configured")
+		return
+	}
+
+	ip := r.PathValue("ip")
+	if net.ParseIP(ip) == nil {
+		writeError(w, s.logger, http.StatusBadRequest, "invalid IP address format")
+		return
+	}
+
+	var req struct {
+		Label string `json:"label"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, s.logger, http.StatusBadRequest, "failed parsing request body")
+		return
+	}
+
+	// Validate input length
+	if len(req.Label) > 100 {
+		writeError(w, s.logger, http.StatusBadRequest, "device label must be 100 characters or less")
+		return
+	}
+
+	err := s.deviceRepo.UpdateDeviceLabel(r.Context(), ip, req.Label)
+	if err != nil {
+		s.logger.Error("Failed updating device label",
+			slog.String("ip", ip),
+			slog.String("label", req.Label),
+			slog.String("error", err.Error()))
+		
+		if err.Error() == "device not found" {
+			writeError(w, s.logger, http.StatusNotFound, "device not found in inventory")
+			return
+		}
+		writeError(w, s.logger, http.StatusInternalServerError, "internal database update error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+

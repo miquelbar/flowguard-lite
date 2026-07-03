@@ -23,11 +23,12 @@ type CollectorProvider interface {
 
 // APIServer manages the lifecycle of the HTTP REST API server.
 type APIServer struct {
-	server    *http.Server
-	cfg       *config.Config
-	logger    *slog.Logger
-	collector CollectorProvider
-	repo      storage.FlowRepository
+	server     *http.Server
+	cfg        *config.Config
+	logger     *slog.Logger
+	collector  CollectorProvider
+	repo       storage.FlowRepository
+	deviceRepo storage.DeviceRepository
 }
 
 // HealthResponse represents the structure of health check outputs.
@@ -40,13 +41,20 @@ type HealthResponse struct {
 }
 
 // NewAPIServer creates and configures a new APIServer instance.
-func NewAPIServer(cfg *config.Config, logger *slog.Logger, coll CollectorProvider, repo storage.FlowRepository) *APIServer {
+func NewAPIServer(
+	cfg *config.Config,
+	logger *slog.Logger,
+	coll CollectorProvider,
+	repo storage.FlowRepository,
+	deviceRepo storage.DeviceRepository,
+) *APIServer {
 	mux := http.NewServeMux()
 	s := &APIServer{
-		cfg:       cfg,
-		logger:    logger,
-		collector: coll,
-		repo:      repo,
+		cfg:        cfg,
+		logger:     logger,
+		collector:  coll,
+		repo:       repo,
+		deviceRepo: deviceRepo,
 		server: &http.Server{
 			Addr:         ":" + cfg.Port,
 			Handler:      mux,
@@ -63,6 +71,11 @@ func NewAPIServer(cfg *config.Config, logger *slog.Logger, coll CollectorProvide
 	mux.HandleFunc("/api/top/sources", s.handleTopSources)
 	mux.HandleFunc("/api/top/destinations", s.handleTopDestinations)
 	mux.HandleFunc("/api/top/ports", s.handleTopPorts)
+
+	// Device inventory endpoints (Go 1.22+ wildcard patterns)
+	mux.HandleFunc("GET /api/devices", s.handleListDevices)
+	mux.HandleFunc("PUT /api/devices/{ip}/label", s.handleUpdateDeviceLabel)
+
 	mux.Handle("/", ui.Handler())
 
 	return s

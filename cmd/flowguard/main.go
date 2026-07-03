@@ -12,6 +12,7 @@ import (
 	"github.com/flowguard/flowguard/internal/api"
 	"github.com/flowguard/flowguard/internal/collector"
 	"github.com/flowguard/flowguard/internal/config"
+	"github.com/flowguard/flowguard/internal/device"
 	"github.com/flowguard/flowguard/internal/logger"
 	"github.com/flowguard/flowguard/internal/storage"
 )
@@ -48,21 +49,27 @@ func main() {
 	agg := storage.NewFlowAggregator(repo, log, 15*time.Second)
 	agg.Start()
 
-	// 6. Initialize Flow Collector, using the Aggregator as the flow processor
-	coll := collector.NewFlowCollector(cfg, log, agg)
+	// 6. Initialize Device Profiler with local subnets and downstream aggregator
+	profiler := device.NewDeviceProfiler(repo, log, cfg.LocalSubnets, agg)
+	profiler.Start()
 
-	// 7. Start Flow Collector daemon
+	// 7. Initialize Flow Collector, using the Profiler as the flow processor
+	coll := collector.NewFlowCollector(cfg, log, profiler)
+
+	// 8. Start Flow Collector daemon
 	if err := coll.Start(); err != nil {
 		log.Error("Failed to start Flow Collector daemon", slog.String("error", err.Error()))
+		coll.Shutdown()
+		profiler.Shutdown()
 		agg.Shutdown()
 		repo.Close()
 		os.Exit(1)
 	}
 
-	// 8. Initialize API HTTP server
-	server := api.NewAPIServer(cfg, log, coll, repo)
+	// 9. Initialize API HTTP server
+	server := api.NewAPIServer(cfg, log, coll, repo, repo)
 
-	// 9. Run HTTP server in a separate goroutine so we can trap signals concurrently
+	// 10. Run HTTP server in a separate goroutine so we can trap signals concurrently
 	serverErrChan := make(chan error, 1)
 	go func() {
 		if err := server.Start(); err != nil {
@@ -70,15 +77,16 @@ func main() {
 		}
 	}()
 
-	// 10. Setup signal trapping for graceful shutdown
+	// 11. Setup signal trapping for graceful shutdown
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
-	// 11. Wait for termination signal or server start failure
+	// 12. Wait for termination signal or server start failure
 	select {
 	case err := <-serverErrChan:
 		log.Error("HTTP server stopped unexpectedly", slog.String("error", err.Error()))
 		coll.Shutdown()
+		profiler.Shutdown()
 		agg.Shutdown()
 		repo.Close()
 		os.Exit(1)
@@ -100,6 +108,9 @@ func main() {
 
 		// Shutdown the Flow Collector
 		coll.Shutdown()
+
+		// Shutdown the Device Profiler (stops background reverse DNS lookups)
+		profiler.Shutdown()
 
 		// Shutdown the Flow Aggregator (flushes remaining in-memory states to database)
 		agg.Shutdown()
