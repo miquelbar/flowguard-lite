@@ -23,6 +23,7 @@
             <nav class="nav-links">
                 <button id="nav-dashboard" class="nav-link active">Traffic Analysis</button>
                 <button id="nav-devices" class="nav-link">Device Inventory</button>
+                <button id="nav-anomalies" class="nav-link">Anomaly Alerts</button>
             </nav>
 
             <div class="controls-area">
@@ -226,6 +227,48 @@
                     </div>
                 </section>
             </main>
+        </div>
+
+        <!-- VIEW 3: Anomalies Feed -->
+        <div id="view-anomalies" class="view-content">
+            <section class="panel full-width-panel">
+                <div class="panel-header flex-header">
+                    <div>
+                        <h2>Behavioral Alerts Feed</h2>
+                        <p class="panel-subtitle text-muted">Real-time anomaly detections flagged on local network nodes</p>
+                    </div>
+                    <div class="filter-controls">
+                        <div class="tab-buttons">
+                            <button class="triage-filter-btn active" data-status="all">All Alerts</button>
+                            <button class="triage-filter-btn" data-status="active">Active</button>
+                            <button class="triage-filter-btn" data-status="acknowledged">Acknowledged</button>
+                            <button class="triage-filter-btn" data-status="silenced">Silenced</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="table-container">
+                        <table id="tbl-anomalies">
+                            <thead>
+                                <tr>
+                                    <th>Device IP</th>
+                                    <th>Anomaly Type</th>
+                                    <th>Severity</th>
+                                    <th>Description</th>
+                                    <th>Triggered At</th>
+                                    <th>Status</th>
+                                    <th class="text-center">Triage Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted">No anomalies detected. All nodes are functioning within baseline.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
         </div>
 
         <!-- Toast Notifications -->

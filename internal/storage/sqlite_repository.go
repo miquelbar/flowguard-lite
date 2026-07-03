@@ -79,6 +79,20 @@ func NewSQLiteRepository(dataDir string, logger *slog.Logger) (*SQLiteRepository
 			updated_at DATETIME NOT NULL,
 			FOREIGN KEY(ip) REFERENCES devices(ip) ON DELETE CASCADE
 		);
+
+		CREATE TABLE IF NOT EXISTS anomalies (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			ip TEXT NOT NULL,
+			type TEXT NOT NULL,
+			description TEXT NOT NULL,
+			severity TEXT NOT NULL DEFAULT 'medium',
+			status TEXT NOT NULL DEFAULT 'active',
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			FOREIGN KEY(ip) REFERENCES devices(ip) ON DELETE CASCADE
+		);
+		CREATE INDEX IF NOT EXISTS idx_anomalies_created ON anomalies (created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_anomalies_ip ON anomalies (ip);
 	`)
 	if err != nil {
 		metaDB.Close()
@@ -465,6 +479,97 @@ func (r *SQLiteRepository) GetBaseline(ctx context.Context, ip string) (*DeviceB
 	}
 
 	return &b, nil
+}
+
+// SaveAnomaly registers a new behavioral alert.
+func (r *SQLiteRepository) SaveAnomaly(ctx context.Context, a *Anomaly) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	createdStr := a.CreatedAt.Format(time.RFC3339)
+	updatedStr := a.UpdatedAt.Format(time.RFC3339)
+
+	res, err := r.metaDB.ExecContext(ctx, `
+		INSERT INTO anomalies (ip, type, description, severity, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, a.IP, a.Type, a.Description, a.Severity, a.Status, createdStr, updatedStr)
+	if err != nil {
+		return fmt.Errorf("failed to save anomaly for IP %s: %w", a.IP, err)
+	}
+
+	id, err := res.LastInsertId()
+	if err == nil {
+		a.ID = id
+	}
+
+	return nil
+}
+
+// UpdateAnomalyStatus reviews, silences, or acknowledges an alert.
+func (r *SQLiteRepository) UpdateAnomalyStatus(ctx context.Context, id int64, status string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	updatedStr := time.Now().Format(time.RFC3339)
+
+	res, err := r.metaDB.ExecContext(ctx, `
+		UPDATE anomalies SET status = ?, updated_at = ? WHERE id = ?
+	`, status, updatedStr, id)
+	if err != nil {
+		return fmt.Errorf("failed to update anomaly status: %w", err)
+	}
+
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return errors.New("anomaly not found")
+	}
+
+	return nil
+}
+
+// ListAnomalies queries recent anomalies triggered.
+func (r *SQLiteRepository) ListAnomalies(ctx context.Context, limit int) ([]Anomaly, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	rows, err := r.metaDB.QueryContext(ctx, `
+		SELECT id, ip, type, description, severity, status, created_at, updated_at
+		FROM anomalies
+		ORDER BY created_at DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed query anomalies list: %w", err)
+	}
+	defer rows.Close()
+
+	var list []Anomaly
+	for rows.Next() {
+		var a Anomaly
+		var createdStr, updatedStr string
+
+		err = rows.Scan(&a.ID, &a.IP, &a.Type, &a.Description, &a.Severity, &a.Status, &createdStr, &updatedStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan anomaly row: %w", err)
+		}
+
+		if t, err := time.Parse(time.RFC3339, createdStr); err == nil {
+			a.CreatedAt = t
+		}
+		if t, err := time.Parse(time.RFC3339, updatedStr); err == nil {
+			a.UpdatedAt = t
+		}
+
+		list = append(list, a)
+	}
+
+	if list == nil {
+		list = []Anomaly{}
+	}
+	return list, nil
 }
 
 

@@ -2,19 +2,24 @@
 document.addEventListener("DOMContentLoaded", () => {
     let activeView = "dashboard";
     let activeTab = "sources";
+    let activeTriageFilter = "all";
     let autoRefreshTimer = null;
     
     // In-memory data states
     let talkersData = [];
     let exportersData = [];
     let devicesData = [];
+    let anomaliesData = [];
     let selectedDeviceIP = null;
 
     // Navigation elements
     const navDashboard = document.getElementById("nav-dashboard");
     const navDevices = document.getElementById("nav-devices");
+    const navAnomalies = document.getElementById("nav-anomalies");
+    
     const viewDashboard = document.getElementById("view-dashboard");
     const viewDevices = document.getElementById("view-devices");
+    const viewAnomalies = document.getElementById("view-anomalies");
 
     // Elements
     const btnRefresh = document.getElementById("btn-refresh");
@@ -31,7 +36,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const tblExporters = document.getElementById("tbl-exporters").querySelector("tbody");
     const tblTopTalkers = document.getElementById("tbl-top-talkers").querySelector("tbody");
     const tblDevices = document.getElementById("tbl-devices").querySelector("tbody");
+    const tblAnomalies = document.getElementById("tbl-anomalies").querySelector("tbody");
+    
     const tabButtons = document.querySelectorAll(".tab-btn");
+    const triageFilterButtons = document.querySelectorAll(".triage-filter-btn");
 
     // Device Detail elements
     const detailsEmpty = document.getElementById("device-details-empty");
@@ -133,6 +141,18 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Fetch Anomalies list
+    async function fetchAnomalies() {
+        try {
+            const resp = await fetch("/api/anomalies?limit=100");
+            if (!resp.ok) throw new Error("Anomalies query failed");
+            anomaliesData = await resp.json();
+            renderAnomalies();
+        } catch (err) {
+            console.error("Error fetching anomalies: ", err);
+        }
+    }
+
     // Render Exporters to table
     function renderExporters() {
         if (!exportersData || exportersData.length === 0) {
@@ -210,7 +230,6 @@ document.addEventListener("DOMContentLoaded", () => {
         // Attach select click listeners to row and action button
         tblDevices.querySelectorAll("tr").forEach(row => {
             row.addEventListener("click", (e) => {
-                // Ignore clicks on buttons inside row to prevent double trigger
                 if (e.target.tagName === "BUTTON") return;
                 const ip = row.getAttribute("data-ip");
                 selectDevice(ip);
@@ -257,7 +276,6 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!resp.ok) throw new Error("Failed fetching device baseline");
             const baseline = await resp.json();
 
-            // Format statistical deviations
             const byteLimit = baseline.mean_bytes + (3 * baseline.stddev_bytes);
             const packetLimit = baseline.mean_packets + (3 * baseline.stddev_packets);
             const peerLimit = baseline.mean_peers + (3 * baseline.stddev_peers);
@@ -315,10 +333,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!resp.ok) throw new Error("Failed to update device label");
 
             showToast(`Label for ${selectedDeviceIP} updated successfully!`);
-            
-            // Reload devices state
             await fetchDevices();
-            // Reselect to update label in detail header view
             const dev = devicesData.find(d => d.ip === selectedDeviceIP);
             if (dev) {
                 inputDetailLabel.value = dev.label || "";
@@ -327,6 +342,78 @@ document.addEventListener("DOMContentLoaded", () => {
             showToast(err.message, "error");
         }
     });
+
+    // Render Anomalies to table
+    function renderAnomalies() {
+        const filtered = anomaliesData.filter(anom => {
+            if (activeTriageFilter === "all") return true;
+            return anom.status === activeTriageFilter;
+        });
+
+        if (filtered.length === 0) {
+            tblAnomalies.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No anomalies match selection filter.</td></tr>`;
+            return;
+        }
+
+        tblAnomalies.innerHTML = filtered.map(anom => {
+            const badgeClass = anom.severity === "high" ? "badge-high" : (anom.severity === "medium" ? "badge-medium" : "badge-low");
+            const statusClass = `status-${anom.status}`;
+            
+            // Build triage buttons depending on current status
+            let buttonsHtml = "";
+            if (anom.status === "active") {
+                buttonsHtml = `
+                    <button class="btn-triage btn-ack" data-id="${anom.id}" data-action="acknowledged">Acknowledge</button>
+                    <button class="btn-triage btn-silence" data-id="${anom.id}" data-action="silenced">Silence</button>
+                `;
+            } else {
+                buttonsHtml = `
+                    <button class="btn-triage btn-reactivate" data-id="${anom.id}" data-action="active">Reactivate</button>
+                `;
+            }
+
+            return `
+                <tr>
+                    <td class="font-semibold">${anom.ip}</td>
+                    <td><span class="badge ${badgeClass}">${anom.type}</span></td>
+                    <td style="text-transform: capitalize;">${anom.severity}</td>
+                    <td>${anom.description}</td>
+                    <td>${formatTime(anom.created_at)}</td>
+                    <td><span class="${statusClass}">${anom.status}</span></td>
+                    <td class="triage-actions">${buttonsHtml}</td>
+                </tr>
+            `;
+        }).join('');
+
+        // Attach triage buttons click listeners
+        tblAnomalies.querySelectorAll(".btn-triage").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                const id = e.target.getAttribute("data-id");
+                const action = e.target.getAttribute("data-action");
+                await updateAnomalyStatus(id, action);
+            });
+        });
+    }
+
+    // Submit triage action PUT request
+    async function updateAnomalyStatus(id, newStatus) {
+        try {
+            const resp = await fetch(`/api/anomalies/${id}/status`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ status: newStatus })
+            });
+
+            if (!resp.ok) throw new Error("Failed to update alert review status");
+
+            showToast(`Alert status successfully updated to ${newStatus}!`);
+            await fetchAnomalies();
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
 
     // Perform full page data fetch
     async function loadData() {
@@ -339,35 +426,48 @@ document.addEventListener("DOMContentLoaded", () => {
         } else if (activeView === "devices") {
             await fetchDevices();
             if (selectedDeviceIP) {
-                // Keep selected detail updated
                 const dev = devicesData.find(d => d.ip === selectedDeviceIP);
                 if (dev) {
                     selectDevice(selectedDeviceIP);
                 }
             }
+        } else if (activeView === "anomalies") {
+            await fetchAnomalies();
         }
     }
 
     // Switch between SPA views
     function switchView(viewName) {
         activeView = viewName;
+        
+        // Remove active class from all nav links
+        navDashboard.classList.remove("active");
+        navDevices.classList.remove("active");
+        navAnomalies.classList.remove("active");
+
+        // Hide all views
+        viewDashboard.classList.remove("active");
+        viewDevices.classList.remove("active");
+        viewAnomalies.classList.remove("active");
+
         if (viewName === "dashboard") {
             navDashboard.classList.add("active");
-            navDevices.classList.remove("active");
             viewDashboard.classList.add("active");
-            viewDevices.classList.remove("active");
-        } else {
-            navDashboard.classList.remove("active");
+        } else if (viewName === "devices") {
             navDevices.classList.add("active");
-            viewDashboard.classList.remove("active");
             viewDevices.classList.add("active");
+        } else if (viewName === "anomalies") {
+            navAnomalies.classList.add("active");
+            viewAnomalies.classList.add("active");
         }
+        
         loadData();
     }
 
     // Navigation Button Listeners
     navDashboard.addEventListener("click", () => switchView("dashboard"));
     navDevices.addEventListener("click", () => switchView("devices"));
+    navAnomalies.addEventListener("click", () => switchView("anomalies"));
 
     // Handle Manual Refresh
     btnRefresh.addEventListener("click", () => {
@@ -385,6 +485,16 @@ document.addEventListener("DOMContentLoaded", () => {
             e.target.classList.add("active");
             activeTab = e.target.getAttribute("data-tab");
             fetchTopTalkers();
+        });
+    });
+
+    // Handle triage status filter buttons
+    triageFilterButtons.forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            triageFilterButtons.forEach(b => b.classList.remove("active"));
+            e.target.classList.add("active");
+            activeTriageFilter = e.target.getAttribute("data-status");
+            renderAnomalies();
         });
     });
 

@@ -80,6 +80,18 @@ func (m *MockDeviceRepository) GetBaseline(ctx context.Context, ip string) (*sto
 	return nil, nil
 }
 
+func (m *MockDeviceRepository) SaveAnomaly(ctx context.Context, a *storage.Anomaly) error {
+	return nil
+}
+
+func (m *MockDeviceRepository) UpdateAnomalyStatus(ctx context.Context, id int64, status string) error {
+	return nil
+}
+
+func (m *MockDeviceRepository) ListAnomalies(ctx context.Context, limit int) ([]storage.Anomaly, error) {
+	return []storage.Anomaly{}, nil
+}
+
 type MockFlowProcessor struct {
 	mu     sync.Mutex
 	Events []*flow.FlowEvent

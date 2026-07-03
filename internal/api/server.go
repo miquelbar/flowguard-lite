@@ -81,6 +81,10 @@ func NewAPIServer(
 	mux.HandleFunc("PUT /api/devices/{ip}/label", s.handleUpdateDeviceLabel)
 	mux.HandleFunc("GET /api/devices/{ip}/baseline", s.handleGetDeviceBaseline)
 
+	// Anomaly detection endpoints (Go 1.22+ wildcard patterns)
+	mux.HandleFunc("GET /api/anomalies", s.handleListAnomalies)
+	mux.HandleFunc("PUT /api/anomalies/{id}/status", s.handleUpdateAnomalyStatus)
+
 	mux.Handle("/", ui.Handler())
 
 	return s

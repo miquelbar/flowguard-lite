@@ -10,10 +10,12 @@ import (
 	"time"
 
 	"github.com/flowguard/flowguard/internal/api"
+	"github.com/flowguard/flowguard/internal/anomaly"
 	"github.com/flowguard/flowguard/internal/baseline"
 	"github.com/flowguard/flowguard/internal/collector"
 	"github.com/flowguard/flowguard/internal/config"
 	"github.com/flowguard/flowguard/internal/device"
+	"github.com/flowguard/flowguard/internal/flow"
 	"github.com/flowguard/flowguard/internal/logger"
 	"github.com/flowguard/flowguard/internal/storage"
 )
@@ -102,10 +104,16 @@ func main() {
 		}
 	}()
 
-	// 11. Initialize API HTTP server
+	// 11. Initialize Anomaly Engine & Register post-flush hooks on FlowAggregator
+	anomalyEngine := anomaly.NewAnomalyEngine(repo, log, baselineEngine, cfg.LocalSubnets)
+	agg.RegisterFlushCallback(func(ctx context.Context, batch []flow.FlowEvent) {
+		anomalyEngine.AnalyzeBatch(ctx, repo, batch)
+	})
+
+	// 12. Initialize API HTTP server
 	server := api.NewAPIServer(cfg, log, coll, repo, repo, baselineEngine)
 
-	// 12. Run HTTP server in a separate goroutine so we can trap signals concurrently
+	// 13. Run HTTP server in a separate goroutine so we can trap signals concurrently
 	serverErrChan := make(chan error, 1)
 	go func() {
 		if err := server.Start(); err != nil {
@@ -113,11 +121,11 @@ func main() {
 		}
 	}()
 
-	// 13. Setup signal trapping for graceful shutdown
+	// 14. Setup signal trapping for graceful shutdown
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
-	// 14. Wait for termination signal or server start failure
+	// 15. Wait for termination signal or server start failure
 	select {
 	case err := <-serverErrChan:
 		log.Error("HTTP server stopped unexpectedly", slog.String("error", err.Error()))

@@ -443,6 +443,83 @@ body {
     font-family: monospace;
 }
 
+/* Anomaly Alert Styling */
+.badge-high {
+    background-color: rgba(239, 68, 68, 0.12) !important;
+    color: #fca5a5 !important;
+    border: 1px solid rgba(239, 68, 68, 0.3) !important;
+}
+
+.badge-medium {
+    background-color: rgba(245, 158, 11, 0.12) !important;
+    color: #fcd34d !important;
+    border: 1px solid rgba(245, 158, 11, 0.3) !important;
+}
+
+.badge-low {
+    background-color: rgba(99, 102, 241, 0.12) !important;
+    color: #a5b4fc !important;
+    border: 1px solid rgba(99, 102, 241, 0.3) !important;
+}
+
+.status-active {
+    color: var(--danger-color);
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.status-acknowledged {
+    color: var(--success-color);
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.status-silenced {
+    color: var(--text-secondary);
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+.triage-actions {
+    display: flex;
+    gap: 0.35rem;
+    justify-content: center;
+}
+
+.btn-triage {
+    border: 1px solid var(--border-color);
+    background-color: rgba(255,255,255,0.03);
+    color: var(--text-primary);
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-triage:hover {
+    background-color: rgba(255,255,255,0.08);
+}
+
+.btn-ack:hover {
+    border-color: var(--success-color);
+    color: var(--success-color);
+    background-color: rgba(16, 185, 129, 0.05);
+}
+
+.btn-silence:hover {
+    border-color: var(--warning-color);
+    color: var(--warning-color);
+    background-color: rgba(245, 158, 11, 0.05);
+}
+
+.btn-reactivate:hover {
+    border-color: var(--danger-color);
+    color: var(--danger-color);
+    background-color: rgba(239, 68, 68, 0.05);
+}
+
 /* Form inputs & filtering */
 .filter-controls {
     display: flex;
@@ -486,7 +563,7 @@ body {
     padding: 2px;
 }
 
-.tab-btn {
+.tab-btn, .triage-filter-btn {
     background: none;
     border: none;
     color: var(--text-secondary);
@@ -498,11 +575,11 @@ body {
     transition: all 0.2s ease;
 }
 
-.tab-btn:hover {
+.tab-btn:hover, .triage-filter-btn:hover {
     color: #fff;
 }
 
-.tab-btn.active {
+.tab-btn.active, .triage-filter-btn.active {
     background-color: var(--primary-color);
     color: #fff;
     box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
@@ -542,7 +619,6 @@ td {
 
 tr:hover td {
     background-color: rgba(255, 255, 255, 0.02);
-    cursor: pointer;
 }
 
 tr.selected td {

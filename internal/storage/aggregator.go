@@ -23,6 +23,9 @@ type FlowAggregator struct {
 	mu            sync.Mutex
 	buffer        map[string]*flow.FlowEvent
 	currentBucket time.Time
+
+	// Post-flush callbacks to execute anomaly matching
+	onFlush []func(ctx context.Context, batch []flow.FlowEvent)
 }
 
 // NewFlowAggregator creates a new thread-safe FlowAggregator instance.
@@ -38,51 +41,58 @@ func NewFlowAggregator(repo FlowRepository, logger *slog.Logger, flushInterval t
 	}
 }
 
-// Start launches the automated background flush worker loop.
+// RegisterFlushCallback registers a callback to run after each successful batch flush.
+func (a *FlowAggregator) RegisterFlushCallback(cb func(ctx context.Context, batch []flow.FlowEvent)) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.onFlush = append(a.onFlush, cb)
+}
+
+// Start launches the background worker goroutine for scheduled flushes.
 func (a *FlowAggregator) Start() {
-	a.logger.Info("Starting Flow Aggregator flush loop...", slog.Duration("interval", a.interval))
+	a.mu.Lock()
+	a.currentBucket = time.Now().Truncate(time.Minute)
+	a.mu.Unlock()
+
 	a.wg.Add(1)
 	go a.flushLoop()
 }
 
-// Shutdown stops the background loop and flushes all remaining in-memory aggregates.
+// Shutdown flushes final buffered data and halts background routines.
 func (a *FlowAggregator) Shutdown() {
-	a.logger.Info("Shutting down Flow Aggregator...")
 	a.cancel()
 	a.wg.Wait()
 
-	// Perform final flush to verify no aggregates are lost
+	// Final flush remaining buffered data
 	a.Flush()
-	a.logger.Info("Flow Aggregator shut down successfully.")
 }
 
-// Process implements the flow.FlowProcessor interface to aggregate incoming raw events.
+// Process implements the flow.FlowProcessor interface to aggregate incoming traffic flows.
 func (a *FlowAggregator) Process(event *flow.FlowEvent) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	// Truncate timestamp to minute level for 1m aggregation buckets
+	// Align event timestamp to 1-minute bucket boundary
 	bucketTime := event.Timestamp.Truncate(time.Minute)
 
-	if a.currentBucket.IsZero() {
+	// If bucket has advanced, trigger proactive flush of previous bucket
+	if bucketTime.After(a.currentBucket) {
+		oldBucket := a.currentBucket
+		oldBatch := a.drainBuffer()
 		a.currentBucket = bucketTime
-	} else if bucketTime.After(a.currentBucket) {
-		// If we receive a packet belonging to a newer minute bucket, proactively flush the old one
-		// to preserve memory bounds.
-		a.logger.Debug("Newer minute bucket detected, triggering intermediate flush",
-			slog.Time("old_bucket", a.currentBucket),
-			slog.Time("new_bucket", bucketTime))
-		go a.flushBatch(a.currentBucket, a.drainBuffer())
-		a.currentBucket = bucketTime
+
+		// Execute database save in a separate helper goroutine to avoid blocking collector worker threads
+		if len(oldBatch) > 0 {
+			go a.flushBatch(oldBucket, oldBatch)
+		}
 	}
 
-	// Create unique compound key for aggregation grouping
+	// Aggregate flows matching unique parameters: SrcIP | DstIP | DstPort | Protocol
 	key := fmt.Sprintf("%s|%s|%d|%d", event.SrcIP, event.DstIP, event.DstPort, event.Protocol)
 
 	if existing, ok := a.buffer[key]; ok {
 		existing.Bytes += event.Bytes
 		existing.Packets += event.Packets
-		// TCP Flags bitwise OR to capture all flag occurrences (SYN, ACK, RST) in the minute
 		existing.TCPFlags |= event.TCPFlags
 	} else {
 		// Clone event to avoid holding reference to collector buffer
@@ -140,6 +150,16 @@ func (a *FlowAggregator) flushBatch(bucket time.Time, batch []flow.FlowEvent) {
 		a.logger.Error("Failed to save aggregated flows to storage",
 			slog.Time("bucket", bucket),
 			slog.String("error", err.Error()))
+		return
+	}
+
+	// Trigger post-flush callbacks (e.g. anomaly detection checks)
+	a.mu.Lock()
+	callbacks := a.onFlush
+	a.mu.Unlock()
+
+	for _, cb := range callbacks {
+		cb(ctx, batch)
 	}
 }
 

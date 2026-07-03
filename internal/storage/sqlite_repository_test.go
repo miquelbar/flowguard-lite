@@ -290,6 +290,71 @@ func TestSQLiteRepository_Baselines(t *testing.T) {
 	}
 }
 
+func TestSQLiteRepository_Anomalies(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sqlite_anomalies_test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo, err := NewSQLiteRepository(tmpDir, logger)
+	if err != nil {
+		t.Fatalf("failed to create repo: %v", err)
+	}
+	defer repo.Close()
+
+	ctx := context.Background()
+	now := time.Now().Truncate(time.Second)
+
+	// Save parent device first to satisfy foreign key constraint
+	err = repo.UpsertDevice(ctx, "192.168.1.100", "", now)
+	if err != nil {
+		t.Fatalf("failed setup: %v", err)
+	}
+
+	anom := &Anomaly{
+		IP:          "192.168.1.100",
+		Type:        "TRAFFIC_SPIKE",
+		Description: "Abnormal volume spike",
+		Severity:    "high",
+		Status:      "active",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	// 1. Save Anomaly
+	err = repo.SaveAnomaly(ctx, anom)
+	if err != nil {
+		t.Fatalf("failed to save anomaly: %v", err)
+	}
+	if anom.ID == 0 {
+		t.Error("expected populated auto-increment anomaly ID, got 0")
+	}
+
+	// 2. List anomalies
+	list, err := repo.ListAnomalies(ctx, 10)
+	if err != nil {
+		t.Fatalf("failed listing anomalies: %v", err)
+	}
+	if len(list) != 1 || list[0].IP != "192.168.1.100" || list[0].Status != "active" {
+		t.Errorf("unexpected anomalies list output: %v", list)
+	}
+
+	// 3. Update status
+	err = repo.UpdateAnomalyStatus(ctx, anom.ID, "acknowledged")
+	if err != nil {
+		t.Fatalf("failed to update anomaly status: %v", err)
+	}
+
+	// 4. Verify update
+	list, _ = repo.ListAnomalies(ctx, 10)
+	if len(list) != 1 || list[0].Status != "acknowledged" {
+		t.Errorf("expected status 'acknowledged', got '%s'", list[0].Status)
+	}
+}
+
+
 
 func BenchmarkSQLiteRepository_SaveAggregates(b *testing.B) {
 	tmpDir, err := os.MkdirTemp("", "sqlite_bench")

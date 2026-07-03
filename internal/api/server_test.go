@@ -193,6 +193,23 @@ func (m *MockFlowRepository) GetBaseline(ctx context.Context, ip string) (*stora
 	return nil, m.Err
 }
 
+func (m *MockFlowRepository) SaveAnomaly(ctx context.Context, a *storage.Anomaly) error {
+	return m.Err
+}
+
+func (m *MockFlowRepository) UpdateAnomalyStatus(ctx context.Context, id int64, status string) error {
+	if id == 123 {
+		return m.Err
+	}
+	return errors.New("anomaly not found")
+}
+
+func (m *MockFlowRepository) ListAnomalies(ctx context.Context, limit int) ([]storage.Anomaly, error) {
+	return []storage.Anomaly{
+		{ID: 123, IP: "192.168.1.10", Type: "TRAFFIC_SPIKE", Status: "active"},
+	}, m.Err
+}
+
 func TestParseQueryParams_Valid(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/top/sources?limit=25&start=2026-07-03T12:00:00Z&end=2026-07-03T13:00:00Z", nil)
 	start, end, limit, err := parseQueryParams(req)
@@ -421,4 +438,49 @@ func TestHandleDeviceBaseline(t *testing.T) {
 		t.Errorf("expected status NotFound (404), got %d", w.Code)
 	}
 }
+
+func TestHandleAnomalies(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockRepo := &MockFlowRepository{}
+
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil)
+
+	// 1. GET /api/anomalies
+	req := httptest.NewRequest(http.MethodGet, "/api/anomalies?limit=10", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status OK, got %d", w.Code)
+	}
+
+	var anomalies []storage.Anomaly
+	if err := json.Unmarshal(w.Body.Bytes(), &anomalies); err != nil {
+		t.Fatalf("failed decoding anomalies: %v", err)
+	}
+	if len(anomalies) != 1 || anomalies[0].ID != 123 || anomalies[0].Type != "TRAFFIC_SPIKE" {
+		t.Errorf("unexpected anomalies result: %v", anomalies)
+	}
+
+	// 2. PUT /api/anomalies/123/status (valid)
+	bodyStr := `{"status": "acknowledged"}`
+	req = httptest.NewRequest(http.MethodPut, "/api/anomalies/123/status", strings.NewReader(bodyStr))
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status OK, got %d", w.Code)
+	}
+
+	// 3. PUT /api/anomalies/999/status (not found)
+	req = httptest.NewRequest(http.MethodPut, "/api/anomalies/999/status", strings.NewReader(bodyStr))
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status NotFound (404), got %d", w.Code)
+	}
+}
+
 

@@ -29,6 +29,18 @@ type DeviceBaseline struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
+// Anomaly represents a detected behavioral deviance.
+type Anomaly struct {
+	ID          int64     `json:"id"`
+	IP          string    `json:"ip"`
+	Type        string    `json:"type"`
+	Description string    `json:"description"`
+	Severity    string    `json:"severity"`
+	Status      string    `json:"status"` // "active", "acknowledged", "silenced"
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 // FlowRepository defines the interface for reading and writing flow aggregates.
 type FlowRepository interface {
 	// SaveAggregates writes a slice of aggregated flow records to the shard matching the bucket timestamp.
@@ -44,7 +56,7 @@ type FlowRepository interface {
 	GetTopPorts(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error)
 }
 
-// DeviceRepository defines the operations on local device metadata and baselines.
+// DeviceRepository defines the operations on local device metadata, baselines, and anomalies.
 type DeviceRepository interface {
 	// UpsertDevice registers or updates a device's last-seen status and hostname.
 	UpsertDevice(ctx context.Context, ip string, hostname string, lastSeen time.Time) error
@@ -63,6 +75,15 @@ type DeviceRepository interface {
 
 	// GetBaseline retrieves the cached historical baseline profile for a device.
 	GetBaseline(ctx context.Context, ip string) (*DeviceBaseline, error)
+
+	// SaveAnomaly registers a new behavioral alert.
+	SaveAnomaly(ctx context.Context, a *Anomaly) error
+
+	// UpdateAnomalyStatus reviews, silences, or acknowledges an alert.
+	UpdateAnomalyStatus(ctx context.Context, id int64, status string) error
+
+	// ListAnomalies queries recent anomalies triggered.
+	ListAnomalies(ctx context.Context, limit int) ([]Anomaly, error)
 }
 
 // Manager defines the interface for managing database shards and schema maintenance.
