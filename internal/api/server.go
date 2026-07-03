@@ -10,29 +10,39 @@ import (
 	"time"
 
 	"github.com/flowguard/flowguard/internal/config"
+	"github.com/flowguard/flowguard/internal/collector"
 )
+
+// CollectorProvider defines the contract for fetching collector stats and exporters.
+type CollectorProvider interface {
+	GetStats() collector.Stats
+	GetExporters() []collector.ExporterMetadata
+}
 
 // APIServer manages the lifecycle of the HTTP REST API server.
 type APIServer struct {
-	server *http.Server
-	cfg    *config.Config
-	logger *slog.Logger
+	server    *http.Server
+	cfg       *config.Config
+	logger    *slog.Logger
+	collector CollectorProvider
 }
 
 // HealthResponse represents the structure of health check outputs.
 type HealthResponse struct {
-	Status      string `json:"status"`
-	Environment string `json:"environment"`
-	Timestamp   string `json:"timestamp"`
-	Version     string `json:"version"`
+	Status      string          `json:"status"`
+	Environment string          `json:"environment"`
+	Timestamp   string          `json:"timestamp"`
+	Version     string          `json:"version"`
+	Collector   *collector.Stats `json:"collector,omitempty"`
 }
 
 // NewAPIServer creates and configures a new APIServer instance.
-func NewAPIServer(cfg *config.Config, logger *slog.Logger) *APIServer {
+func NewAPIServer(cfg *config.Config, logger *slog.Logger, coll CollectorProvider) *APIServer {
 	mux := http.NewServeMux()
 	s := &APIServer{
-		cfg:    cfg,
-		logger: logger,
+		cfg:       cfg,
+		logger:    logger,
+		collector: coll,
 		server: &http.Server{
 			Addr:         ":" + cfg.Port,
 			Handler:      mux,
@@ -42,7 +52,10 @@ func NewAPIServer(cfg *config.Config, logger *slog.Logger) *APIServer {
 		},
 	}
 
+	// Dynamic routing matching PLAN.md
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/api/health", s.handleHealth)
+	mux.HandleFunc("/api/exporters", s.handleExporters)
 
 	return s
 }
@@ -62,7 +75,7 @@ func (s *APIServer) Shutdown(ctx context.Context) error {
 	return s.server.Shutdown(ctx)
 }
 
-// handleHealth returns basic service availability status in JSON format.
+// handleHealth returns availability status and optionally collector performance counters.
 func (s *APIServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -76,9 +89,35 @@ func (s *APIServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 		Version:     "0.1.0",
 	}
 
+	if s.collector != nil {
+		stats := s.collector.GetStats()
+		res.Collector = &stats
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(res); err != nil {
 		s.logger.Error("Failed to encode health response", slog.String("error", err.Error()))
+	}
+}
+
+// handleExporters returns a JSON list of all active flow exporters.
+func (s *APIServer) handleExporters(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	var exporters []collector.ExporterMetadata
+	if s.collector != nil {
+		exporters = s.collector.GetExporters()
+	} else {
+		exporters = []collector.ExporterMetadata{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(exporters); err != nil {
+		s.logger.Error("Failed to encode exporters response", slog.String("error", err.Error()))
 	}
 }
