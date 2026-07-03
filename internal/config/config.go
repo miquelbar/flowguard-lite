@@ -22,6 +22,7 @@ type Config struct {
 	SYNFloodThresholdPPS  int      `yaml:"syn_flood_threshold_pps"`
 	UDPFloodThresholdPPS  int      `yaml:"udp_flood_threshold_pps"`
 	ICMPFloodThresholdPPS int      `yaml:"icmp_flood_threshold_pps"`
+	SuricataEvePath       string   `yaml:"suricata_eve_path"`
 }
 
 // DefaultConfig returns the default configuration settings.
@@ -39,6 +40,7 @@ func DefaultConfig() *Config {
 		SYNFloodThresholdPPS:  1000,
 		UDPFloodThresholdPPS:  3000,
 		ICMPFloodThresholdPPS: 500,
+		SuricataEvePath:       "",
 	}
 }
 

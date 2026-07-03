@@ -19,6 +19,7 @@ import (
 	"github.com/flowguard/flowguard/internal/flow"
 	"github.com/flowguard/flowguard/internal/logger"
 	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/flowguard/flowguard/internal/suricata"
 )
 
 func main() {
@@ -116,10 +117,17 @@ func main() {
 		anomalyEngine.AnalyzeBatch(ctx, repo, batch)
 	})
 
-	// 13. Initialize API HTTP server
+	// 13. Initialize Suricata tailer worker
+	var suricataTailer *suricata.Tailer
+	if cfg.SuricataEvePath != "" {
+		suricataTailer = suricata.NewTailer(repo, log, cfg.SuricataEvePath, cfg.LocalSubnets)
+		suricataTailer.Start()
+	}
+
+	// 14. Initialize API HTTP server
 	server := api.NewAPIServer(cfg, log, coll, repo, repo, baselineEngine)
 
-	// 14. Run HTTP server in a separate goroutine so we can trap signals concurrently
+	// 15. Run HTTP server in a separate goroutine so we can trap signals concurrently
 	serverErrChan := make(chan error, 1)
 	go func() {
 		if err := server.Start(); err != nil {
@@ -127,15 +135,18 @@ func main() {
 		}
 	}()
 
-	// 15. Setup signal trapping for graceful shutdown
+	// 16. Setup signal trapping for graceful shutdown
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
-	// 16. Wait for termination signal or server start failure
+	// 17. Wait for termination signal or server start failure
 	select {
 	case err := <-serverErrChan:
 		log.Error("HTTP server stopped unexpectedly", slog.String("error", err.Error()))
 		baselineCancel()
+		if suricataTailer != nil {
+			suricataTailer.Shutdown()
+		}
 		coll.Shutdown()
 		ddosDetector.Shutdown()
 		profiler.Shutdown()
@@ -159,6 +170,11 @@ func main() {
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			log.Error("Failed to shut down HTTP API server cleanly", slog.String("error", err.Error()))
 			shutdownFailed = true
+		}
+
+		// Shutdown the Suricata Tailer
+		if suricataTailer != nil {
+			suricataTailer.Shutdown()
 		}
 
 		// Shutdown the Flow Collector
