@@ -12,6 +12,7 @@ import (
 	"github.com/flowguard/flowguard/internal/config"
 	"github.com/flowguard/flowguard/internal/collector"
 	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/flowguard/flowguard/internal/ui"
 )
 
 // CollectorProvider defines the contract for fetching collector stats and exporters.
@@ -59,6 +60,10 @@ func NewAPIServer(cfg *config.Config, logger *slog.Logger, coll CollectorProvide
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/exporters", s.handleExporters)
+	mux.HandleFunc("/api/top/sources", s.handleTopSources)
+	mux.HandleFunc("/api/top/destinations", s.handleTopDestinations)
+	mux.HandleFunc("/api/top/ports", s.handleTopPorts)
+	mux.Handle("/", ui.Handler())
 
 	return s
 }

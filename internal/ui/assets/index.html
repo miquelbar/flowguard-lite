@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowGuard Lite Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="glow-bg"></div>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="main-header">
+            <div class="logo-area">
+                <div class="logo-icon"></div>
+                <h1>FlowGuard <span class="accent-text">Lite</span></h1>
+            </div>
+            <div class="controls-area">
+                <span class="status-indicator online"></span>
+                <span class="status-label">System Active</span>
+                <button id="btn-refresh" class="btn-primary">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
+        </header>
+
+        <!-- Stats Grid -->
+        <section class="stats-grid">
+            <div class="stat-card" id="card-packets">
+                <div class="stat-icon packets-glow">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <h3>Total Packets</h3>
+                    <p class="stat-value" id="val-packets">-</p>
+                </div>
+            </div>
+
+            <div class="stat-card" id="card-drops">
+                <div class="stat-icon drops-glow">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"/>
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <h3>Dropped Packets</h3>
+                    <p class="stat-value text-danger" id="val-drops">-</p>
+                </div>
+            </div>
+
+            <div class="stat-card" id="card-errors">
+                <div class="stat-icon errors-glow">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/>
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <h3>Decode Errors</h3>
+                    <p class="stat-value text-warning" id="val-errors">-</p>
+                </div>
+            </div>
+
+            <div class="stat-card" id="card-queue">
+                <div class="stat-icon queue-glow">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/>
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <h3>Queue Depth</h3>
+                    <p class="stat-value" id="val-queue">-</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Workspace -->
+        <main class="dashboard-main">
+            <!-- Left Side: Exporters -->
+            <section class="panel panel-left">
+                <div class="panel-header">
+                    <h2>Active Exporters</h2>
+                </div>
+                <div class="panel-body">
+                    <div class="table-container">
+                        <table id="tbl-exporters">
+                            <thead>
+                                <tr>
+                                    <th>Exporter IP</th>
+                                    <th>Last Seen</th>
+                                    <th class="text-right">Packets</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">Loading exporters...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Side: Top Talkers -->
+            <section class="panel panel-right">
+                <div class="panel-header flex-header">
+                    <h2>Top Talkers</h2>
+                    <div class="filter-controls">
+                        <input type="text" id="input-search" placeholder="Search by IP or Port..." class="form-control">
+                        <div class="tab-buttons">
+                            <button class="tab-btn active" data-tab="sources">Sources</button>
+                            <button class="tab-btn" data-tab="destinations">Destinations</button>
+                            <button class="tab-btn" data-tab="ports">Ports</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="table-container">
+                        <table id="tbl-top-talkers">
+                            <thead>
+                                <tr>
+                                    <th>Key</th>
+                                    <th class="text-right">Flows</th>
+                                    <th class="text-right">Packets</th>
+                                    <th class="text-right">Bytes</th>
+                                    <th class="text-right width-progress">Volume</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">Loading traffic metrics...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
