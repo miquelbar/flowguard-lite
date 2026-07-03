@@ -72,6 +72,14 @@ func (m *MockDeviceRepository) ListDevices(ctx context.Context) ([]storage.Devic
 	return res, nil
 }
 
+func (m *MockDeviceRepository) SaveBaseline(ctx context.Context, b *storage.DeviceBaseline) error {
+	return nil
+}
+
+func (m *MockDeviceRepository) GetBaseline(ctx context.Context, ip string) (*storage.DeviceBaseline, error) {
+	return nil, nil
+}
+
 type MockFlowProcessor struct {
 	mu     sync.Mutex
 	Events []*flow.FlowEvent

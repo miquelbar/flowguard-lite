@@ -67,6 +67,18 @@ func NewSQLiteRepository(dataDir string, logger *slog.Logger) (*SQLiteRepository
 			first_seen DATETIME NOT NULL,
 			last_seen DATETIME NOT NULL
 		);
+
+		CREATE TABLE IF NOT EXISTS device_baselines (
+			ip TEXT PRIMARY KEY,
+			mean_bytes REAL NOT NULL DEFAULT 0,
+			stddev_bytes REAL NOT NULL DEFAULT 0,
+			mean_packets REAL NOT NULL DEFAULT 0,
+			stddev_packets REAL NOT NULL DEFAULT 0,
+			mean_peers REAL NOT NULL DEFAULT 0,
+			stddev_peers REAL NOT NULL DEFAULT 0,
+			updated_at DATETIME NOT NULL,
+			FOREIGN KEY(ip) REFERENCES devices(ip) ON DELETE CASCADE
+		);
 	`)
 	if err != nil {
 		metaDB.Close()
@@ -205,7 +217,7 @@ func (r *SQLiteRepository) SaveAggregates(ctx context.Context, ts time.Time, agg
 
 // GetTopSources returns source IPs sorted by byte volume.
 func (r *SQLiteRepository) GetTopSources(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error) {
-	dbs, err := r.getShardsInRange(start, end)
+	dbs, err := r.GetShardsInRange(start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +244,7 @@ func (r *SQLiteRepository) GetTopSources(ctx context.Context, start, end time.Ti
 
 // GetTopDestinations returns destination IPs sorted by byte volume.
 func (r *SQLiteRepository) GetTopDestinations(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error) {
-	dbs, err := r.getShardsInRange(start, end)
+	dbs, err := r.GetShardsInRange(start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +271,7 @@ func (r *SQLiteRepository) GetTopDestinations(ctx context.Context, start, end ti
 
 // GetTopPorts returns destination ports sorted by byte volume.
 func (r *SQLiteRepository) GetTopPorts(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error) {
-	dbs, err := r.getShardsInRange(start, end)
+	dbs, err := r.GetShardsInRange(start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -402,6 +414,60 @@ func (r *SQLiteRepository) ListDevices(ctx context.Context) ([]Device, error) {
 	return devices, nil
 }
 
+// SaveBaseline persists/updates the historical behavioral baseline profile for a device.
+func (r *SQLiteRepository) SaveBaseline(ctx context.Context, b *DeviceBaseline) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	updatedAtStr := b.UpdatedAt.Format(time.RFC3339)
+
+	_, err := r.metaDB.ExecContext(ctx, `
+		INSERT INTO device_baselines (ip, mean_bytes, stddev_bytes, mean_packets, stddev_packets, mean_peers, stddev_peers, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(ip) DO UPDATE SET
+			mean_bytes = excluded.mean_bytes,
+			stddev_bytes = excluded.stddev_bytes,
+			mean_packets = excluded.mean_packets,
+			stddev_packets = excluded.stddev_packets,
+			mean_peers = excluded.mean_peers,
+			stddev_peers = excluded.stddev_peers,
+			updated_at = excluded.updated_at
+	`, b.IP, b.MeanBytes, b.StdDevBytes, b.MeanPackets, b.StdDevPackets, b.MeanPeers, b.StdDevPeers, updatedAtStr)
+	if err != nil {
+		return fmt.Errorf("failed to save baseline for IP %s: %w", b.IP, err)
+	}
+	return nil
+}
+
+// GetBaseline retrieves the cached historical baseline profile for a device.
+func (r *SQLiteRepository) GetBaseline(ctx context.Context, ip string) (*DeviceBaseline, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var b DeviceBaseline
+	var updatedAtStr string
+
+	err := r.metaDB.QueryRowContext(ctx, `
+		SELECT ip, mean_bytes, stddev_bytes, mean_packets, stddev_packets, mean_peers, stddev_peers, updated_at
+		FROM device_baselines
+		WHERE ip = ?
+	`, ip).Scan(&b.IP, &b.MeanBytes, &b.StdDevBytes, &b.MeanPackets, &b.StdDevPackets, &b.MeanPeers, &b.StdDevPeers, &updatedAtStr)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil // Return nil, nil when baseline is not found
+		}
+		return nil, fmt.Errorf("failed to query baseline %s: %w", ip, err)
+	}
+
+	if t, err := time.Parse(time.RFC3339, updatedAtStr); err == nil {
+		b.UpdatedAt = t
+	}
+
+	return &b, nil
+}
+
+
 // Helper: Open / cache daily SQLite shards and verify table schema.
 func (r *SQLiteRepository) getOrCreateShard(dateStr string) (*sql.DB, error) {
 	r.mu.Lock()
@@ -454,8 +520,8 @@ func (r *SQLiteRepository) getOrCreateShard(dateStr string) (*sql.DB, error) {
 	return db, nil
 }
 
-// Helper: Get list of DB handles active in the date range.
-func (r *SQLiteRepository) getShardsInRange(start, end time.Time) ([]*sql.DB, error) {
+// GetShardsInRange returns list of DB handles active in the date range.
+func (r *SQLiteRepository) GetShardsInRange(start, end time.Time) ([]*sql.DB, error) {
 	var res []*sql.DB
 
 	curr := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())

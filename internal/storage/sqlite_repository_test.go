@@ -236,6 +236,61 @@ func TestSQLiteRepository_Devices(t *testing.T) {
 	}
 }
 
+func TestSQLiteRepository_Baselines(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sqlite_baselines_test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo, err := NewSQLiteRepository(tmpDir, logger)
+	if err != nil {
+		t.Fatalf("failed to create repo: %v", err)
+	}
+	defer repo.Close()
+
+	ctx := context.Background()
+	now := time.Now().Truncate(time.Second)
+
+	// Save parent device first to satisfy foreign key constraint
+	err = repo.UpsertDevice(ctx, "192.168.1.100", "", now)
+	if err != nil {
+		t.Fatalf("failed to setup device: %v", err)
+	}
+
+	b := &DeviceBaseline{
+		IP:            "192.168.1.100",
+		MeanBytes:     50000.5,
+		StdDevBytes:   1000.2,
+		MeanPackets:   100.1,
+		StdDevPackets: 5.4,
+		MeanPeers:     12.0,
+		StdDevPeers:   1.1,
+		UpdatedAt:     now,
+	}
+
+	// 1. Save baseline
+	err = repo.SaveBaseline(ctx, b)
+	if err != nil {
+		t.Fatalf("failed to save baseline: %v", err)
+	}
+
+	// 2. Load and verify
+	loaded, err := repo.GetBaseline(ctx, "192.168.1.100")
+	if err != nil {
+		t.Fatalf("failed to query baseline: %v", err)
+	}
+	if loaded == nil {
+		t.Fatal("expected baseline to be found, got nil")
+	}
+
+	if loaded.MeanBytes != 50000.5 || loaded.StdDevBytes != 1000.2 || loaded.MeanPackets != 100.1 || loaded.MeanPeers != 12.0 {
+		t.Errorf("unexpected baseline values: %+v", loaded)
+	}
+}
+
+
 func BenchmarkSQLiteRepository_SaveAggregates(b *testing.B) {
 	tmpDir, err := os.MkdirTemp("", "sqlite_bench")
 	if err != nil {

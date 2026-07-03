@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let talkersData = [];
     let exportersData = [];
     let devicesData = [];
+    let selectedDeviceIP = null;
 
     // Navigation elements
     const navDashboard = document.getElementById("nav-dashboard");
@@ -32,13 +33,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const tblDevices = document.getElementById("tbl-devices").querySelector("tbody");
     const tabButtons = document.querySelectorAll(".tab-btn");
 
-    // Modal dialog elements
-    const dialogLabel = document.getElementById("dialog-label");
-    const dialogIpLabel = document.getElementById("dialog-ip-label");
-    const inputLabelVal = document.getElementById("input-label-val");
-    const btnDialogCancel = document.getElementById("btn-dialog-cancel");
+    // Device Detail elements
+    const detailsEmpty = document.getElementById("device-details-empty");
+    const detailsContent = document.getElementById("device-details-content");
+    const detailIp = document.getElementById("detail-ip");
+    const detailHost = document.getElementById("detail-host");
+    const formUpdateLabel = document.getElementById("form-update-label");
+    const inputDetailLabel = document.getElementById("input-detail-label");
+    const baselineStatsContent = document.getElementById("baseline-stats-content");
+
+    // Toast elements
     const toastContainer = document.getElementById("toast-container");
-    let currentEditIP = "";
 
     // Helper: format bytes into human-readable representation
     function formatBytes(bytes) {
@@ -184,34 +189,144 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         if (filtered.length === 0) {
-            tblDevices.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No devices match active search filters.</td></tr>`;
+            tblDevices.innerHTML = `<tr><td colspan="4" class="text-center text-muted">No devices match active search filters.</td></tr>`;
             return;
         }
 
-        tblDevices.innerHTML = filtered.map(dev => `
-            <tr data-ip="${dev.ip}">
-                <td class="font-semibold">${dev.ip}</td>
-                <td class="text-muted">${dev.hostname || "<i>Unresolved</i>"}</td>
-                <td>${dev.label ? `<span class="badge badge-label">${dev.label}</span>` : "<span class="text-muted">-</span>"}</td>
-                <td>${formatTime(dev.first_seen)}</td>
-                <td>${formatTime(dev.last_seen)}</td>
-                <td class="text-center">
-                    <button class="btn-secondary btn-edit-label" data-ip="${dev.ip}" data-label="${dev.label || ""}">Edit</button>
-                </td>
-            </tr>
-        `).join('');
+        tblDevices.innerHTML = filtered.map(dev => {
+            const isSelected = selectedDeviceIP === dev.ip;
+            return `
+                <tr data-ip="${dev.ip}" class="${isSelected ? 'selected' : ''}">
+                    <td class="font-semibold">${dev.ip}</td>
+                    <td class="text-muted">${dev.hostname || "<i>Unresolved</i>"}</td>
+                    <td>${dev.label ? `<span class="badge badge-label">${dev.label}</span>` : "<span class="text-muted">-</span>"}</td>
+                    <td class="text-center">
+                        <button class="btn-secondary btn-select-device" data-ip="${dev.ip}">Select</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
 
-        // Attach listeners to newly created Edit buttons
-        tblDevices.querySelectorAll(".btn-edit-label").forEach(btn => {
+        // Attach select click listeners to row and action button
+        tblDevices.querySelectorAll("tr").forEach(row => {
+            row.addEventListener("click", (e) => {
+                // Ignore clicks on buttons inside row to prevent double trigger
+                if (e.target.tagName === "BUTTON") return;
+                const ip = row.getAttribute("data-ip");
+                selectDevice(ip);
+            });
+        });
+
+        tblDevices.querySelectorAll(".btn-select-device").forEach(btn => {
             btn.addEventListener("click", (e) => {
-                currentEditIP = e.target.getAttribute("data-ip");
-                const currentLabel = e.target.getAttribute("data-label");
-                dialogIpLabel.textContent = `IP: ${currentEditIP}`;
-                inputLabelVal.value = currentLabel;
-                dialogLabel.showModal();
+                const ip = e.target.getAttribute("data-ip");
+                selectDevice(ip);
             });
         });
     }
+
+    // Select device and load baseline details
+    async function selectDevice(ip) {
+        selectedDeviceIP = ip;
+        renderDevices(); // Highlight row
+        
+        const dev = devicesData.find(d => d.ip === ip);
+        if (!dev) return;
+
+        detailsEmpty.classList.add("hidden");
+        detailsContent.classList.remove("hidden");
+        
+        detailIp.textContent = dev.ip;
+        detailHost.textContent = dev.hostname ? `Reverse DNS: ${dev.hostname}` : "Reverse DNS: Unresolved";
+        inputDetailLabel.value = dev.label || "";
+
+        // Fetch behavioral baseline
+        baselineStatsContent.innerHTML = `<p class="text-muted text-center">Loading baseline profile...</p>`;
+        
+        try {
+            const resp = await fetch(`/api/devices/${ip}/baseline`);
+            if (resp.status === 404) {
+                baselineStatsContent.innerHTML = `
+                    <div class="text-center text-muted pad-large" style="border: 1px dashed rgba(255,255,255,0.08); border-radius: 8px;">
+                        No baseline computed yet.<br>
+                        <span style="font-size: 0.75rem;">Profile will generate once at least 5 minutes of active traffic flows are aggregated.</span>
+                    </div>
+                `;
+                return;
+            }
+            if (!resp.ok) throw new Error("Failed fetching device baseline");
+            const baseline = await resp.json();
+
+            // Format statistical deviations
+            const byteLimit = baseline.mean_bytes + (3 * baseline.stddev_bytes);
+            const packetLimit = baseline.mean_packets + (3 * baseline.stddev_packets);
+            const peerLimit = baseline.mean_peers + (3 * baseline.stddev_peers);
+
+            baselineStatsContent.innerHTML = `
+                <div class="baseline-stat-row">
+                    <span class="metric-name">Average Bytes/Min</span>
+                    <span class="metric-value">${formatBytes(baseline.mean_bytes)}</span>
+                </div>
+                <div class="baseline-stat-row">
+                    <span class="metric-name">Traffic Limit (Mean + 3σ)</span>
+                    <span class="metric-value text-warning" style="font-weight:700;">${formatBytes(byteLimit)}</span>
+                </div>
+                <div class="baseline-stat-row">
+                    <span class="metric-name">Average Packets/Min</span>
+                    <span class="metric-value">${formatNumber(Math.round(baseline.mean_packets))} pkts</span>
+                </div>
+                <div class="baseline-stat-row">
+                    <span class="metric-name">Packet Limit (Mean + 3σ)</span>
+                    <span class="metric-value text-warning" style="font-weight:700;">${formatNumber(Math.round(packetLimit))} pkts</span>
+                </div>
+                <div class="baseline-stat-row">
+                    <span class="metric-name">Average Peers/Min</span>
+                    <span class="metric-value">${baseline.mean_peers.toFixed(1)}</span>
+                </div>
+                <div class="baseline-stat-row">
+                    <span class="metric-name">Peer Limit (Mean + 3σ)</span>
+                    <span class="metric-value text-warning" style="font-weight:700;">${Math.round(peerLimit)} peers</span>
+                </div>
+                <p class="text-muted text-right" style="font-size:0.75rem; margin-top:0.5rem;">
+                    Baseline updated: ${formatTime(baseline.updated_at)}
+                </p>
+            `;
+        } catch (err) {
+            baselineStatsContent.innerHTML = `<p class="text-danger text-center">Failed to load baseline: ${err.message}</p>`;
+        }
+    }
+
+    // Submit label update from details panel
+    formUpdateLabel.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!selectedDeviceIP) return;
+
+        const newLabel = inputDetailLabel.value.trim();
+
+        try {
+            const resp = await fetch(`/api/devices/${selectedDeviceIP}/label`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ label: newLabel })
+            });
+
+            if (!resp.ok) throw new Error("Failed to update device label");
+
+            showToast(`Label for ${selectedDeviceIP} updated successfully!`);
+            
+            // Reload devices state
+            await fetchDevices();
+            // Reselect to update label in detail header view
+            const dev = devicesData.find(d => d.ip === selectedDeviceIP);
+            if (dev) {
+                inputDetailLabel.value = dev.label || "";
+            }
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    });
 
     // Perform full page data fetch
     async function loadData() {
@@ -223,6 +338,13 @@ document.addEventListener("DOMContentLoaded", () => {
             ]);
         } else if (activeView === "devices") {
             await fetchDevices();
+            if (selectedDeviceIP) {
+                // Keep selected detail updated
+                const dev = devicesData.find(d => d.ip === selectedDeviceIP);
+                if (dev) {
+                    selectDevice(selectedDeviceIP);
+                }
+            }
         }
     }
 
@@ -264,35 +386,6 @@ document.addEventListener("DOMContentLoaded", () => {
             activeTab = e.target.getAttribute("data-tab");
             fetchTopTalkers();
         });
-    });
-
-    // Modal dialog cancel action
-    btnDialogCancel.addEventListener("click", () => {
-        dialogLabel.close();
-    });
-
-    // Save label submission
-    dialogLabel.querySelector("form").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const newLabel = inputLabelVal.value.trim();
-
-        try {
-            const resp = await fetch(`/api/devices/${currentEditIP}/label`, {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ label: newLabel })
-            });
-
-            if (!resp.ok) throw new Error("Failed to save device label");
-
-            showToast(`Label for ${currentEditIP} updated successfully!`);
-            dialogLabel.close();
-            fetchDevices(); // Reload device list
-        } catch (err) {
-            showToast(err.message, "error");
-        }
     });
 
     // Initial Load & Auto-Refresh Setup (every 5 seconds)

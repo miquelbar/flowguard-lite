@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/flowguard/flowguard/internal/api"
+	"github.com/flowguard/flowguard/internal/baseline"
 	"github.com/flowguard/flowguard/internal/collector"
 	"github.com/flowguard/flowguard/internal/config"
 	"github.com/flowguard/flowguard/internal/device"
@@ -66,10 +67,45 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 9. Initialize API HTTP server
-	server := api.NewAPIServer(cfg, log, coll, repo, repo)
+	// 9. Initialize Baseline Engine
+	baselineEngine := baseline.NewBaselineEngine(repo, log)
+	if err := baselineEngine.LoadBaselines(context.Background()); err != nil {
+		log.Warn("Failed to load device baselines on startup", slog.String("error", err.Error()))
+	}
 
-	// 10. Run HTTP server in a separate goroutine so we can trap signals concurrently
+	// 10. Start background baseline recalculator loop
+	baselineCtx, baselineCancel := context.WithCancel(context.Background())
+	go func() {
+		// Run initial calculation after a short startup delay (e.g. 5 seconds) to allow initial flows to accumulate
+		select {
+		case <-time.After(5 * time.Second):
+			log.Info("Executing initial baseline calculation...")
+			if err := baselineEngine.CalculateBaselines(baselineCtx, repo); err != nil {
+				log.Error("Failed to calculate initial device baselines", slog.String("error", err.Error()))
+			}
+		case <-baselineCtx.Done():
+			return
+		}
+
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				log.Info("Executing periodic baseline recalculation...")
+				if err := baselineEngine.CalculateBaselines(baselineCtx, repo); err != nil {
+					log.Error("Failed to recalculate device baselines", slog.String("error", err.Error()))
+				}
+			case <-baselineCtx.Done():
+				return
+			}
+		}
+	}()
+
+	// 11. Initialize API HTTP server
+	server := api.NewAPIServer(cfg, log, coll, repo, repo, baselineEngine)
+
+	// 12. Run HTTP server in a separate goroutine so we can trap signals concurrently
 	serverErrChan := make(chan error, 1)
 	go func() {
 		if err := server.Start(); err != nil {
@@ -77,14 +113,15 @@ func main() {
 		}
 	}()
 
-	// 11. Setup signal trapping for graceful shutdown
+	// 13. Setup signal trapping for graceful shutdown
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
-	// 12. Wait for termination signal or server start failure
+	// 14. Wait for termination signal or server start failure
 	select {
 	case err := <-serverErrChan:
 		log.Error("HTTP server stopped unexpectedly", slog.String("error", err.Error()))
+		baselineCancel()
 		coll.Shutdown()
 		profiler.Shutdown()
 		agg.Shutdown()
@@ -93,6 +130,9 @@ func main() {
 
 	case sig := <-signalChan:
 		log.Info("Termination signal received. Initiating graceful shutdown...", slog.String("signal", sig.String()))
+
+		// Stop baseline calculations
+		baselineCancel()
 
 		// Create a timeout context for shutdown operations (e.g., 5 seconds)
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

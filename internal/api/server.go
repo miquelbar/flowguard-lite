@@ -9,8 +9,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/config"
+	"github.com/flowguard/flowguard/internal/baseline"
 	"github.com/flowguard/flowguard/internal/collector"
+	"github.com/flowguard/flowguard/internal/config"
 	"github.com/flowguard/flowguard/internal/storage"
 	"github.com/flowguard/flowguard/internal/ui"
 )
@@ -23,12 +24,13 @@ type CollectorProvider interface {
 
 // APIServer manages the lifecycle of the HTTP REST API server.
 type APIServer struct {
-	server     *http.Server
-	cfg        *config.Config
-	logger     *slog.Logger
-	collector  CollectorProvider
-	repo       storage.FlowRepository
-	deviceRepo storage.DeviceRepository
+	server         *http.Server
+	cfg            *config.Config
+	logger         *slog.Logger
+	collector      CollectorProvider
+	repo           storage.FlowRepository
+	deviceRepo     storage.DeviceRepository
+	baselineEngine *baseline.BaselineEngine
 }
 
 // HealthResponse represents the structure of health check outputs.
@@ -47,14 +49,16 @@ func NewAPIServer(
 	coll CollectorProvider,
 	repo storage.FlowRepository,
 	deviceRepo storage.DeviceRepository,
+	baselineEngine *baseline.BaselineEngine,
 ) *APIServer {
 	mux := http.NewServeMux()
 	s := &APIServer{
-		cfg:        cfg,
-		logger:     logger,
-		collector:  coll,
-		repo:       repo,
-		deviceRepo: deviceRepo,
+		cfg:            cfg,
+		logger:         logger,
+		collector:      coll,
+		repo:           repo,
+		deviceRepo:     deviceRepo,
+		baselineEngine: baselineEngine,
 		server: &http.Server{
 			Addr:         ":" + cfg.Port,
 			Handler:      mux,
@@ -75,6 +79,7 @@ func NewAPIServer(
 	// Device inventory endpoints (Go 1.22+ wildcard patterns)
 	mux.HandleFunc("GET /api/devices", s.handleListDevices)
 	mux.HandleFunc("PUT /api/devices/{ip}/label", s.handleUpdateDeviceLabel)
+	mux.HandleFunc("GET /api/devices/{ip}/baseline", s.handleGetDeviceBaseline)
 
 	mux.Handle("/", ui.Handler())
 

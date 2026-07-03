@@ -234,3 +234,42 @@ func (s *APIServer) handleUpdateDeviceLabel(w http.ResponseWriter, r *http.Reque
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
 
+// handleGetDeviceBaseline returns the baseline statistical values for a device.
+func (s *APIServer) handleGetDeviceBaseline(w http.ResponseWriter, r *http.Request) {
+	if s.baselineEngine == nil {
+		writeError(w, s.logger, http.StatusInternalServerError, "baseline engine is not configured")
+		return
+	}
+
+	ip := r.PathValue("ip")
+	if net.ParseIP(ip) == nil {
+		writeError(w, s.logger, http.StatusBadRequest, "invalid IP address format")
+		return
+	}
+
+	// Fetch cached or database baseline
+	baseLine := s.baselineEngine.GetCachedBaseline(ip)
+	if baseLine == nil {
+		// Fallback to database lookup in case cache is being calculated/re-initialized
+		var err error
+		baseLine, err = s.deviceRepo.GetBaseline(r.Context(), ip)
+		if err != nil {
+			s.logger.Error("Failed querying baseline from database", slog.String("ip", ip), slog.String("error", err.Error()))
+			writeError(w, s.logger, http.StatusInternalServerError, "internal database error")
+			return
+		}
+	}
+
+	if baseLine == nil {
+		writeError(w, s.logger, http.StatusNotFound, "baseline profile not found for this device")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(baseLine); err != nil {
+		s.logger.Error("Failed to encode device baseline response", slog.String("error", err.Error()))
+	}
+}
+
+

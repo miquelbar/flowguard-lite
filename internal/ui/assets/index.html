@@ -154,57 +154,79 @@
             </main>
         </div>
 
-        <!-- VIEW 2: Device Inventory -->
+        <!-- VIEW 2: Device Inventory & Baselines -->
         <div id="view-devices" class="view-content">
-            <section class="panel full-width-panel">
-                <div class="panel-header flex-header">
-                    <div>
-                        <h2>Device Inventory</h2>
-                        <p class="panel-subtitle text-muted">Auto-discovered nodes in configured local networks</p>
+            <main class="dashboard-main device-split-layout">
+                <!-- Left Side: Devices list -->
+                <section class="panel panel-left-devices">
+                    <div class="panel-header flex-header">
+                        <div>
+                            <h2>Device Inventory</h2>
+                            <p class="panel-subtitle text-muted">Auto-discovered nodes in local networks</p>
+                        </div>
+                        <div class="filter-controls">
+                            <input type="text" id="input-device-search" placeholder="Search IP or hostname..." class="form-control">
+                        </div>
                     </div>
-                    <div class="filter-controls">
-                        <input type="text" id="input-device-search" placeholder="Search IP or hostname..." class="form-control">
+                    <div class="panel-body">
+                        <div class="table-container">
+                            <table id="tbl-devices">
+                                <thead>
+                                    <tr>
+                                        <th>IP Address</th>
+                                        <th>Hostname (Reverse DNS)</th>
+                                        <th>Label</th>
+                                        <th class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="4" class="text-center text-muted">Loading devices...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
-                <div class="panel-body">
-                    <div class="table-container">
-                        <table id="tbl-devices">
-                            <thead>
-                                <tr>
-                                    <th>IP Address</th>
-                                    <th>Hostname (Reverse DNS)</th>
-                                    <th>Label</th>
-                                    <th>First Seen</th>
-                                    <th>Last Seen</th>
-                                    <th class="text-center">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted">No devices discovered yet. Verify UDP flow telemetry ingestion.</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-        </div>
+                </section>
 
-        <!-- Label Edit Modal (Glassmorphic Dialog) -->
-        <dialog id="dialog-label" class="dialog-glass">
-            <form method="dialog" class="dialog-form">
-                <h3>Edit Device Label</h3>
-                <p id="dialog-ip-label" class="dialog-ip"></p>
-                <div class="form-group">
-                    <label for="input-label-val">Custom Name / Label</label>
-                    <input type="text" id="input-label-val" placeholder="e.g. Office Printer, NAS Server" class="form-control width-full">
-                </div>
-                <div class="dialog-actions">
-                    <button type="button" id="btn-dialog-cancel" class="btn-secondary">Cancel</button>
-                    <button type="submit" id="btn-dialog-save" class="btn-primary">Save Label</button>
-                </div>
-            </form>
-        </dialog>
+                <!-- Right Side: Device Details & Baselines -->
+                <section class="panel panel-right-devices" id="panel-device-details">
+                    <div class="panel-header">
+                        <h2>Device Profile & Baseline</h2>
+                    </div>
+                    <div class="panel-body flex-column-body">
+                        <div id="device-details-empty" class="text-center text-muted pad-large">
+                            Select a device from the list to view its profiling details and behavioral baseline.
+                        </div>
+                        <div id="device-details-content" class="hidden">
+                            <div class="device-summary-header">
+                                <h3 id="detail-ip">192.168.1.50</h3>
+                                <p id="detail-host" class="text-muted"></p>
+                            </div>
+                            
+                            <!-- Label Form -->
+                            <form id="form-update-label" class="detail-section">
+                                <div class="form-group">
+                                    <label for="input-detail-label">Custom Label / Name</label>
+                                    <div class="inline-form">
+                                        <input type="text" id="input-detail-label" placeholder="e.g. Printer, NAS" class="form-control flex-grow-input">
+                                        <button type="submit" class="btn-primary">Save</button>
+                                    </div>
+                                </div>
+                            </form>
+
+                            <!-- Baseline Card -->
+                            <div class="detail-section">
+                                <h4>Behavioral Baseline Limits (1-Min Window)</h4>
+                                <div class="baseline-stats" id="baseline-stats-content">
+                                    <!-- Stats inserted dynamically -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
 
         <!-- Toast Notifications -->
         <div id="toast-container"></div>

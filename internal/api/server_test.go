@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/flowguard/flowguard/internal/baseline"
 	"github.com/flowguard/flowguard/internal/collector"
 	"github.com/flowguard/flowguard/internal/config"
 	"github.com/flowguard/flowguard/internal/flow"
@@ -40,7 +41,7 @@ func TestHandleHealth(t *testing.T) {
 			DecodeErrors:    1,
 		},
 	}
-	server := NewAPIServer(cfg, logger, mockColl, nil, nil)
+	server := NewAPIServer(cfg, logger, mockColl, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
@@ -81,7 +82,7 @@ func TestHandleHealth(t *testing.T) {
 func TestHandleHealth_InvalidMethod(t *testing.T) {
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := NewAPIServer(cfg, logger, nil, nil, nil)
+	server := NewAPIServer(cfg, logger, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/health", nil)
 	w := httptest.NewRecorder()
@@ -105,7 +106,7 @@ func TestHandleExporters(t *testing.T) {
 			{IP: "192.168.1.1", LastSeen: now, PacketCount: 100},
 		},
 	}
-	server := NewAPIServer(cfg, logger, mockColl, nil, nil)
+	server := NewAPIServer(cfg, logger, mockColl, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/exporters", nil)
 	w := httptest.NewRecorder()
@@ -139,6 +140,7 @@ type MockFlowRepository struct {
 	Sources      []flow.TopResult
 	Destinations []flow.TopResult
 	Ports        []flow.TopResult
+	Baseline     *storage.DeviceBaseline
 	Err          error
 }
 
@@ -177,6 +179,18 @@ func (m *MockFlowRepository) ListDevices(ctx context.Context) ([]storage.Device,
 	return []storage.Device{
 		{IP: "192.168.1.10", Label: "Discovered Device", Hostname: "test.local"},
 	}, m.Err
+}
+
+func (m *MockFlowRepository) SaveBaseline(ctx context.Context, b *storage.DeviceBaseline) error {
+	m.Baseline = b
+	return m.Err
+}
+
+func (m *MockFlowRepository) GetBaseline(ctx context.Context, ip string) (*storage.DeviceBaseline, error) {
+	if m.Baseline != nil && m.Baseline.IP == ip {
+		return m.Baseline, m.Err
+	}
+	return nil, m.Err
 }
 
 func TestParseQueryParams_Valid(t *testing.T) {
@@ -235,7 +249,7 @@ func TestHandleTopTalkers(t *testing.T) {
 		},
 	}
 
-	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil)
 
 	// 1. Sources check
 	req := httptest.NewRequest(http.MethodGet, "/api/top/sources", nil)
@@ -286,7 +300,7 @@ func TestHandleTopTalkers(t *testing.T) {
 func TestHandleUI(t *testing.T) {
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := NewAPIServer(cfg, logger, nil, nil, nil)
+	server := NewAPIServer(cfg, logger, nil, nil, nil, nil)
 
 	// Fetch root "/"
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -326,7 +340,7 @@ func TestHandleDevices(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockRepo := &MockFlowRepository{}
 
-	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil)
 
 	// 1. GET /api/devices
 	req := httptest.NewRequest(http.MethodGet, "/api/devices", nil)
@@ -357,6 +371,49 @@ func TestHandleDevices(t *testing.T) {
 
 	// 3. PUT /api/devices/1.1.1.1/label (not found)
 	req = httptest.NewRequest(http.MethodPut, "/api/devices/1.1.1.1/label", strings.NewReader(bodyStr))
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status NotFound (404), got %d", w.Code)
+	}
+}
+
+func TestHandleDeviceBaseline(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockRepo := &MockFlowRepository{}
+	engine := baseline.NewBaselineEngine(mockRepo, logger)
+
+	ip := "192.168.1.10"
+	mockRepo.Baseline = &storage.DeviceBaseline{
+		IP:        ip,
+		MeanBytes: 25000.0,
+		UpdatedAt: time.Now().Truncate(time.Second),
+	}
+	_ = engine.LoadBaselines(context.Background())
+
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, engine)
+
+	// 1. GET /api/devices/192.168.1.10/baseline (valid)
+	req := httptest.NewRequest(http.MethodGet, "/api/devices/192.168.1.10/baseline", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status OK, got %d", w.Code)
+	}
+
+	var baseVal storage.DeviceBaseline
+	if err := json.Unmarshal(w.Body.Bytes(), &baseVal); err != nil {
+		t.Fatalf("failed decoding baseline: %v", err)
+	}
+	if baseVal.MeanBytes != 25000.0 {
+		t.Errorf("expected mean bytes 25000.0, got %f", baseVal.MeanBytes)
+	}
+
+	// 2. GET /api/devices/1.1.1.1/baseline (not found)
+	req = httptest.NewRequest(http.MethodGet, "/api/devices/1.1.1.1/baseline", nil)
 	w = httptest.NewRecorder()
 	server.server.Handler.ServeHTTP(w, req)
 

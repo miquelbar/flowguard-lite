@@ -17,6 +17,18 @@ type Device struct {
 	LastSeen  time.Time `json:"last_seen"`
 }
 
+// DeviceBaseline represents the normal statistical traffic limits for a local device.
+type DeviceBaseline struct {
+	IP            string    `json:"ip"`
+	MeanBytes     float64   `json:"mean_bytes"`
+	StdDevBytes   float64   `json:"stddev_bytes"`
+	MeanPackets   float64   `json:"mean_packets"`
+	StdDevPackets float64   `json:"stddev_packets"`
+	MeanPeers     float64   `json:"mean_peers"`
+	StdDevPeers   float64   `json:"stddev_peers"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
 // FlowRepository defines the interface for reading and writing flow aggregates.
 type FlowRepository interface {
 	// SaveAggregates writes a slice of aggregated flow records to the shard matching the bucket timestamp.
@@ -32,7 +44,7 @@ type FlowRepository interface {
 	GetTopPorts(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error)
 }
 
-// DeviceRepository defines the operations on local device metadata.
+// DeviceRepository defines the operations on local device metadata and baselines.
 type DeviceRepository interface {
 	// UpsertDevice registers or updates a device's last-seen status and hostname.
 	UpsertDevice(ctx context.Context, ip string, hostname string, lastSeen time.Time) error
@@ -45,6 +57,12 @@ type DeviceRepository interface {
 
 	// ListDevices lists all discovered network devices.
 	ListDevices(ctx context.Context) ([]Device, error)
+
+	// SaveBaseline persists/updates the historical behavioral baseline profile for a device.
+	SaveBaseline(ctx context.Context, b *DeviceBaseline) error
+
+	// GetBaseline retrieves the cached historical baseline profile for a device.
+	GetBaseline(ctx context.Context, ip string) (*DeviceBaseline, error)
 }
 
 // Manager defines the interface for managing database shards and schema maintenance.
