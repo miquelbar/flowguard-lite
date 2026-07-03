@@ -10,25 +10,35 @@ import (
 
 // Config represents the application configuration.
 type Config struct {
-	Port         string   `yaml:"port"`
-	NetflowPort  int      `yaml:"netflow_port"`
-	SflowPort    int      `yaml:"sflow_port"`
-	StorageDir   string   `yaml:"storage_dir"`
-	LogLevel     string   `yaml:"log_level"`
-	Environment  string   `yaml:"environment"`
-	LocalSubnets []string `yaml:"local_subnets"`
+	Port                  string   `yaml:"port"`
+	NetflowPort           int      `yaml:"netflow_port"`
+	SflowPort             int      `yaml:"sflow_port"`
+	StorageDir            string   `yaml:"storage_dir"`
+	LogLevel              string   `yaml:"log_level"`
+	Environment           string   `yaml:"environment"`
+	LocalSubnets          []string `yaml:"local_subnets"`
+	DDoSThresholdPPS      int      `yaml:"ddos_threshold_pps"`
+	DDoSThresholdBPS      int      `yaml:"ddos_threshold_bps"`
+	SYNFloodThresholdPPS  int      `yaml:"syn_flood_threshold_pps"`
+	UDPFloodThresholdPPS  int      `yaml:"udp_flood_threshold_pps"`
+	ICMPFloodThresholdPPS int      `yaml:"icmp_flood_threshold_pps"`
 }
 
 // DefaultConfig returns the default configuration settings.
 func DefaultConfig() *Config {
 	return &Config{
-		Port:         "8080",
-		NetflowPort:  2055,
-		SflowPort:    6343,
-		StorageDir:   "/data",
-		LogLevel:     "info",
-		Environment:  "production",
-		LocalSubnets: []string{"192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12"},
+		Port:                  "8080",
+		NetflowPort:           2055,
+		SflowPort:             6343,
+		StorageDir:            "/data",
+		LogLevel:              "info",
+		Environment:           "production",
+		LocalSubnets:          []string{"192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12"},
+		DDoSThresholdPPS:      5000,
+		DDoSThresholdBPS:      10 * 1024 * 1024, // 10 MB/s
+		SYNFloodThresholdPPS:  1000,
+		UDPFloodThresholdPPS:  3000,
+		ICMPFloodThresholdPPS: 500,
 	}
 }
 

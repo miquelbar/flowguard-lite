@@ -14,6 +14,7 @@ import (
 	"github.com/flowguard/flowguard/internal/baseline"
 	"github.com/flowguard/flowguard/internal/collector"
 	"github.com/flowguard/flowguard/internal/config"
+	"github.com/flowguard/flowguard/internal/ddos"
 	"github.com/flowguard/flowguard/internal/device"
 	"github.com/flowguard/flowguard/internal/flow"
 	"github.com/flowguard/flowguard/internal/logger"
@@ -56,26 +57,31 @@ func main() {
 	profiler := device.NewDeviceProfiler(repo, log, cfg.LocalSubnets, agg)
 	profiler.Start()
 
-	// 7. Initialize Flow Collector, using the Profiler as the flow processor
-	coll := collector.NewFlowCollector(cfg, log, profiler)
+	// 7. Initialize DDoS Detector with local subnets and downstream DeviceProfiler
+	ddosDetector := ddos.NewDDoSDetector(repo, log, cfg, profiler)
+	ddosDetector.Start()
 
-	// 8. Start Flow Collector daemon
+	// 8. Initialize Flow Collector, using the DDoS Detector as the flow entrypoint processor
+	coll := collector.NewFlowCollector(cfg, log, ddosDetector)
+
+	// 9. Start Flow Collector daemon
 	if err := coll.Start(); err != nil {
 		log.Error("Failed to start Flow Collector daemon", slog.String("error", err.Error()))
 		coll.Shutdown()
+		ddosDetector.Shutdown()
 		profiler.Shutdown()
 		agg.Shutdown()
 		repo.Close()
 		os.Exit(1)
 	}
 
-	// 9. Initialize Baseline Engine
+	// 10. Initialize Baseline Engine
 	baselineEngine := baseline.NewBaselineEngine(repo, log)
 	if err := baselineEngine.LoadBaselines(context.Background()); err != nil {
 		log.Warn("Failed to load device baselines on startup", slog.String("error", err.Error()))
 	}
 
-	// 10. Start background baseline recalculator loop
+	// 11. Start background baseline recalculator loop
 	baselineCtx, baselineCancel := context.WithCancel(context.Background())
 	go func() {
 		// Run initial calculation after a short startup delay (e.g. 5 seconds) to allow initial flows to accumulate
@@ -104,16 +110,16 @@ func main() {
 		}
 	}()
 
-	// 11. Initialize Anomaly Engine & Register post-flush hooks on FlowAggregator
+	// 12. Initialize Anomaly Engine & Register post-flush hooks on FlowAggregator
 	anomalyEngine := anomaly.NewAnomalyEngine(repo, log, baselineEngine, cfg.LocalSubnets)
 	agg.RegisterFlushCallback(func(ctx context.Context, batch []flow.FlowEvent) {
 		anomalyEngine.AnalyzeBatch(ctx, repo, batch)
 	})
 
-	// 12. Initialize API HTTP server
+	// 13. Initialize API HTTP server
 	server := api.NewAPIServer(cfg, log, coll, repo, repo, baselineEngine)
 
-	// 13. Run HTTP server in a separate goroutine so we can trap signals concurrently
+	// 14. Run HTTP server in a separate goroutine so we can trap signals concurrently
 	serverErrChan := make(chan error, 1)
 	go func() {
 		if err := server.Start(); err != nil {
@@ -121,16 +127,17 @@ func main() {
 		}
 	}()
 
-	// 14. Setup signal trapping for graceful shutdown
+	// 15. Setup signal trapping for graceful shutdown
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
-	// 15. Wait for termination signal or server start failure
+	// 16. Wait for termination signal or server start failure
 	select {
 	case err := <-serverErrChan:
 		log.Error("HTTP server stopped unexpectedly", slog.String("error", err.Error()))
 		baselineCancel()
 		coll.Shutdown()
+		ddosDetector.Shutdown()
 		profiler.Shutdown()
 		agg.Shutdown()
 		repo.Close()
@@ -156,6 +163,9 @@ func main() {
 
 		// Shutdown the Flow Collector
 		coll.Shutdown()
+
+		// Shutdown the DDoS Detector
+		ddosDetector.Shutdown()
 
 		// Shutdown the Device Profiler (stops background reverse DNS lookups)
 		profiler.Shutdown()
