@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  flowguard:
+    image: flowguard:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: flowguard
+    restart: unless-stopped
+    ports:
+      - "8080:8080"        # HTTP Web UI & REST API
+      - "2055:2055/udp"    # NetFlow / IPFIX collector
+      - "6343:6343/udp"    # sFlow collector
+    volumes:
+      - flowguard_data:/data
+    environment:
+      - FLOWGUARD_LOG_LEVEL=info
+      - FLOWGUARD_ENV=production
+
+volumes:
+  flowguard_data:
+    driver: local

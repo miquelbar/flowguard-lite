@@ -1,0 +1,28 @@
+# FlowGuard Lite Gitignore
+# Excludes local build outputs, runtime databases, and developer environments.
+
+# Native binary and build outputs
+/bin/
+/dist/
+/web/dist/
+/web/node_modules/
+
+# Local databases and data folder
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+/data/
+/flows/
+
+# OS/IDE specific files
+.DS_Store
+.idea/
+.vscode/
+
+# Local configuration overrides
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.log
