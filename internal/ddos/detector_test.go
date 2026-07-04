@@ -59,6 +59,10 @@ func (m *MockDeviceRepository) ListAnomalies(ctx context.Context, limit int) ([]
 	return m.Anomalies, nil
 }
 
+func (m *MockDeviceRepository) GetActiveAnomalies(ctx context.Context, since time.Time) ([]storage.Anomaly, error) {
+	return []storage.Anomaly{}, nil
+}
+
 func TestDDoSDetector_DetectionAndDeduplication(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	repo := &MockDeviceRepository{}

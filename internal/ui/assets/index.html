@@ -93,30 +93,58 @@
 
             <!-- Main Workspace -->
             <main class="dashboard-main">
-                <!-- Left Side: Exporters -->
-                <section class="panel panel-left">
-                    <div class="panel-header">
-                        <h2>Active Exporters</h2>
-                    </div>
-                    <div class="panel-body">
-                        <div class="table-container">
-                            <table id="tbl-exporters">
-                                <thead>
-                                    <tr>
-                                        <th>Exporter IP</th>
-                                        <th>Last Seen</th>
-                                        <th class="text-right">Packets</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td colspan="3" class="text-center text-muted">Loading exporters...</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                <!-- Left Side: Threat Risk & Exporters -->
+                <div class="left-workspace-column">
+                    <!-- Threat Risk Ranking -->
+                    <section class="panel panel-left compact-panel margin-bottom-panel">
+                        <div class="panel-header">
+                            <h2>Threat Risk Ranking</h2>
                         </div>
-                    </div>
-                </section>
+                        <div class="panel-body">
+                            <div class="table-container compact-table-container">
+                                <table id="tbl-threat-risk">
+                                    <thead>
+                                        <tr>
+                                            <th>Device IP</th>
+                                            <th>Risk Score</th>
+                                            <th class="text-right">Threat Level</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td colspan="3" class="text-center text-muted">All devices functioning at Low Risk.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Active Exporters -->
+                    <section class="panel panel-left compact-panel">
+                        <div class="panel-header">
+                            <h2>Active Exporters</h2>
+                        </div>
+                        <div class="panel-body">
+                            <div class="table-container compact-table-container">
+                                <table id="tbl-exporters">
+                                    <thead>
+                                        <tr>
+                                            <th>Exporter IP</th>
+                                            <th>Last Seen</th>
+                                            <th class="text-right">Packets</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td colspan="3" class="text-center text-muted">Loading exporters...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
+                </div>
 
                 <!-- Right Side: Top Talkers -->
                 <section class="panel panel-right">
@@ -200,9 +228,14 @@
                             Select a device from the list to view its profiling details and behavioral baseline.
                         </div>
                         <div id="device-details-content" class="hidden">
-                            <div class="device-summary-header">
-                                <h3 id="detail-ip">192.168.1.50</h3>
-                                <p id="detail-host" class="text-muted"></p>
+                            <div class="device-summary-header flex-header" style="flex-direction:row; align-items:center; justify-content:space-between; width:100%;">
+                                <div>
+                                    <h3 id="detail-ip">192.168.1.50</h3>
+                                    <p id="detail-host" class="text-muted"></p>
+                                </div>
+                                <div id="detail-risk-badge-container">
+                                    <!-- Dynamic threat score badge -->
+                                </div>
                             </div>
                             
                             <!-- Label Form -->

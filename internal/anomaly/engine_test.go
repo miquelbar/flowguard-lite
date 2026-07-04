@@ -60,6 +60,10 @@ func (m *MockDeviceRepository) ListAnomalies(ctx context.Context, limit int) ([]
 	return m.Anomalies, nil
 }
 
+func (m *MockDeviceRepository) GetActiveAnomalies(ctx context.Context, since time.Time) ([]storage.Anomaly, error) {
+	return []storage.Anomaly{}, nil
+}
+
 func TestAnomalyEngine_DeduplicationAndVolume(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "anomaly_engine_test")
 	if err != nil {

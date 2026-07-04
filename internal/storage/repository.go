@@ -84,6 +84,9 @@ type DeviceRepository interface {
 
 	// ListAnomalies queries recent anomalies triggered.
 	ListAnomalies(ctx context.Context, limit int) ([]Anomaly, error)
+
+	// GetActiveAnomalies queries all active anomalies triggered since a given time.
+	GetActiveAnomalies(ctx context.Context, since time.Time) ([]Anomaly, error)
 }
 
 // Manager defines the interface for managing database shards and schema maintenance.

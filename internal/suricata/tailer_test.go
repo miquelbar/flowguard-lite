@@ -58,6 +58,10 @@ func (m *MockDeviceRepository) ListAnomalies(ctx context.Context, limit int) ([]
 	return m.Anomalies, nil
 }
 
+func (m *MockDeviceRepository) GetActiveAnomalies(ctx context.Context, since time.Time) ([]storage.Anomaly, error) {
+	return []storage.Anomaly{}, nil
+}
+
 func TestTailer_AlertIngestAndDeduplication(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "eve_json_test")
 	if err != nil {

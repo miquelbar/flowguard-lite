@@ -48,12 +48,7 @@ func (a *FlowAggregator) RegisterFlushCallback(cb func(ctx context.Context, batc
 	a.onFlush = append(a.onFlush, cb)
 }
 
-// Start launches the background worker goroutine for scheduled flushes.
 func (a *FlowAggregator) Start() {
-	a.mu.Lock()
-	a.currentBucket = time.Now().Truncate(time.Minute)
-	a.mu.Unlock()
-
 	a.wg.Add(1)
 	go a.flushLoop()
 }
@@ -76,7 +71,9 @@ func (a *FlowAggregator) Process(event *flow.FlowEvent) {
 	bucketTime := event.Timestamp.Truncate(time.Minute)
 
 	// If bucket has advanced, trigger proactive flush of previous bucket
-	if bucketTime.After(a.currentBucket) {
+	if a.currentBucket.IsZero() {
+		a.currentBucket = bucketTime
+	} else if bucketTime.After(a.currentBucket) {
 		oldBucket := a.currentBucket
 		oldBatch := a.drainBuffer()
 		a.currentBucket = bucketTime

@@ -60,6 +60,10 @@ func (m *MockDeviceRepository) ListAnomalies(ctx context.Context, limit int) ([]
 	return []storage.Anomaly{}, nil
 }
 
+func (m *MockDeviceRepository) GetActiveAnomalies(ctx context.Context, since time.Time) ([]storage.Anomaly, error) {
+	return []storage.Anomaly{}, nil
+}
+
 func TestCalcMeanAndStdDev(t *testing.T) {
 	samples := []float64{10, 12, 23, 23, 16, 23, 21, 16}
 	mean := calcMean(samples)

@@ -92,6 +92,10 @@ func (m *MockDeviceRepository) ListAnomalies(ctx context.Context, limit int) ([]
 	return []storage.Anomaly{}, nil
 }
 
+func (m *MockDeviceRepository) GetActiveAnomalies(ctx context.Context, since time.Time) ([]storage.Anomaly, error) {
+	return []storage.Anomaly{}, nil
+}
+
 type MockFlowProcessor struct {
 	mu     sync.Mutex
 	Events []*flow.FlowEvent

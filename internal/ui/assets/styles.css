@@ -309,6 +309,12 @@ body {
     gap: 1.5rem;
 }
 
+.left-workspace-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
 @media (min-width: 1024px) {
     .dashboard-main {
         grid-template-columns: 380px 1fr;
@@ -327,6 +333,14 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 480px;
+}
+
+.compact-panel {
+    min-height: 240px !important;
+}
+
+.margin-bottom-panel {
+    margin-bottom: 0.5rem;
 }
 
 .panel-header {
@@ -441,6 +455,38 @@ body {
     font-size: 0.938rem;
     font-weight: 600;
     font-family: monospace;
+}
+
+/* Threat Risk Score Badges */
+.risk-badge {
+    padding: 0.4rem 0.8rem;
+    border-radius: 10px;
+    font-size: 0.813rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.risk-badge-high {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(185, 28, 28, 0.35) 100%);
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.4);
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.15);
+}
+
+.risk-badge-medium {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(217, 119, 6, 0.35) 100%);
+    color: #fcd34d;
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+.risk-badge-low {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.25) 100%);
+    color: #a7f3d0;
+    border-color: rgba(16, 185, 129, 0.3);
 }
 
 /* Anomaly Alert Styling */
@@ -593,6 +639,10 @@ body {
     max-height: 500px;
 }
 
+.compact-table-container {
+    max-height: 180px !important;
+}
+
 table {
     width: 100%;
     border-collapse: collapse;
@@ -602,6 +652,12 @@ table {
 th, td {
     padding: 0.875rem 1rem;
     text-align: left;
+}
+
+/* Make compact tables have tighter padding */
+.compact-table-container th, .compact-table-container td {
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.813rem !important;
 }
 
 th {

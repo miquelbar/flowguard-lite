@@ -10,6 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let exportersData = [];
     let devicesData = [];
     let anomaliesData = [];
+    let riskDevicesData = [];
     let selectedDeviceIP = null;
 
     // Navigation elements
@@ -37,6 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const tblTopTalkers = document.getElementById("tbl-top-talkers").querySelector("tbody");
     const tblDevices = document.getElementById("tbl-devices").querySelector("tbody");
     const tblAnomalies = document.getElementById("tbl-anomalies").querySelector("tbody");
+    const tblThreatRisk = document.getElementById("tbl-threat-risk").querySelector("tbody");
     
     const tabButtons = document.querySelectorAll(".tab-btn");
     const triageFilterButtons = document.querySelectorAll(".triage-filter-btn");
@@ -49,6 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const formUpdateLabel = document.getElementById("form-update-label");
     const inputDetailLabel = document.getElementById("input-detail-label");
     const baselineStatsContent = document.getElementById("baseline-stats-content");
+    const detailRiskBadgeContainer = document.getElementById("detail-risk-badge-container");
 
     // Toast elements
     const toastContainer = document.getElementById("toast-container");
@@ -141,6 +144,18 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Fetch Threat Risk Scoring ranks
+    async function fetchThreatRisk() {
+        try {
+            const resp = await fetch("/api/risk/devices");
+            if (!resp.ok) throw new Error("Risk query failed");
+            riskDevicesData = await resp.json();
+            renderThreatRisk();
+        } catch (err) {
+            console.error("Error fetching threat risk scores: ", err);
+        }
+    }
+
     // Fetch Anomalies list
     async function fetchAnomalies() {
         try {
@@ -167,6 +182,38 @@ document.addEventListener("DOMContentLoaded", () => {
                 <td class="text-right">${formatNumber(exp.packet_count)}</td>
             </tr>
         `).join('');
+    }
+
+    // Render Threat Risk Ranking to table
+    function renderThreatRisk() {
+        if (!riskDevicesData || riskDevicesData.length === 0) {
+            tblThreatRisk.innerHTML = `<tr><td colspan="3" class="text-center text-muted">All devices functioning at Low Risk.</td></tr>`;
+            return;
+        }
+
+        tblThreatRisk.innerHTML = riskDevicesData.map(dev => {
+            const badgeClass = dev.risk_level === "high" ? "risk-badge-high" : (dev.risk_level === "medium" ? "risk-badge-medium" : "risk-badge-low");
+            return `
+                <tr style="cursor: pointer;" class="threat-device-row" data-ip="${dev.ip}">
+                    <td class="font-semibold">${dev.ip} ${dev.label ? `<span style="font-size:0.75rem; font-weight:normal;" class="badge badge-label">${dev.label}</span>` : ''}</td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:0.5rem;">
+                            <span class="risk-badge ${badgeClass}" style="padding: 0.15rem 0.4rem; font-size: 0.75rem;">${dev.risk_score}</span>
+                        </div>
+                    </td>
+                    <td class="text-right text-muted" style="text-transform: capitalize;">${dev.risk_level} Risk</td>
+                </tr>
+            `;
+        }).join('');
+
+        // Clicking a threat device row navigates to devices page and selects it
+        tblThreatRisk.querySelectorAll(".threat-device-row").forEach(row => {
+            row.addEventListener("click", () => {
+                const ip = row.getAttribute("data-ip");
+                selectedDeviceIP = ip;
+                switchView("devices");
+            });
+        });
     }
 
     // Render Top Talkers to table with progress bars
@@ -258,6 +305,15 @@ document.addEventListener("DOMContentLoaded", () => {
         detailIp.textContent = dev.ip;
         detailHost.textContent = dev.hostname ? `Reverse DNS: ${dev.hostname}` : "Reverse DNS: Unresolved";
         inputDetailLabel.value = dev.label || "";
+
+        // Display current active risk badge
+        const riskDev = riskDevicesData.find(r => r.ip === ip);
+        if (riskDev) {
+            const badgeClass = riskDev.risk_level === "high" ? "risk-badge-high" : (riskDev.risk_level === "medium" ? "risk-badge-medium" : "risk-badge-low");
+            detailRiskBadgeContainer.innerHTML = `<span class="risk-badge ${badgeClass}" title="Active alerts: ${riskDev.active_alert_count}">Risk Index: ${riskDev.risk_score}</span>`;
+        } else {
+            detailRiskBadgeContainer.innerHTML = `<span class="risk-badge risk-badge-low">Risk Index: 0</span>`;
+        }
 
         // Fetch behavioral baseline
         baselineStatsContent.innerHTML = `<p class="text-muted text-center">Loading baseline profile...</p>`;
@@ -409,7 +465,10 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!resp.ok) throw new Error("Failed to update alert review status");
 
             showToast(`Alert status successfully updated to ${newStatus}!`);
-            await fetchAnomalies();
+            await Promise.all([
+                fetchAnomalies(),
+                fetchThreatRisk()
+            ]);
         } catch (err) {
             showToast(err.message, "error");
         }
@@ -417,6 +476,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Perform full page data fetch
     async function loadData() {
+        // Fetch threat risk ranks unconditionally as they affect indicators and badges across multiple views
+        await fetchThreatRisk();
+
         if (activeView === "dashboard") {
             await Promise.all([
                 fetchHealth(),

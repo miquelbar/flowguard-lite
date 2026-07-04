@@ -16,6 +16,7 @@ import (
 	"github.com/flowguard/flowguard/internal/collector"
 	"github.com/flowguard/flowguard/internal/config"
 	"github.com/flowguard/flowguard/internal/flow"
+	"github.com/flowguard/flowguard/internal/risk"
 	"github.com/flowguard/flowguard/internal/storage"
 )
 
@@ -41,7 +42,7 @@ func TestHandleHealth(t *testing.T) {
 			DecodeErrors:    1,
 		},
 	}
-	server := NewAPIServer(cfg, logger, mockColl, nil, nil, nil)
+	server := NewAPIServer(cfg, logger, mockColl, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
@@ -82,7 +83,7 @@ func TestHandleHealth(t *testing.T) {
 func TestHandleHealth_InvalidMethod(t *testing.T) {
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := NewAPIServer(cfg, logger, nil, nil, nil, nil)
+	server := NewAPIServer(cfg, logger, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/health", nil)
 	w := httptest.NewRecorder()
@@ -106,7 +107,7 @@ func TestHandleExporters(t *testing.T) {
 			{IP: "192.168.1.1", LastSeen: now, PacketCount: 100},
 		},
 	}
-	server := NewAPIServer(cfg, logger, mockColl, nil, nil, nil)
+	server := NewAPIServer(cfg, logger, mockColl, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/exporters", nil)
 	w := httptest.NewRecorder()
@@ -141,6 +142,8 @@ type MockFlowRepository struct {
 	Destinations []flow.TopResult
 	Ports        []flow.TopResult
 	Baseline     *storage.DeviceBaseline
+	Devices      []storage.Device
+	Anomalies    []storage.Anomaly
 	Err          error
 }
 
@@ -176,6 +179,9 @@ func (m *MockFlowRepository) GetDevice(ctx context.Context, ip string) (*storage
 }
 
 func (m *MockFlowRepository) ListDevices(ctx context.Context) ([]storage.Device, error) {
+	if len(m.Devices) > 0 {
+		return m.Devices, m.Err
+	}
 	return []storage.Device{
 		{IP: "192.168.1.10", Label: "Discovered Device", Hostname: "test.local"},
 	}, m.Err
@@ -207,6 +213,15 @@ func (m *MockFlowRepository) UpdateAnomalyStatus(ctx context.Context, id int64, 
 func (m *MockFlowRepository) ListAnomalies(ctx context.Context, limit int) ([]storage.Anomaly, error) {
 	return []storage.Anomaly{
 		{ID: 123, IP: "192.168.1.10", Type: "TRAFFIC_SPIKE", Status: "active"},
+	}, m.Err
+}
+
+func (m *MockFlowRepository) GetActiveAnomalies(ctx context.Context, since time.Time) ([]storage.Anomaly, error) {
+	if len(m.Anomalies) > 0 {
+		return m.Anomalies, m.Err
+	}
+	return []storage.Anomaly{
+		{ID: 123, IP: "192.168.1.10", Type: "TRAFFIC_SPIKE", Status: "active", CreatedAt: time.Now()},
 	}, m.Err
 }
 
@@ -266,7 +281,7 @@ func TestHandleTopTalkers(t *testing.T) {
 		},
 	}
 
-	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil)
 
 	// 1. Sources check
 	req := httptest.NewRequest(http.MethodGet, "/api/top/sources", nil)
@@ -317,7 +332,7 @@ func TestHandleTopTalkers(t *testing.T) {
 func TestHandleUI(t *testing.T) {
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := NewAPIServer(cfg, logger, nil, nil, nil, nil)
+	server := NewAPIServer(cfg, logger, nil, nil, nil, nil, nil)
 
 	// Fetch root "/"
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -357,7 +372,7 @@ func TestHandleDevices(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockRepo := &MockFlowRepository{}
 
-	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil)
 
 	// 1. GET /api/devices
 	req := httptest.NewRequest(http.MethodGet, "/api/devices", nil)
@@ -410,7 +425,7 @@ func TestHandleDeviceBaseline(t *testing.T) {
 	}
 	_ = engine.LoadBaselines(context.Background())
 
-	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, engine)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, engine, nil)
 
 	// 1. GET /api/devices/192.168.1.10/baseline (valid)
 	req := httptest.NewRequest(http.MethodGet, "/api/devices/192.168.1.10/baseline", nil)
@@ -444,7 +459,7 @@ func TestHandleAnomalies(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockRepo := &MockFlowRepository{}
 
-	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil)
 
 	// 1. GET /api/anomalies
 	req := httptest.NewRequest(http.MethodGet, "/api/anomalies?limit=10", nil)
@@ -480,6 +495,39 @@ func TestHandleAnomalies(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected status NotFound (404), got %d", w.Code)
+	}
+}
+
+func TestHandleListRiskDevices(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockRepo := &MockFlowRepository{}
+
+	// Add some mock devices and active anomalies to MockFlowRepository so we can score
+	mockRepo.Devices = []storage.Device{
+		{IP: "192.168.1.10", Hostname: "test.local", Label: "Discovered Device"},
+	}
+	mockRepo.Anomalies = []storage.Anomaly{
+		{IP: "192.168.1.10", Type: "TRAFFIC_SPIKE", Severity: "high", Status: "active", CreatedAt: time.Now()},
+	}
+
+	riskEng := risk.NewRiskEngine(mockRepo)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, riskEng)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/risk/devices", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status OK, got %d", w.Code)
+	}
+
+	var results []risk.DeviceRisk
+	if err := json.Unmarshal(w.Body.Bytes(), &results); err != nil {
+		t.Fatalf("failed decoding risk list: %v", err)
+	}
+	if len(results) != 1 || results[0].RiskScore != 40 || results[0].RiskLevel != "medium" {
+		t.Errorf("unexpected risk list: %+v", results)
 	}
 }
 

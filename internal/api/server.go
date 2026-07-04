@@ -12,6 +12,7 @@ import (
 	"github.com/flowguard/flowguard/internal/baseline"
 	"github.com/flowguard/flowguard/internal/collector"
 	"github.com/flowguard/flowguard/internal/config"
+	"github.com/flowguard/flowguard/internal/risk"
 	"github.com/flowguard/flowguard/internal/storage"
 	"github.com/flowguard/flowguard/internal/ui"
 )
@@ -31,6 +32,7 @@ type APIServer struct {
 	repo           storage.FlowRepository
 	deviceRepo     storage.DeviceRepository
 	baselineEngine *baseline.BaselineEngine
+	riskEngine     *risk.RiskEngine
 }
 
 // HealthResponse represents the structure of health check outputs.
@@ -50,6 +52,7 @@ func NewAPIServer(
 	repo storage.FlowRepository,
 	deviceRepo storage.DeviceRepository,
 	baselineEngine *baseline.BaselineEngine,
+	riskEngine *risk.RiskEngine,
 ) *APIServer {
 	mux := http.NewServeMux()
 	s := &APIServer{
@@ -59,6 +62,7 @@ func NewAPIServer(
 		repo:           repo,
 		deviceRepo:     deviceRepo,
 		baselineEngine: baselineEngine,
+		riskEngine:     riskEngine,
 		server: &http.Server{
 			Addr:         ":" + cfg.Port,
 			Handler:      mux,
@@ -84,6 +88,9 @@ func NewAPIServer(
 	// Anomaly detection endpoints (Go 1.22+ wildcard patterns)
 	mux.HandleFunc("GET /api/anomalies", s.handleListAnomalies)
 	mux.HandleFunc("PUT /api/anomalies/{id}/status", s.handleUpdateAnomalyStatus)
+
+	// Threat risk scoring endpoints (Go 1.22+ wildcard patterns)
+	mux.HandleFunc("GET /api/risk/devices", s.handleListRiskDevices)
 
 	mux.Handle("/", ui.Handler())
 

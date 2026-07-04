@@ -347,5 +347,27 @@ func (s *APIServer) handleUpdateAnomalyStatus(w http.ResponseWriter, r *http.Req
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
 
+// handleListRiskDevices returns the sorted list of devices ranked by threat risk scoring.
+func (s *APIServer) handleListRiskDevices(w http.ResponseWriter, r *http.Request) {
+	if s.riskEngine == nil {
+		writeError(w, s.logger, http.StatusInternalServerError, "threat risk scoring engine is not configured")
+		return
+	}
+
+	list, err := s.riskEngine.CalculateDeviceRisks(r.Context())
+	if err != nil {
+		s.logger.Error("Failed calculating device threat risks", slog.String("error", err.Error()))
+		writeError(w, s.logger, http.StatusInternalServerError, "internal calculation error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(list); err != nil {
+		s.logger.Error("Failed to encode device threat risks response", slog.String("error", err.Error()))
+	}
+}
+
+
 
 

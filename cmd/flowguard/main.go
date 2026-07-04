@@ -18,6 +18,7 @@ import (
 	"github.com/flowguard/flowguard/internal/device"
 	"github.com/flowguard/flowguard/internal/flow"
 	"github.com/flowguard/flowguard/internal/logger"
+	"github.com/flowguard/flowguard/internal/risk"
 	"github.com/flowguard/flowguard/internal/storage"
 	"github.com/flowguard/flowguard/internal/suricata"
 )
@@ -124,10 +125,13 @@ func main() {
 		suricataTailer.Start()
 	}
 
-	// 14. Initialize API HTTP server
-	server := api.NewAPIServer(cfg, log, coll, repo, repo, baselineEngine)
+	// 14. Initialize Threat Risk Scoring Engine
+	riskEngine := risk.NewRiskEngine(repo)
 
-	// 15. Run HTTP server in a separate goroutine so we can trap signals concurrently
+	// 15. Initialize API HTTP server
+	server := api.NewAPIServer(cfg, log, coll, repo, repo, baselineEngine, riskEngine)
+
+	// 16. Run HTTP server in a separate goroutine so we can trap signals concurrently
 	serverErrChan := make(chan error, 1)
 	go func() {
 		if err := server.Start(); err != nil {
@@ -135,11 +139,11 @@ func main() {
 		}
 	}()
 
-	// 16. Setup signal trapping for graceful shutdown
+	// 17. Setup signal trapping for graceful shutdown
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
-	// 17. Wait for termination signal or server start failure
+	// 18. Wait for termination signal or server start failure
 	select {
 	case err := <-serverErrChan:
 		log.Error("HTTP server stopped unexpectedly", slog.String("error", err.Error()))

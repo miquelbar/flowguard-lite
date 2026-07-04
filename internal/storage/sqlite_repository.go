@@ -572,6 +572,50 @@ func (r *SQLiteRepository) ListAnomalies(ctx context.Context, limit int) ([]Anom
 	return list, nil
 }
 
+// GetActiveAnomalies queries all active anomalies triggered since a given time.
+func (r *SQLiteRepository) GetActiveAnomalies(ctx context.Context, since time.Time) ([]Anomaly, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	sinceStr := since.Format(time.RFC3339)
+
+	rows, err := r.metaDB.QueryContext(ctx, `
+		SELECT id, ip, type, description, severity, status, created_at, updated_at
+		FROM anomalies
+		WHERE status = 'active' AND created_at >= ?
+		ORDER BY created_at DESC
+	`, sinceStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed query active anomalies list: %w", err)
+	}
+	defer rows.Close()
+
+	var list []Anomaly
+	for rows.Next() {
+		var a Anomaly
+		var createdStr, updatedStr string
+
+		err = rows.Scan(&a.ID, &a.IP, &a.Type, &a.Description, &a.Severity, &a.Status, &createdStr, &updatedStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan active anomaly row: %w", err)
+		}
+
+		if t, err := time.Parse(time.RFC3339, createdStr); err == nil {
+			a.CreatedAt = t
+		}
+		if t, err := time.Parse(time.RFC3339, updatedStr); err == nil {
+			a.UpdatedAt = t
+		}
+
+		list = append(list, a)
+	}
+
+	if list == nil {
+		list = []Anomaly{}
+	}
+	return list, nil
+}
+
 
 // Helper: Open / cache daily SQLite shards and verify table schema.
 func (r *SQLiteRepository) getOrCreateShard(dateStr string) (*sql.DB, error) {

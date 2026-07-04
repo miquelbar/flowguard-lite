@@ -352,6 +352,26 @@ func TestSQLiteRepository_Anomalies(t *testing.T) {
 	if len(list) != 1 || list[0].Status != "acknowledged" {
 		t.Errorf("expected status 'acknowledged', got '%s'", list[0].Status)
 	}
+
+	// 5. Save another active anomaly and verify GetActiveAnomalies
+	anom2 := &Anomaly{
+		IP:          "192.168.1.100",
+		Type:        "NEW_PORT",
+		Description: "New port query",
+		Severity:    "low",
+		Status:      "active",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	_ = repo.SaveAnomaly(ctx, anom2)
+
+	activeList, err := repo.GetActiveAnomalies(ctx, now.Add(-1*time.Hour))
+	if err != nil {
+		t.Fatalf("failed query active anomalies: %v", err)
+	}
+	if len(activeList) != 1 || activeList[0].Type != "NEW_PORT" {
+		t.Errorf("expected 1 active anomaly (NEW_PORT), got: %v", activeList)
+	}
 }
 
 
