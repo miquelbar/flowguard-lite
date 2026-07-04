@@ -58,27 +58,24 @@ func (m *MockDeviceRepository) GetActiveAnomalies(ctx context.Context, since tim
 	defer m.mu.Unlock()
 	var filtered []storage.Anomaly
 	for _, a := range m.Anomalies {
-		if a.Status == "active" && a.CreatedAt.After(since) {
+		if a.CreatedAt.After(since) {
 			filtered = append(filtered, a)
 		}
 	}
 	return filtered, nil
 }
 
-func TestRiskEngine_CalculateDeviceRisks(t *testing.T) {
+func TestRiskEngine_CalculateDeviceRisks_DecayAndCapping(t *testing.T) {
 	repo := &MockDeviceRepository{}
 	engine := NewRiskEngine(repo)
 
 	now := time.Now()
 
-	// 1. Setup mock devices
 	repo.Devices = []storage.Device{
 		{IP: "192.168.1.100", Hostname: "target-1.local", Label: "Server"},
-		{IP: "192.168.1.200", Hostname: "target-2.local", Label: "Smart TV"},
 		{IP: "192.168.1.50", Hostname: "target-3.local", Label: "Laptop"},
 	}
 
-	// 2. Setup mock anomalies (varying severity and ages)
 	repo.Anomalies = []storage.Anomaly{
 		// Device 1: High severity triggered 6 hours ago (decay = 18/24 = 0.75 -> decayed weight = 40 * 0.75 = 30)
 		{
@@ -88,24 +85,7 @@ func TestRiskEngine_CalculateDeviceRisks(t *testing.T) {
 			Status:    "active",
 			CreatedAt: now.Add(-6 * time.Hour),
 		},
-		// Device 2: Medium severity triggered 12 hours ago (decay = 12/24 = 0.5 -> decayed weight = 20 * 0.5 = 10)
-		// Plus Low severity triggered 2 hours ago (decay = 22/24 = 0.916 -> decayed weight = 10 * 0.916 = 9.16)
-		// Total weight = 19.16 -> rounded to 19 (medium risk)
-		{
-			IP:        "192.168.1.200",
-			Type:      "NEW_PORT",
-			Severity:  "medium",
-			Status:    "active",
-			CreatedAt: now.Add(-12 * time.Hour),
-		},
-		{
-			IP:        "192.168.1.200",
-			Type:      "NEW_DESTINATION",
-			Severity:  "low",
-			Status:    "active",
-			CreatedAt: now.Add(-2 * time.Hour),
-		},
-		// Device 3: No active anomalies or older than 24 hours (should be ignored)
+		// Device 2: Older than 24 hours (should be ignored)
 		{
 			IP:        "192.168.1.50",
 			Type:      "TRAFFIC_SPIKE",
@@ -120,17 +100,84 @@ func TestRiskEngine_CalculateDeviceRisks(t *testing.T) {
 		t.Fatalf("failed CalculateDeviceRisks: %v", err)
 	}
 
-	// Should return only 2 devices (Device 1 and Device 2)
-	if len(results) != 2 {
-		t.Fatalf("expected 2 risky devices, got %d", len(results))
+	if len(results) != 1 {
+		t.Fatalf("expected 1 risky device, got %d", len(results))
 	}
 
-	// Sorted descending: Device 1 should be first (score 30 > score 19)
 	if results[0].IP != "192.168.1.100" || results[0].RiskScore != 30 || results[0].RiskLevel != "medium" {
 		t.Errorf("unexpected results[0]: %+v", results[0])
 	}
+	if len(results[0].Evidence) != 1 || results[0].Evidence[0].Type != "TRAFFIC_SPIKE" {
+		t.Errorf("expected 1 evidence item for TRAFFIC_SPIKE, got %+v", results[0].Evidence)
+	}
+}
 
+func TestRiskEngine_CorrelationBooster(t *testing.T) {
+	repo := &MockDeviceRepository{}
+	engine := NewRiskEngine(repo)
+
+	now := time.Now()
+
+	repo.Devices = []storage.Device{
+		{IP: "192.168.1.100", Hostname: "correlated.local"},
+		{IP: "192.168.1.200", Hostname: "uncorrelated.local"},
+	}
+
+	repo.Anomalies = []storage.Anomaly{
+		// Device 1 (correlated): Suricata alert + Traffic spike within 10 minutes
+		// Both low severity (weight 10 + 10 = 20)
+		// Triggered 0 hours ago (no decay)
+		// +20 correlation booster = 40 (medium level)
+		{
+			IP:        "192.168.1.100",
+			Type:      "SURICATA_ALERT",
+			Severity:  "low",
+			Status:    "active",
+			CreatedAt: now,
+		},
+		{
+			IP:        "192.168.1.100",
+			Type:      "TRAFFIC_SPIKE",
+			Severity:  "low",
+			Status:    "active",
+			CreatedAt: now.Add(-10 * time.Minute),
+		},
+
+		// Device 2 (uncorrelated): Suricata alert + Traffic spike spaced by 3 hours (no boost)
+		// Both low severity (weight 10 + 10 = 20)
+		// No boost = 20 (low level)
+		{
+			IP:        "192.168.1.200",
+			Type:      "SURICATA_ALERT",
+			Severity:  "low",
+			Status:    "active",
+			CreatedAt: now,
+		},
+		{
+			IP:        "192.168.1.200",
+			Type:      "TRAFFIC_SPIKE",
+			Severity:  "low",
+			Status:    "active",
+			CreatedAt: now.Add(-3 * time.Hour),
+		},
+	}
+
+	results, err := engine.CalculateDeviceRisks(context.Background())
+	if err != nil {
+		t.Fatalf("failed CalculateDeviceRisks: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 devices, got %d", len(results))
+	}
+
+	// First element should be 192.168.1.100 (score 40 > 20)
+	if results[0].IP != "192.168.1.100" || results[0].RiskScore != 40 || results[0].RiskLevel != "medium" {
+		t.Errorf("expected device 192.168.1.100 to have score 40, got: %+v", results[0])
+	}
+
+	// Second element should be 192.168.1.200 (score 19 due to 3h decay)
 	if results[1].IP != "192.168.1.200" || results[1].RiskScore != 19 || results[1].RiskLevel != "low" {
-		t.Errorf("unexpected results[1]: %+v", results[1])
+		t.Errorf("expected device 192.168.1.200 to have score 19, got: %+v", results[1])
 	}
 }

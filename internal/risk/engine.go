@@ -9,18 +9,27 @@ import (
 	"github.com/flowguard/flowguard/internal/storage"
 )
 
-// DeviceRisk represents a computed security threat score and details for a device.
-type DeviceRisk struct {
-	IP               string   `json:"ip"`
-	Label            string   `json:"label"`
-	Hostname         string   `json:"hostname"`
-	RiskScore        int      `json:"risk_score"`
-	RiskLevel        string   `json:"risk_level"` // "low", "medium", "high"
-	ActiveAlertCount int      `json:"active_alert_count"`
-	Explanations     []string `json:"explanations"`
+// EvidenceRef represents an individual security event contributing to the device's threat level.
+type EvidenceRef struct {
+	Type      string    `json:"type"`
+	Severity  string    `json:"severity"`
+	Timestamp time.Time `json:"timestamp"`
+	Message   string    `json:"message"`
 }
 
-// RiskEngine handles threat scoring and temporal alert decay formulas.
+// DeviceRisk represents a computed security threat score, classification level, and supporting evidence.
+type DeviceRisk struct {
+	IP               string        `json:"ip"`
+	Label            string        `json:"label"`
+	Hostname         string        `json:"hostname"`
+	RiskScore        int           `json:"risk_score"`
+	RiskLevel        string        `json:"risk_level"` // "low", "medium", "high"
+	ActiveAlertCount int           `json:"active_alert_count"`
+	Explanations     []string      `json:"explanations"`
+	Evidence         []EvidenceRef `json:"evidence"`
+}
+
+// RiskEngine handles threat scoring, temporal alert decay, and multi-source event correlation.
 type RiskEngine struct {
 	repo storage.DeviceRepository
 }
@@ -30,7 +39,7 @@ func NewRiskEngine(repo storage.DeviceRepository) *RiskEngine {
 	return &RiskEngine{repo: repo}
 }
 
-// CalculateDeviceRisks queries active anomalies over the past 24 hours and compiles a list of risky devices.
+// CalculateDeviceRisks queries active anomalies over the past 24 hours, correlates multiple sources, and compiles the ranking list.
 func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, error) {
 	devices, err := e.repo.ListDevices(ctx)
 	if err != nil {
@@ -61,7 +70,12 @@ func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, er
 
 		var rawScore float64
 		var explanations []string
-		activeCount := 0
+		var evidence []EvidenceRef
+
+		var hasSuricata bool
+		var hasFlowAnomaly bool
+		var suricataTimes []time.Time
+		var flowAnomalyTimes []time.Time
 
 		for _, a := range anoms {
 			// Determine base severity weight
@@ -82,9 +96,50 @@ func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, er
 
 			decayedWeight := weight * decay
 			rawScore += decayedWeight
-			activeCount++
 
 			explanations = append(explanations, a.Description)
+			evidence = append(evidence, EvidenceRef{
+				Type:      a.Type,
+				Severity:  a.Severity,
+				Timestamp: a.CreatedAt,
+				Message:   a.Description,
+			})
+
+			// Classify for correlation checks
+			if a.Type == "SURICATA_ALERT" {
+				hasSuricata = true
+				suricataTimes = append(suricataTimes, a.CreatedAt)
+			} else {
+				// Traffic spikes, port anomalies, or DDoS events
+				hasFlowAnomaly = true
+				flowAnomalyTimes = append(flowAnomalyTimes, a.CreatedAt)
+			}
+		}
+
+		// Perform correlation checks: if there is both a Suricata alert and a flow anomaly within 1 hour
+		correlated := false
+		if hasSuricata && hasFlowAnomaly {
+			for _, sTime := range suricataTimes {
+				for _, fTime := range flowAnomalyTimes {
+					diff := sTime.Sub(fTime)
+					if diff < 0 {
+						diff = -diff
+					}
+					if diff <= 1*time.Hour {
+						correlated = true
+						break
+					}
+				}
+				if correlated {
+					break
+				}
+			}
+		}
+
+		// Apply correlation booster
+		if correlated {
+			rawScore += 20.0
+			explanations = append(explanations, "Correlated signature-based IDS alert with flow-based anomaly within 1 hour (+20 correlation boost)")
 		}
 
 		// Cap score between 0 and 100
@@ -114,8 +169,9 @@ func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, er
 			Hostname:         d.Hostname,
 			RiskScore:        score,
 			RiskLevel:        level,
-			ActiveAlertCount: activeCount,
+			ActiveAlertCount: len(anoms),
 			Explanations:     explanations,
+			Evidence:         evidence,
 		})
 	}
 
