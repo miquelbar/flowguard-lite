@@ -937,8 +937,7 @@ body {
 /* Modern Minimalist Tables */
 .table-container {
     width: 100%;
-    overflow-x: auto;
-    height: 100%;
+    overflow: auto;
     max-height: 500px;
 }
 
@@ -1899,7 +1898,8 @@ body.sidebar-collapsed #btn-toggle-sidebar svg {
 }
 
 .table-container {
-    max-height: 58vh;
+    max-height: 65vh;
+    overflow: auto;
 }
 
 .settings-container {
