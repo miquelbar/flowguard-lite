@@ -702,7 +702,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function renderPolicies() {
         if (!tblPolicies) return;
         if (policiesData.length === 0) {
-            tblPolicies.innerHTML = `<tr><td colspan="5" class="text-center text-muted pad-large">No policies configured yet.</td></tr>`;
+            tblPolicies.innerHTML = `<tr><td colspan="6" class="text-center text-muted pad-large">No policies configured yet.</td></tr>`;
             return;
         }
 
@@ -711,11 +711,24 @@ document.addEventListener("DOMContentLoaded", () => {
             const suppressedText = p.suppressed 
                 ? '<span class="badge badge-label text-warning" style="background-color: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.2);">Silenced</span>' 
                 : '<span class="badge badge-label text-success" style="background-color: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.2);">Active</span>';
-            const scopeBadge = `<span class="badge badge-label" style="background-color: rgba(56,189,248,0.1); border-color: rgba(56,189,248,0.2); color: #38bdf8;">${p.scope}</span>`;
+            const scopeBadge = `<span class="badge badge-label" style="background-color: rgba(56,189,248,0.1); border-color: rgba(56,189,248,0.2); color: #38bdf8; text-transform: uppercase;">${p.scope}</span>`;
+            
+            let priorityBadge = "";
+            if (p.scope === "ip") {
+                priorityBadge = `<span class="badge badge-label" style="background-color: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.2); color: #10b981; font-weight: 600;">4 (Highest)</span>`;
+            } else if (p.scope === "subnet") {
+                priorityBadge = `<span class="badge badge-label" style="background-color: rgba(56,189,248,0.1); border-color: rgba(56,189,248,0.2); color: #38bdf8;">3</span>`;
+            } else if (p.scope === "alert_type") {
+                priorityBadge = `<span class="badge badge-label" style="background-color: rgba(251,146,60,0.1); border-color: rgba(251,146,60,0.2); color: #fb923c;">2</span>`;
+            } else {
+                priorityBadge = `<span class="badge badge-label" style="background-color: rgba(148,163,184,0.1); border-color: rgba(148,163,184,0.2); color: #94a3b8;">1 (Lowest)</span>`;
+            }
+
             return `
                 <tr data-id="${p.id}" class="${isSelected ? 'selected' : ''}" style="cursor: pointer;">
                     <td class="font-semibold">${escapeHtml(p.name)}</td>
                     <td>${scopeBadge}</td>
+                    <td>${priorityBadge}</td>
                     <td class="text-muted font-mono" style="font-size: 0.813rem;">${escapeHtml(p.target || "(all)")}</td>
                     <td>${suppressedText}</td>
                     <td class="text-center">

@@ -582,7 +582,7 @@
                     <div class="panel-header flex-header">
                         <div>
                             <h2>Traffic Treatment Policies</h2>
-                            <p class="panel-subtitle text-muted">Override anomaly behavior and silence noisy devices/alerts</p>
+                            <p class="panel-subtitle text-muted">Override anomaly behavior. Most specific rule wins: IP (Highest) &gt; Subnet &gt; Alert Type &gt; Global (Lowest).</p>
                         </div>
                         <div>
                             <button id="btn-add-policy" class="btn-primary">
@@ -601,6 +601,7 @@
                                     <tr>
                                         <th>Name</th>
                                         <th>Scope</th>
+                                        <th>Priority</th>
                                         <th>Target</th>
                                         <th>Status</th>
                                         <th class="text-center">Action</th>
@@ -608,7 +609,7 @@
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td colspan="5" class="text-center text-muted">Loading policies...</td>
+                                        <td colspan="6" class="text-center text-muted">Loading policies...</td>
                                     </tr>
                                 </tbody>
                             </table>
