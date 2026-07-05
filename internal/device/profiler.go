@@ -238,3 +238,18 @@ func (p *DeviceProfiler) dnsLookupWorker() {
 		}
 	}
 }
+
+// UpdateLocalSubnets dynamically re-configures the local subnets list at runtime.
+func (p *DeviceProfiler) UpdateLocalSubnets(subnets []string) {
+	var parsed []*net.IPNet
+	for _, cidr := range subnets {
+		_, ipNet, err := net.ParseCIDR(strings.TrimSpace(cidr))
+		if err == nil {
+			parsed = append(parsed, ipNet)
+		}
+	}
+	p.dnsMu.Lock()
+	p.localSubnets = parsed
+	p.dnsMu.Unlock()
+	p.logger.Info("Dynamically updated DeviceProfiler local subnets", slog.Int("count", len(parsed)))
+}

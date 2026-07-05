@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -115,6 +116,30 @@ func TestSQLiteRepository_SaveAndQuery(t *testing.T) {
 	}
 	if ports[0].Key != "443" || ports[0].Bytes != 10000 {
 		t.Errorf("expected top port 443 with 10000 bytes, got %s with %d", ports[0].Key, ports[0].Bytes)
+	}
+
+	// 4. Query Top Protocols
+	protocols, err := repo.GetTopProtocols(ctx, start, end, 10)
+	if err != nil {
+		t.Fatalf("failed to query top protocols: %v", err)
+	}
+	if len(protocols) != 2 {
+		t.Fatalf("expected 2 protocol keys, got %d", len(protocols))
+	}
+	if protocols[0].Key != "6" || protocols[0].Bytes != 10000 {
+		t.Errorf("expected top protocol 6 with 10000 bytes, got %s with %d", protocols[0].Key, protocols[0].Bytes)
+	}
+
+	// 5. Query traffic time-series with 5-minute buckets
+	series, err := repo.GetTrafficTimeSeries(ctx, start, end, 300)
+	if err != nil {
+		t.Fatalf("failed to query traffic time series: %v", err)
+	}
+	if len(series) != 1 {
+		t.Fatalf("expected 1 time-series bucket, got %d: %+v", len(series), series)
+	}
+	if series[0].Bytes != 12000 || series[0].Packets != 40 {
+		t.Errorf("unexpected traffic time-series bucket: %+v", series[0])
 	}
 }
 
@@ -372,9 +397,41 @@ func TestSQLiteRepository_Anomalies(t *testing.T) {
 	if len(activeList) != 1 || activeList[0].Type != "NEW_PORT" {
 		t.Errorf("expected 1 active anomaly (NEW_PORT), got: %v", activeList)
 	}
+	// 6. Test anomaly callbacks and audit logging
+	var callbackTriggered int32
+	repo.RegisterAnomalyCallback(func(a *Anomaly) {
+		atomic.AddInt32(&callbackTriggered, 1)
+	})
+
+	anom3 := &Anomaly{
+		IP:          "192.168.1.50",
+		Type:        "NEW_DESTINATION",
+		Description: "New peer query",
+		Severity:    "low",
+		Status:      "active",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	_ = repo.SaveAnomaly(ctx, anom3)
+
+	time.Sleep(50 * time.Millisecond) // Allow background goroutine to execute
+	if atomic.LoadInt32(&callbackTriggered) != 1 {
+		t.Error("expected anomaly save callback to trigger")
+	}
+
+	err = repo.SaveAuditLog(ctx, "update_label", "set ip 192.168.1.50 to Laptop")
+	if err != nil {
+		t.Fatalf("failed saving audit log: %v", err)
+	}
+
+	logs, err := repo.ListAuditLogs(ctx, 10)
+	if err != nil {
+		t.Fatalf("failed querying audit logs: %v", err)
+	}
+	if len(logs) != 1 || logs[0].Action != "update_label" {
+		t.Errorf("unexpected audit logs list: %v", logs)
+	}
 }
-
-
 
 func BenchmarkSQLiteRepository_SaveAggregates(b *testing.B) {
 	tmpDir, err := os.MkdirTemp("", "sqlite_bench")
@@ -412,5 +469,120 @@ func BenchmarkSQLiteRepository_SaveAggregates(b *testing.B) {
 		if err := repo.SaveAggregates(ctx, now, batch); err != nil {
 			b.Fatalf("failed to save: %v", err)
 		}
+	}
+}
+
+func TestSQLiteRepository_DeviceProfileQueries(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sqlite_profile_test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo, err := NewSQLiteRepository(tmpDir, logger)
+	if err != nil {
+		t.Fatalf("failed to create repository: %v", err)
+	}
+	defer repo.Close()
+
+	ctx := context.Background()
+	now := time.Now().Truncate(time.Minute)
+
+	// 1. Setup metadata
+	err = repo.UpsertDevice(ctx, "192.168.1.100", "test-host", now)
+	if err != nil {
+		t.Fatalf("failed to upsert device: %v", err)
+	}
+
+	anom := &Anomaly{
+		IP:          "192.168.1.100",
+		Type:        "TRAFFIC_SPIKE",
+		Description: "Anomaly 1",
+		Severity:    "high",
+		Status:      "active",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	err = repo.SaveAnomaly(ctx, anom)
+	if err != nil {
+		t.Fatalf("failed to save anomaly: %v", err)
+	}
+
+	// 2. Setup flows
+	flows := []flow.FlowEvent{
+		{
+			Timestamp: now,
+			SrcIP:     "192.168.1.100",
+			DstIP:     "8.8.8.8",
+			DstPort:   53,
+			Protocol:  17,
+			Bytes:     1000,
+			Packets:   10,
+		},
+		{
+			Timestamp: now,
+			SrcIP:     "1.1.1.1",
+			DstIP:     "192.168.1.100",
+			DstPort:   443,
+			Protocol:  6,
+			Bytes:     2000,
+			Packets:   20,
+		},
+	}
+	err = repo.SaveAggregates(ctx, now, flows)
+	if err != nil {
+		t.Fatalf("failed to save aggregates: %v", err)
+	}
+
+	start := now.Add(-1 * time.Hour)
+	end := now.Add(1 * time.Hour)
+
+	// Test GetAnomaliesForIP
+	anoms, err := repo.GetAnomaliesForIP(ctx, "192.168.1.100", 10)
+	if err != nil {
+		t.Fatalf("failed to get anomalies for IP: %v", err)
+	}
+	if len(anoms) != 1 || anoms[0].Type != "TRAFFIC_SPIKE" {
+		t.Errorf("expected 1 anomaly of type TRAFFIC_SPIKE, got %v", anoms)
+	}
+
+	// Test GetDeviceTrafficTimeSeries
+	ts, err := repo.GetDeviceTrafficTimeSeries(ctx, "192.168.1.100", start, end, 60)
+	if err != nil {
+		t.Fatalf("failed to get device traffic time series: %v", err)
+	}
+	if len(ts) != 1 || ts[0].Bytes != 3000 {
+		t.Errorf("expected 3000 bytes in time series, got %v", ts)
+	}
+
+	// Test GetDeviceTopPeers
+	peers, err := repo.GetDeviceTopPeers(ctx, "192.168.1.100", start, end, 10)
+	if err != nil {
+		t.Fatalf("failed to get device top peers: %v", err)
+	}
+	if len(peers) != 2 {
+		t.Fatalf("expected 2 peers, got %d", len(peers))
+	}
+	if peers[0].Key != "1.1.1.1" || peers[0].Bytes != 2000 {
+		t.Errorf("expected top peer to be 1.1.1.1 with 2000 bytes, got %v", peers[0])
+	}
+	if peers[1].Key != "8.8.8.8" || peers[1].Bytes != 1000 {
+		t.Errorf("expected second peer to be 8.8.8.8 with 1000 bytes, got %v", peers[1])
+	}
+
+	// Test GetDeviceTopPorts
+	ports, err := repo.GetDeviceTopPorts(ctx, "192.168.1.100", start, end, 10)
+	if err != nil {
+		t.Fatalf("failed to get device top ports: %v", err)
+	}
+	if len(ports) != 2 {
+		t.Fatalf("expected 2 ports, got %d", len(ports))
+	}
+	if ports[0].Key != "443" || ports[0].Bytes != 2000 {
+		t.Errorf("expected top port to be 443 with 2000 bytes, got %v", ports[0])
+	}
+	if ports[1].Key != "53" || ports[1].Bytes != 1000 {
+		t.Errorf("expected second port to be 53 with 1000 bytes, got %v", ports[1])
 	}
 }

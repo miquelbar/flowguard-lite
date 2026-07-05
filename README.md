@@ -58,4 +58,4 @@ make lint
 ## 📖 Documentation & GitHub Pages
 The project documentation is located inside the `/docs` directory. It is configured to automatically compile and deploy to **GitHub Pages** via GitHub Actions on pushes to the `main` branch.
 
-To view or host documentation locally, simply open [docs/index.html](docs/index.html) in your browser.
+To view or host documentation locally, view the [docs/index.md](docs/index.md) documentation root file.

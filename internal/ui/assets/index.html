@@ -11,24 +11,114 @@
 </head>
 <body>
     <div class="glow-bg"></div>
-    <div class="app-container">
-        <!-- Header -->
-        <header class="main-header">
+    <div id="auth-overlay" class="auth-overlay hidden">
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="logo-icon"></div>
+                <div>
+                    <h2 id="auth-title">FlowGuard Lite</h2>
+                    <p id="auth-subtitle">Sign in to this FlowGuard node</p>
+                </div>
+            </div>
+            <form id="form-auth">
+                <div class="form-group">
+                    <label for="auth-password">Admin Password</label>
+                    <input type="password" id="auth-password" class="form-control" autocomplete="current-password" required minlength="10">
+                </div>
+                <p id="auth-message" class="auth-message text-muted"></p>
+                <button id="btn-auth-submit" type="submit" class="btn-primary full-width-btn">Sign In</button>
+            </form>
+        </div>
+    </div>
+    <div class="app-shell">
+        <aside class="sidebar">
             <div class="logo-area">
                 <div class="logo-icon"></div>
-                <h1>FlowGuard <span class="accent-text">Lite</span></h1>
+                <div>
+                    <h1>FlowGuard <span class="accent-text">Lite</span></h1>
+                    <p class="sidebar-subtitle">Network monitor</p>
+                </div>
             </div>
-            
-            <!-- Navigation -->
+
             <nav class="nav-links">
-                <button id="nav-dashboard" class="nav-link active">Traffic Analysis</button>
-                <button id="nav-devices" class="nav-link">Device Inventory</button>
-                <button id="nav-anomalies" class="nav-link">Anomaly Alerts</button>
+                <button id="nav-dashboard" class="nav-link active">
+                    <svg class="icon nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                    </svg>
+                    <span class="nav-text">Traffic</span>
+                </button>
+                <button id="nav-devices" class="nav-link">
+                    <svg class="icon nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                        <line x1="8" y1="21" x2="16" y2="21"/>
+                        <line x1="12" y1="17" x2="12" y2="21"/>
+                    </svg>
+                    <span class="nav-text">Devices</span>
+                </button>
+                <button id="nav-anomalies" class="nav-link">
+                    <svg class="icon nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <span class="nav-text">Alerts</span>
+                </button>
+                <button id="nav-audit" class="nav-link">
+                    <svg class="icon nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                    <span class="nav-text">Audit</span>
+                </button>
+                <button id="nav-settings" class="nav-link">
+                    <svg class="icon nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                    <span class="nav-text">Settings</span>
+                </button>
             </nav>
 
-            <div class="controls-area">
+            <div class="sidebar-tools">
+                <button id="btn-toggle-sidebar" class="sidebar-tool-btn" type="button" title="Collapse Sidebar">
+                    <svg class="icon nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="9" y1="3" x2="9" y2="21"/>
+                        <path d="M16 15l-3-3 3-3"/>
+                    </svg>
+                    <span class="tool-text">Collapse</span>
+                </button>
+                <button id="btn-toggle-theme" class="sidebar-tool-btn theme-toggle-btn" type="button" title="Toggle Theme">
+                    <svg class="icon nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+                    </svg>
+                    <span class="tool-text">Dark Mode</span>
+                </button>
+                <button id="btn-logout" class="sidebar-tool-btn" type="button" title="Logout">
+                    <svg class="icon nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+                    </svg>
+                    <span class="tool-text">Logout</span>
+                </button>
+            </div>
+
+            <div class="sidebar-footer">
                 <span class="status-indicator online"></span>
-                <span class="status-label">System Active</span>
+                <span class="status-label">Collector running</span>
+            </div>
+        </aside>
+
+        <main class="app-container">
+        <!-- Header -->
+        <header class="main-header">
+            <div>
+                <h2 id="workspace-title">Traffic</h2>
+                <p class="workspace-subtitle">Flow telemetry, risk signals, and local device activity</p>
+            </div>
+            <div class="controls-area">
                 <button id="btn-refresh" class="btn-primary">
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
@@ -91,6 +181,48 @@
                 </div>
             </section>
 
+            <section class="panel traffic-chart-panel">
+                <div class="panel-header flex-header">
+                    <div>
+                        <h2>Network Activity</h2>
+                        <p class="panel-subtitle text-muted">Bytes, packets, and flow count over bounded aggregate windows</p>
+                    </div>
+                    <div class="chart-controls">
+                        <div class="tab-buttons" id="traffic-range-tabs">
+                            <button class="tab-btn traffic-range-btn" data-range="1h">1h</button>
+                            <button class="tab-btn traffic-range-btn" data-range="6h">6h</button>
+                            <button class="tab-btn traffic-range-btn active" data-range="24h">24h</button>
+                            <button class="tab-btn traffic-range-btn" data-range="7d">7d</button>
+                        </div>
+                        <div class="tab-buttons" id="traffic-metric-tabs">
+                            <button class="tab-btn traffic-metric-btn active" data-metric="bytes">Bytes</button>
+                            <button class="tab-btn traffic-metric-btn" data-metric="packets">Packets</button>
+                            <button class="tab-btn traffic-metric-btn" data-metric="flows">Flows</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-body chart-panel-body">
+                    <div class="traffic-chart-frame">
+                        <svg id="traffic-chart" class="traffic-chart" viewBox="0 0 900 260" role="img" aria-label="Network traffic chart"></svg>
+                        <div id="traffic-chart-empty" class="chart-empty text-muted hidden">No traffic buckets in this range.</div>
+                    </div>
+                    <div class="network-signal-grid">
+                        <div class="network-signal-card">
+                            <h3>Top Talker Share</h3>
+                            <div id="top-talker-signal" class="signal-content text-muted">Loading...</div>
+                        </div>
+                        <div class="network-signal-card">
+                            <h3>Protocol / Port Mix</h3>
+                            <div id="port-distribution-signal" class="signal-content text-muted">Loading...</div>
+                        </div>
+                        <div class="network-signal-card">
+                            <h3>Subnet / VLAN Summary</h3>
+                            <div id="subnet-summary-signal" class="signal-content text-muted">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Main Workspace -->
             <main class="dashboard-main">
                 <!-- Left Side: Threat Risk & Exporters -->
@@ -98,7 +230,7 @@
                     <!-- Threat Risk Ranking -->
                     <section class="panel panel-left compact-panel margin-bottom-panel">
                         <div class="panel-header">
-                            <h2>Threat Risk Ranking</h2>
+                            <h2>Risk Ranking</h2>
                         </div>
                         <div class="panel-body">
                             <div class="table-container compact-table-container">
@@ -107,7 +239,7 @@
                                         <tr>
                                             <th>Device IP</th>
                                             <th>Risk Score</th>
-                                            <th class="text-right">Threat Level</th>
+                                            <th class="text-right">Level</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -220,8 +352,9 @@
 
                 <!-- Right Side: Device Details & Baselines -->
                 <section class="panel panel-right-devices" id="panel-device-details">
-                    <div class="panel-header">
+                    <div class="panel-header flex-header">
                         <h2>Device Profile & Baseline</h2>
+                        <button id="btn-close-device-details" class="btn-secondary mobile-only" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Close</button>
                     </div>
                     <div class="panel-body flex-column-body">
                         <div id="device-details-empty" class="text-center text-muted pad-large">
@@ -262,40 +395,139 @@
             </main>
         </div>
 
-        <!-- VIEW 3: Anomalies Feed -->
+        <!-- VIEW 3: Alerts Feed -->
         <div id="view-anomalies" class="view-content">
-            <section class="panel full-width-panel">
-                <div class="panel-header flex-header">
-                    <div>
-                        <h2>Behavioral Alerts Feed</h2>
-                        <p class="panel-subtitle text-muted">Real-time anomaly detections flagged on local network nodes</p>
+            <main class="dashboard-main split-layout">
+                <!-- Left Side: Alerts list -->
+                <section class="panel">
+                    <div class="panel-header flex-header" style="flex-wrap: wrap; gap: 1rem;">
+                        <div>
+                            <h2>Alerts</h2>
+                            <p class="panel-subtitle text-muted">Network behavior that differs from learned baselines</p>
+                        </div>
+                        <div class="filter-controls" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                            <div class="search-box">
+                                <input type="text" id="search-anomalies" placeholder="Search by IP, type, description..." class="form-control" style="width: 200px; height: 36px; padding: 0 0.75rem; font-size: 0.875rem;">
+                            </div>
+                            <div class="select-box">
+                                <select id="filter-anomalies-severity" class="form-control" style="height: 36px; padding: 0 0.5rem; width: 130px; font-size: 0.875rem;">
+                                    <option value="all">All Severities</option>
+                                    <option value="high">High Only</option>
+                                    <option value="medium">Medium Only</option>
+                                    <option value="low">Low Only</option>
+                                </select>
+                            </div>
+                            <div class="tab-buttons">
+                                <button class="triage-filter-btn active" data-status="all">All</button>
+                                <button class="triage-filter-btn" data-status="active">Active</button>
+                                <button class="triage-filter-btn" data-status="acknowledged">Ack</button>
+                                <button class="triage-filter-btn" data-status="silenced">Silenced</button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="filter-controls">
-                        <div class="tab-buttons">
-                            <button class="triage-filter-btn active" data-status="all">All Alerts</button>
-                            <button class="triage-filter-btn" data-status="active">Active</button>
-                            <button class="triage-filter-btn" data-status="acknowledged">Acknowledged</button>
-                            <button class="triage-filter-btn" data-status="silenced">Silenced</button>
+                    <div class="panel-body">
+                        <div class="table-container">
+                            <table id="tbl-anomalies">
+                                <thead>
+                                    <tr>
+                                        <th>Device IP</th>
+                                        <th>Type</th>
+                                        <th>Severity</th>
+                                        <th>Time</th>
+                                        <th>Status</th>
+                                        <th class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted">No alerts match the current view.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Right Side: Alert Details & Triage Panel -->
+                <section class="panel" id="panel-anomaly-details">
+                    <div class="panel-header flex-header">
+                        <h2>Alert Details & Triage</h2>
+                        <button id="btn-close-anomaly-details" class="btn-secondary mobile-only" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Close</button>
+                    </div>
+                    <div class="panel-body flex-column-body">
+                        <div id="anomaly-details-empty" class="text-center text-muted pad-large">
+                            Select an alert from the list to view its forensic details and triage actions.
+                        </div>
+                        <div id="anomaly-details-content" class="hidden">
+                            <div class="device-summary-header flex-header" style="flex-direction:row; align-items:center; justify-content:space-between; width:100%; margin-bottom: 1.25rem;">
+                                <div>
+                                    <h3 id="anomaly-detail-ip" style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">192.168.1.50</h3>
+                                    <p id="anomaly-detail-type" class="text-muted" style="font-size: 0.85rem; font-weight: 600; text-transform: uppercase; margin-top: 0.15rem; color: var(--primary-color);"></p>
+                                </div>
+                                <div id="anomaly-detail-badge-container">
+                                    <!-- Dynamic severity badge -->
+                                </div>
+                            </div>
+                            
+                            <div class="detail-section">
+                                <h4>Forensic Description</h4>
+                                <p id="anomaly-detail-description" style="font-size: 0.875rem; line-height: 1.5; color: var(--text-secondary);"></p>
+                            </div>
+
+                            <div class="detail-section">
+                                <h4>Metadata Context</h4>
+                                <div class="anomaly-meta-grid" style="display: grid; grid-template-columns: 1fr; gap: 0.65rem; border: 1px solid var(--border-color); padding: 0.75rem; border-radius: 8px; font-size: 0.813rem;">
+                                    <div><span class="text-muted">Detected at:</span> <span id="anomaly-detail-time" class="font-semibold"></span></div>
+                                    <div><span class="text-muted">Status:</span> <span id="anomaly-detail-status" class="badge-label"></span></div>
+                                </div>
+                            </div>
+
+                            <div class="detail-section">
+                                <h4>Triage Actions</h4>
+                                <div class="anomaly-actions-expanded" id="anomaly-detail-actions" style="display:flex; gap:0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                                    <!-- Triage Action Buttons dynamically populated -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <!-- VIEW 4: Audit Logs Feed -->
+        <div id="view-audit" class="view-content">
+            <section class="panel full-width-panel">
+                <div class="panel-header flex-header" style="flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <h2>Audit Log</h2>
+                        <p class="panel-subtitle text-muted">Configuration changes and alert review history</p>
+                    </div>
+                    <div class="filter-controls" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                        <div class="search-box">
+                            <input type="text" id="search-audit-logs" placeholder="Search logs..." class="form-control" style="width: 250px; height: 36px; padding: 0 0.75rem; font-size: 0.875rem;">
+                        </div>
+                        <div id="audit-pagination-stats" class="text-muted" style="font-size: 0.875rem;">
+                            Showing 0-0 of 0 logs
+                        </div>
+                        <div class="pagination-buttons" style="display: flex; gap: 0.5rem;">
+                            <button id="btn-audit-prev" class="btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.875rem; height: 36px;">Prev</button>
+                            <button id="btn-audit-next" class="btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.875rem; height: 36px;">Next</button>
                         </div>
                     </div>
                 </div>
                 <div class="panel-body">
                     <div class="table-container">
-                        <table id="tbl-anomalies">
+                        <table id="tbl-audit-logs">
                             <thead>
                                 <tr>
-                                    <th>Device IP</th>
-                                    <th>Anomaly Type</th>
-                                    <th>Severity</th>
-                                    <th>Description</th>
-                                    <th>Triggered At</th>
-                                    <th>Status</th>
-                                    <th class="text-center">Triage Actions</th>
+                                    <th>Timestamp</th>
+                                    <th>Action Type</th>
+                                    <th>Details</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted">No anomalies detected. All nodes are functioning within baseline.</td>
+                                    <td colspan="3" class="text-center text-muted">No audit logs recorded yet.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -304,8 +536,183 @@
             </section>
         </div>
 
+        <!-- VIEW 5: Settings and Configurations -->
+        <div id="view-settings" class="view-content">
+            <div class="settings-container">
+                <aside class="settings-nav">
+                    <a href="#settings-network">Network</a>
+                    <a href="#settings-storage">Storage</a>
+                    <a href="#settings-notifications">Notifications</a>
+                </aside>
+
+                <div class="settings-main">
+                <section id="settings-network" class="settings-card">
+                    <div class="settings-card-header">
+                        <h3>Network</h3>
+                        <p>Local CIDR ranges and UDP collector ports</p>
+                    </div>
+                    <form id="form-settings-network">
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Local Subnets (comma-separated)</label>
+                            <input type="text" id="setting-subnets" class="form-control" style="width: 100%;" required>
+                        </div>
+                        <div class="form-row" style="margin-bottom: 1rem;">
+                            <div class="form-group">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">NetFlow Port</label>
+                                <input type="number" id="setting-netflow" class="form-control" style="width: 100%;" required>
+                            </div>
+                            <div class="form-group">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">sFlow Port</label>
+                                <input type="number" id="setting-sflow" class="form-control" style="width: 100%;" required>
+                            </div>
+                        </div>
+                        <div class="settings-actions">
+                            <button type="submit" class="btn-primary">Save Network</button>
+                        </div>
+                    </form>
+                </section>
+
+                <section id="settings-storage" class="settings-card">
+                    <div class="settings-card-header">
+                        <h3>Storage</h3>
+                        <p>Database backend and retention settings</p>
+                    </div>
+                    <form id="form-settings-storage">
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Storage Backend</label>
+                            <select id="setting-backend" class="form-control" style="width: 100%;">
+                                <option value="sqlite">SQLite (Daily shards)</option>
+                                <option value="duckdb">DuckDB (Single analytical file)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Data Retention (Days)</label>
+                            <input type="number" id="setting-retention" class="form-control" style="width: 100%;" value="7" required>
+                        </div>
+                        <div class="settings-actions">
+                            <button type="submit" class="btn-primary">Save Storage</button>
+                        </div>
+                    </form>
+                </section>
+
+                <section id="settings-notifications" class="settings-card">
+                    <div class="settings-card-header">
+                        <h3>Notifications</h3>
+                        <p>Outbound webhooks and Telegram delivery</p>
+                    </div>
+                    <form id="form-settings-webhook">
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Webhook URL</label>
+                            <input type="url" id="setting-webhook-url" class="form-control" style="width: 100%;" placeholder="https://hooks.slack.com/...">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Webhook Format</label>
+                            <select id="setting-webhook-format" class="form-control" style="width: 100%;">
+                                <option value="generic">Generic JSON Payload</option>
+                                <option value="slack">Slack / Discord Compatible</option>
+                                <option value="telegram">Telegram Bot Compatible</option>
+                            </select>
+                        </div>
+
+                        <div style="border-top: 1px solid var(--border-color); margin: 1.5rem 0; padding-top: 1rem;">
+                            <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);">Custom Webhook Headers (Authentication)</h4>
+                            <p class="text-muted" style="font-size: 0.75rem; margin-bottom: 0.75rem; line-height: 1.25;">Add custom headers for webhook auth (e.g., Key: <code>Authorization</code>, Value: <code>Bearer token123</code>)</p>
+                            <div id="webhook-headers-list" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                <!-- Dynamically inserted header rows -->
+                            </div>
+                            <button type="button" id="btn-add-webhook-header" class="btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; width: auto; align-self: flex-start; height: auto;">Add Header</button>
+                        </div>
+
+                        <div style="border-top: 1px solid var(--border-color); margin: 1.5rem 0; padding-top: 1rem;">
+                            <div class="form-group" style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="setting-telegram-enabled" style="width: auto; cursor: pointer;">
+                                <label for="setting-telegram-enabled" style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0; cursor: pointer; user-select: none;">Enable Direct Telegram Bot Alerts</label>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Telegram Bot Token</label>
+                                <input type="text" id="setting-telegram-token" class="form-control" style="width: 100%;" placeholder="e.g. 123456789:ABCdef...">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 1.5rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Telegram Chat ID</label>
+                                <input type="text" id="setting-telegram-chat-id" class="form-control" style="width: 100%;" placeholder="e.g. -100123456789">
+                            </div>
+                        </div>
+
+                        <div class="settings-actions">
+                            <button type="submit" class="btn-primary">Save Notifications</button>
+                            <button type="button" id="btn-test-alert" class="btn-secondary">Send Test Alert</button>
+                        </div>
+                    </form>
+                </section>
+                </div>
+            </div>
+        </div>
+
+        <!-- FIRST RUN SETUP WIZARD OVERLAY -->
+        <div id="view-wizard" class="wizard-overlay hidden">
+            <div class="wizard-card">
+                <div class="wizard-header">
+                    <h2>Initial Setup</h2>
+                    <p>Set the local networks and collector ports for this node</p>
+                </div>
+                <form id="form-wizard">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Local CIDR Subnets (comma-separated)</label>
+                        <input type="text" id="wizard-subnets" class="form-control" style="width: 100%;" value="192.168.1.0/24" required>
+                    </div>
+                    <div class="form-row" style="margin-bottom: 1rem;">
+                        <div class="form-group">
+                            <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">NetFlow Port</label>
+                            <input type="number" id="wizard-netflow" class="form-control" style="width: 100%;" value="2055" required>
+                        </div>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">sFlow Port</label>
+                            <input type="number" id="wizard-sflow" class="form-control" style="width: 100%;" value="6343" required>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 1.5rem;">
+                        <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Storage Backend</label>
+                        <select id="wizard-backend" class="form-control" style="width: 100%;">
+                            <option value="sqlite">SQLite (Daily shards)</option>
+                            <option value="duckdb">DuckDB (Single analytical file)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-primary full-width-btn">Save Setup</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Firewall Export Rules Modal -->
+        <dialog id="modal-firewall" class="modern-dialog">
+            <div class="dialog-header">
+                <h3>Firewall Rule Templates</h3>
+                <button id="btn-close-modal" class="btn-close">&times;</button>
+            </div>
+            <div class="dialog-body">
+                <p class="dialog-desc">Copy the selected template to your gateway after review.</p>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Target IP</label>
+                    <input type="text" id="firewall-target-ip" class="form-control" style="width: 100%;" readonly>
+                </div>
+                
+                <div class="firewall-tabs">
+                    <button class="fw-tab-btn active" data-fw="mikrotik">MikroTik</button>
+                    <button class="fw-tab-btn" data-fw="unifi">UniFi</button>
+                    <button class="fw-tab-btn" data-fw="opnsense">OPNsense</button>
+                </div>
+                
+                <div class="firewall-code-container">
+                    <pre><code id="firewall-code-content">Loading rules...</code></pre>
+                    <button id="btn-copy-rules" class="btn-primary btn-copy">
+                        Copy to Clipboard
+                    </button>
+                </div>
+            </div>
+        </dialog>
+
         <!-- Toast Notifications -->
         <div id="toast-container"></div>
+        </main>
     </div>
     <script src="app.js"></script>
 </body>

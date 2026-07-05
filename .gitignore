@@ -26,3 +26,7 @@
 .env.test.local
 .env.production.local
 *.log
+
+# Local dev workspace files
+/dev-data/
+/config-dev.yaml

@@ -41,6 +41,14 @@ type Anomaly struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// AuditLog represents a security review or configuration action logged for auditing.
+type AuditLog struct {
+	ID        int64     `json:"id"`
+	Timestamp time.Time `json:"timestamp"`
+	Action    string    `json:"action"`
+	Details   string    `json:"details"`
+}
+
 // FlowRepository defines the interface for reading and writing flow aggregates.
 type FlowRepository interface {
 	// SaveAggregates writes a slice of aggregated flow records to the shard matching the bucket timestamp.
@@ -54,6 +62,21 @@ type FlowRepository interface {
 
 	// GetTopPorts returns the destination ports with the most bytes in the given time range.
 	GetTopPorts(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error)
+
+	// GetTopProtocols returns transport protocols with the most bytes in the given time range.
+	GetTopProtocols(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error)
+
+	// GetTrafficTimeSeries returns total traffic counters grouped into fixed-size bounded time buckets.
+	GetTrafficTimeSeries(ctx context.Context, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error)
+
+	// GetDeviceTrafficTimeSeries returns total traffic counters for a specific IP grouped into fixed-size bounded time buckets.
+	GetDeviceTrafficTimeSeries(ctx context.Context, ip string, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error)
+
+	// GetDeviceTopPeers returns the top communicating peer IPs for a device sorted by byte volume.
+	GetDeviceTopPeers(ctx context.Context, ip string, start, end time.Time, limit int) ([]flow.TopResult, error)
+
+	// GetDeviceTopPorts returns the top destination/service ports for a device sorted by byte volume.
+	GetDeviceTopPorts(ctx context.Context, ip string, start, end time.Time, limit int) ([]flow.TopResult, error)
 }
 
 // DeviceRepository defines the operations on local device metadata, baselines, and anomalies.
@@ -87,6 +110,15 @@ type DeviceRepository interface {
 
 	// GetActiveAnomalies queries all active anomalies triggered since a given time.
 	GetActiveAnomalies(ctx context.Context, since time.Time) ([]Anomaly, error)
+
+	// SaveAuditLog writes a security or configuration audit record.
+	SaveAuditLog(ctx context.Context, action string, details string) error
+
+	// ListAuditLogs returns a list of recent audit log records.
+	ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, error)
+
+	// GetAnomaliesForIP queries recent anomalies associated with a specific IP.
+	GetAnomaliesForIP(ctx context.Context, ip string, limit int) ([]Anomaly, error)
 }
 
 // Manager defines the interface for managing database shards and schema maintenance.
@@ -96,4 +128,12 @@ type Manager interface {
 
 	// CleanupRetention prunes shard files older than the specified retention days.
 	CleanupRetention(retentionDays int) error
+}
+
+// StorageRepository combines all storage operations under a single unified interface.
+type StorageRepository interface {
+	FlowRepository
+	DeviceRepository
+	Manager
+	RegisterAnomalyCallback(cb func(a *Anomaly))
 }

@@ -27,10 +27,12 @@ type ExporterMetadata struct {
 
 // Collector stats reporting structure.
 type Stats struct {
-	PacketsReceived uint64 `json:"packets_received"`
-	PacketsDropped  uint64 `json:"packets_dropped"`
-	DecodeErrors    uint64 `json:"decode_errors"`
-	QueueDepth      int    `json:"queue_depth"`
+	PacketsReceived  uint64 `json:"packets_received"`
+	PacketsDropped   uint64 `json:"packets_dropped"`
+	DecodeErrors     uint64 `json:"decode_errors"`
+	QueueDepth       int    `json:"queue_depth"`
+	PacketsNetflow   uint64 `json:"packets_netflow,omitempty"`
+	PacketsSflow     uint64 `json:"packets_sflow,omitempty"`
 }
 
 // FlowCollector manages the UDP listeners and decoding workers.
@@ -53,10 +55,12 @@ type FlowCollector struct {
 	exportersMu sync.RWMutex
 	exporters   map[string]*ExporterMetadata
 
-	statsMu        sync.Mutex
-	receivedCount  uint64
-	droppedCount   uint64
-	decodeErrCount uint64
+	statsMu              sync.Mutex
+	receivedCount        uint64
+	receivedNetflowCount uint64
+	receivedSflowCount   uint64
+	droppedCount         uint64
+	decodeErrCount       uint64
 }
 
 // Type of raw packets buffered for processing
@@ -69,12 +73,27 @@ type rawPacket struct {
 // NewFlowCollector instantiates a new FlowCollector daemon.
 func NewFlowCollector(cfg *config.Config, logger *slog.Logger, processor flow.FlowProcessor) *FlowCollector {
 	ctx, cancel := context.WithCancel(context.Background())
+	exporters := make(map[string]*ExporterMetadata)
+	if cfg != nil && cfg.Environment == "development" {
+		now := time.Now()
+		exporters["192.168.1.1"] = &ExporterMetadata{
+			IP:          "192.168.1.1",
+			LastSeen:    now.Add(-2 * time.Minute),
+			PacketCount: 154320,
+		}
+		exporters["192.168.30.150"] = &ExporterMetadata{
+			IP:          "192.168.30.150",
+			LastSeen:    now.Add(-45 * time.Second),
+			PacketCount: 12050,
+		}
+	}
+
 	return &FlowCollector{
 		cfg:            cfg,
 		logger:         logger,
 		processor:      processor,
 		rawPacketsChan: make(chan *rawPacket, 5000), // Buffer to handle bursts without blocking UDP stack
-		exporters:      make(map[string]*ExporterMetadata),
+		exporters:      exporters,
 		ctx:            ctx,
 		cancel:         cancel,
 	}
@@ -155,10 +174,12 @@ func (c *FlowCollector) GetStats() Stats {
 	c.statsMu.Lock()
 	defer c.statsMu.Unlock()
 	return Stats{
-		PacketsReceived: c.receivedCount,
-		PacketsDropped:  c.droppedCount,
-		DecodeErrors:    c.decodeErrCount,
-		QueueDepth:      len(c.rawPacketsChan),
+		PacketsReceived:  c.receivedCount,
+		PacketsDropped:   c.droppedCount,
+		DecodeErrors:     c.decodeErrCount,
+		QueueDepth:       len(c.rawPacketsChan),
+		PacketsNetflow:   c.receivedNetflowCount,
+		PacketsSflow:     c.receivedSflowCount,
 	}
 }
 
@@ -199,6 +220,11 @@ func (c *FlowCollector) listenLoop(conn *net.UDPConn, packetType string) {
 
 			c.statsMu.Lock()
 			c.receivedCount++
+			if packetType == "netflow" {
+				c.receivedNetflowCount++
+			} else if packetType == "sflow" {
+				c.receivedSflowCount++
+			}
 			c.statsMu.Unlock()
 
 			// Push to rawPacketsChan. If channel is full, drop packet to preserve system stability

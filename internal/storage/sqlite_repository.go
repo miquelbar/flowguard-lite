@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,8 +26,9 @@ type SQLiteRepository struct {
 	// Persistent Metadata Database
 	metaDB *sql.DB
 
-	mu     sync.RWMutex
-	shards map[string]*sql.DB
+	mu            sync.RWMutex
+	shards        map[string]*sql.DB
+	onSaveAnomaly []func(a *Anomaly)
 }
 
 // NewSQLiteRepository creates a new SQLite daily shard storage repository.
@@ -93,6 +95,14 @@ func NewSQLiteRepository(dataDir string, logger *slog.Logger) (*SQLiteRepository
 		);
 		CREATE INDEX IF NOT EXISTS idx_anomalies_created ON anomalies (created_at DESC);
 		CREATE INDEX IF NOT EXISTS idx_anomalies_ip ON anomalies (ip);
+
+		CREATE TABLE IF NOT EXISTS audit_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			timestamp DATETIME NOT NULL,
+			action TEXT NOT NULL,
+			details TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs (timestamp DESC);
 	`)
 	if err != nil {
 		metaDB.Close()
@@ -310,6 +320,82 @@ func (r *SQLiteRepository) GetTopPorts(ctx context.Context, start, end time.Time
 	return sortAndLimit(merged, limit), nil
 }
 
+// GetTopProtocols returns transport protocols sorted by byte volume.
+func (r *SQLiteRepository) GetTopProtocols(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error) {
+	dbs, err := r.GetShardsInRange(start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	merged := make(map[string]*flow.TopResult)
+	startUnix := start.Unix()
+	endUnix := end.Unix()
+
+	for _, db := range dbs {
+		rows, err := db.QueryContext(ctx, `
+			SELECT protocol, SUM(bytes), SUM(packets), SUM(flows)
+			FROM flow_aggregates
+			WHERE bucket_ts >= ? AND bucket_ts <= ?
+			GROUP BY protocol
+		`, startUnix, endUnix)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query top protocols: %w", err)
+		}
+		r.mergeRows(rows, merged)
+	}
+
+	return sortAndLimit(merged, limit), nil
+}
+
+// GetTrafficTimeSeries returns total traffic counters grouped into fixed-size bounded time buckets.
+func (r *SQLiteRepository) GetTrafficTimeSeries(ctx context.Context, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error) {
+	dbs, err := r.GetShardsInRange(start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	startUnix := start.Unix()
+	endUnix := end.Unix()
+	merged := make(map[int64]*flow.TrafficTimeBucket)
+
+	for _, db := range dbs {
+		rows, err := db.QueryContext(ctx, `
+			SELECT (bucket_ts / ?) * ? AS bucket_start, SUM(bytes), SUM(packets), SUM(flows)
+			FROM flow_aggregates
+			WHERE bucket_ts >= ? AND bucket_ts <= ?
+			GROUP BY bucket_start
+			ORDER BY bucket_start ASC
+		`, bucketSeconds, bucketSeconds, startUnix, endUnix)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query traffic time series: %w", err)
+		}
+
+		for rows.Next() {
+			var bucketStart int64
+			var bytesVal, packetsVal, flowsVal uint64
+			if err := rows.Scan(&bucketStart, &bytesVal, &packetsVal, &flowsVal); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("failed scanning traffic time series: %w", err)
+			}
+			item, ok := merged[bucketStart]
+			if !ok {
+				item = &flow.TrafficTimeBucket{Timestamp: time.Unix(bucketStart, 0).UTC()}
+				merged[bucketStart] = item
+			}
+			item.Bytes += bytesVal
+			item.Packets += packetsVal
+			item.Flows += flowsVal
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("failed iterating traffic time series rows: %w", err)
+		}
+		rows.Close()
+	}
+
+	return sortTrafficBuckets(merged), nil
+}
+
 // === DeviceRepository Implementation ===
 
 // UpsertDevice registers or updates a device's last-seen status and hostname.
@@ -502,6 +588,16 @@ func (r *SQLiteRepository) SaveAnomaly(ctx context.Context, a *Anomaly) error {
 		a.ID = id
 	}
 
+	// Trigger callbacks in a non-blocking background goroutine
+	callbacks := r.onSaveAnomaly
+	if len(callbacks) > 0 {
+		go func(anomaly *Anomaly) {
+			for _, cb := range callbacks {
+				cb(anomaly)
+			}
+		}(a)
+	}
+
 	return nil
 }
 
@@ -615,7 +711,6 @@ func (r *SQLiteRepository) GetActiveAnomalies(ctx context.Context, since time.Ti
 	}
 	return list, nil
 }
-
 
 // Helper: Open / cache daily SQLite shards and verify table schema.
 func (r *SQLiteRepository) getOrCreateShard(dateStr string) (*sql.DB, error) {
@@ -765,4 +860,232 @@ func sortAndLimit(m map[string]*flow.TopResult, limit int) []flow.TopResult {
 		return slice[:limit]
 	}
 	return slice
+}
+
+func sortTrafficBuckets(m map[int64]*flow.TrafficTimeBucket) []flow.TrafficTimeBucket {
+	if len(m) == 0 {
+		return []flow.TrafficTimeBucket{}
+	}
+	keys := make([]int64, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i] < keys[j]
+	})
+	results := make([]flow.TrafficTimeBucket, 0, len(keys))
+	for _, key := range keys {
+		results = append(results, *m[key])
+	}
+	return results
+}
+
+// RegisterAnomalyCallback registers a callback invoked whenever a new anomaly is saved.
+func (r *SQLiteRepository) RegisterAnomalyCallback(cb func(a *Anomaly)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.onSaveAnomaly = append(r.onSaveAnomaly, cb)
+}
+
+// SaveAuditLog writes a security or configuration audit record.
+func (r *SQLiteRepository) SaveAuditLog(ctx context.Context, action string, details string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	tsStr := time.Now().Format(time.RFC3339)
+	_, err := r.metaDB.ExecContext(ctx, `
+		INSERT INTO audit_logs (timestamp, action, details) VALUES (?, ?, ?)
+	`, tsStr, action, details)
+	if err != nil {
+		return fmt.Errorf("failed to save audit log: %w", err)
+	}
+	return nil
+}
+
+// ListAuditLogs returns a list of recent audit log records.
+func (r *SQLiteRepository) ListAuditLogs(ctx context.Context, limit int) ([]AuditLog, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	rows, err := r.metaDB.QueryContext(ctx, `
+		SELECT id, timestamp, action, details FROM audit_logs ORDER BY timestamp DESC LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query audit logs: %w", err)
+	}
+	defer rows.Close()
+
+	var list []AuditLog
+	for rows.Next() {
+		var l AuditLog
+		var tsStr string
+		if err := rows.Scan(&l.ID, &tsStr, &l.Action, &l.Details); err != nil {
+			return nil, fmt.Errorf("failed to scan audit log: %w", err)
+		}
+		tVal, err := time.Parse(time.RFC3339, tsStr)
+		if err == nil {
+			l.Timestamp = tVal
+		} else {
+			l.Timestamp = time.Now()
+		}
+		list = append(list, l)
+	}
+
+	if list == nil {
+		list = []AuditLog{}
+	}
+	return list, nil
+}
+
+// GetAnomaliesForIP queries recent anomalies associated with a specific IP.
+func (r *SQLiteRepository) GetAnomaliesForIP(ctx context.Context, ip string, limit int) ([]Anomaly, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	rows, err := r.metaDB.QueryContext(ctx, `
+		SELECT id, ip, type, description, severity, status, created_at, updated_at
+		FROM anomalies
+		WHERE ip = ?
+		ORDER BY created_at DESC
+		LIMIT ?
+	`, ip, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed query anomalies for IP: %w", err)
+	}
+	defer rows.Close()
+
+	var list []Anomaly
+	for rows.Next() {
+		var a Anomaly
+		var createdStr, updatedStr string
+
+		err = rows.Scan(&a.ID, &a.IP, &a.Type, &a.Description, &a.Severity, &a.Status, &createdStr, &updatedStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan anomaly row: %w", err)
+		}
+
+		if t, err := time.Parse(time.RFC3339, createdStr); err == nil {
+			a.CreatedAt = t
+		}
+		if t, err := time.Parse(time.RFC3339, updatedStr); err == nil {
+			a.UpdatedAt = t
+		}
+
+		list = append(list, a)
+	}
+
+	if list == nil {
+		list = []Anomaly{}
+	}
+	return list, nil
+}
+
+// GetDeviceTrafficTimeSeries returns total traffic counters for a specific IP grouped into fixed-size bounded time buckets.
+func (r *SQLiteRepository) GetDeviceTrafficTimeSeries(ctx context.Context, ip string, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error) {
+	dbs, err := r.GetShardsInRange(start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	startUnix := start.Unix()
+	endUnix := end.Unix()
+	merged := make(map[int64]*flow.TrafficTimeBucket)
+
+	for _, db := range dbs {
+		rows, err := db.QueryContext(ctx, `
+			SELECT (bucket_ts / ?) * ? AS bucket_start, SUM(bytes), SUM(packets), SUM(flows)
+			FROM flow_aggregates
+			WHERE bucket_ts >= ? AND bucket_ts <= ? AND (src_ip = ? OR dst_ip = ?)
+			GROUP BY bucket_start
+			ORDER BY bucket_start ASC
+		`, bucketSeconds, bucketSeconds, startUnix, endUnix, ip, ip)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query device traffic time series: %w", err)
+		}
+
+		for rows.Next() {
+			var bucketStart int64
+			var bytesVal, packetsVal, flowsVal uint64
+			if err := rows.Scan(&bucketStart, &bytesVal, &packetsVal, &flowsVal); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("failed scanning device traffic time series: %w", err)
+			}
+			item, ok := merged[bucketStart]
+			if !ok {
+				item = &flow.TrafficTimeBucket{Timestamp: time.Unix(bucketStart, 0).UTC()}
+				merged[bucketStart] = item
+			}
+			item.Bytes += bytesVal
+			item.Packets += packetsVal
+			item.Flows += flowsVal
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("failed iterating device traffic time series rows: %w", err)
+		}
+		rows.Close()
+	}
+
+	return sortTrafficBuckets(merged), nil
+}
+
+// GetDeviceTopPeers returns the top communicating peer IPs for a device sorted by byte volume.
+func (r *SQLiteRepository) GetDeviceTopPeers(ctx context.Context, ip string, start, end time.Time, limit int) ([]flow.TopResult, error) {
+	dbs, err := r.GetShardsInRange(start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	merged := make(map[string]*flow.TopResult)
+	startUnix := start.Unix()
+	endUnix := end.Unix()
+
+	for _, db := range dbs {
+		rows, err := db.QueryContext(ctx, `
+			SELECT peer, SUM(bytes), SUM(packets), SUM(flows)
+			FROM (
+				SELECT dst_ip AS peer, bytes, packets, flows
+				FROM flow_aggregates
+				WHERE bucket_ts >= ? AND bucket_ts <= ? AND src_ip = ?
+				UNION ALL
+				SELECT src_ip AS peer, bytes, packets, flows
+				FROM flow_aggregates
+				WHERE bucket_ts >= ? AND bucket_ts <= ? AND dst_ip = ?
+			)
+			GROUP BY peer
+		`, startUnix, endUnix, ip, startUnix, endUnix, ip)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query device top peers: %w", err)
+		}
+		r.mergeRows(rows, merged)
+	}
+
+	return sortAndLimit(merged, limit), nil
+}
+
+// GetDeviceTopPorts returns the top destination/service ports for a device sorted by byte volume.
+func (r *SQLiteRepository) GetDeviceTopPorts(ctx context.Context, ip string, start, end time.Time, limit int) ([]flow.TopResult, error) {
+	dbs, err := r.GetShardsInRange(start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	merged := make(map[string]*flow.TopResult)
+	startUnix := start.Unix()
+	endUnix := end.Unix()
+
+	for _, db := range dbs {
+		rows, err := db.QueryContext(ctx, `
+			SELECT dst_port, SUM(bytes), SUM(packets), SUM(flows)
+			FROM flow_aggregates
+			WHERE bucket_ts >= ? AND bucket_ts <= ? AND (src_ip = ? OR dst_ip = ?)
+			GROUP BY dst_port
+		`, startUnix, endUnix, ip, ip)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query device top ports: %w", err)
+		}
+		r.mergeRows(rows, merged)
+	}
+
+	return sortAndLimit(merged, limit), nil
 }

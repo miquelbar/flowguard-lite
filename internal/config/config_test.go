@@ -81,6 +81,8 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 	os.Setenv("FLOWGUARD_STORAGE_DIR", "/env/data")
 	os.Setenv("FLOWGUARD_LOG_LEVEL", "warn")
 	os.Setenv("FLOWGUARD_ENV", "staging")
+	os.Setenv("FLOWGUARD_ADMIN_PASSWORD_HASH", "pbkdf2-sha256$1$salt$hash")
+	os.Setenv("FLOWGUARD_SESSION_SECRET", "session-secret")
 
 	defer func() {
 		os.Unsetenv("FLOWGUARD_PORT")
@@ -89,6 +91,8 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 		os.Unsetenv("FLOWGUARD_STORAGE_DIR")
 		os.Unsetenv("FLOWGUARD_LOG_LEVEL")
 		os.Unsetenv("FLOWGUARD_ENV")
+		os.Unsetenv("FLOWGUARD_ADMIN_PASSWORD_HASH")
+		os.Unsetenv("FLOWGUARD_SESSION_SECRET")
 	}()
 
 	cfg, err := LoadConfig("non-existent-config.yaml")
@@ -113,5 +117,56 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 	}
 	if cfg.Environment != "staging" {
 		t.Errorf("expected Environment 'staging', got %s", cfg.Environment)
+	}
+	if cfg.AdminPasswordHash != "pbkdf2-sha256$1$salt$hash" {
+		t.Errorf("expected admin password hash override, got %q", cfg.AdminPasswordHash)
+	}
+	if cfg.SessionSecret != "session-secret" {
+		t.Errorf("expected session secret override, got %q", cfg.SessionSecret)
+	}
+}
+
+func TestLoadConfig_WebhookHeadersEnvOverride(t *testing.T) {
+	t.Setenv("FLOWGUARD_WEBHOOK_HEADERS", `{"Authorization":"Bearer test","X-FlowGuard":"dev"}`)
+
+	cfg, err := LoadConfig("non-existent-config.yaml")
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+
+	if cfg.WebhookHeaders["Authorization"] != "Bearer test" {
+		t.Errorf("expected Authorization header override, got %q", cfg.WebhookHeaders["Authorization"])
+	}
+	if cfg.WebhookHeaders["X-FlowGuard"] != "dev" {
+		t.Errorf("expected X-FlowGuard header override, got %q", cfg.WebhookHeaders["X-FlowGuard"])
+	}
+}
+
+func TestSaveConfig(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "config_save_test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := DefaultConfig()
+	cfg.Port = "1234"
+	cfg.FirstRunCompleted = true
+
+	configPath := filepath.Join(tmpDir, "saved_config.yaml")
+	if err := SaveConfig(configPath, cfg); err != nil {
+		t.Fatalf("failed to save config: %v", err)
+	}
+
+	loaded, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("failed to load saved config: %v", err)
+	}
+
+	if loaded.Port != "1234" {
+		t.Errorf("expected saved Port '1234', got %s", loaded.Port)
+	}
+	if !loaded.FirstRunCompleted {
+		t.Errorf("expected saved FirstRunCompleted to be true")
 	}
 }

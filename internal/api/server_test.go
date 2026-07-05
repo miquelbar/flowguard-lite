@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +20,7 @@ import (
 	"github.com/flowguard/flowguard/internal/flow"
 	"github.com/flowguard/flowguard/internal/risk"
 	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/flowguard/flowguard/internal/webhook"
 )
 
 type MockCollector struct {
@@ -42,7 +45,7 @@ func TestHandleHealth(t *testing.T) {
 			DecodeErrors:    1,
 		},
 	}
-	server := NewAPIServer(cfg, logger, mockColl, nil, nil, nil, nil)
+	server := NewAPIServer(cfg, logger, mockColl, nil, nil, nil, nil, nil, nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
@@ -83,7 +86,7 @@ func TestHandleHealth(t *testing.T) {
 func TestHandleHealth_InvalidMethod(t *testing.T) {
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := NewAPIServer(cfg, logger, nil, nil, nil, nil, nil)
+	server := NewAPIServer(cfg, logger, nil, nil, nil, nil, nil, nil, nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodPost, "/health", nil)
 	w := httptest.NewRecorder()
@@ -107,7 +110,7 @@ func TestHandleExporters(t *testing.T) {
 			{IP: "192.168.1.1", LastSeen: now, PacketCount: 100},
 		},
 	}
-	server := NewAPIServer(cfg, logger, mockColl, nil, nil, nil, nil)
+	server := NewAPIServer(cfg, logger, mockColl, nil, nil, nil, nil, nil, nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/exporters", nil)
 	w := httptest.NewRecorder()
@@ -141,6 +144,7 @@ type MockFlowRepository struct {
 	Sources      []flow.TopResult
 	Destinations []flow.TopResult
 	Ports        []flow.TopResult
+	Protocols    []flow.TopResult
 	Baseline     *storage.DeviceBaseline
 	Devices      []storage.Device
 	Anomalies    []storage.Anomaly
@@ -163,6 +167,16 @@ func (m *MockFlowRepository) GetTopPorts(ctx context.Context, start, end time.Ti
 	return m.Ports, m.Err
 }
 
+func (m *MockFlowRepository) GetTopProtocols(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error) {
+	return m.Protocols, m.Err
+}
+
+func (m *MockFlowRepository) GetTrafficTimeSeries(ctx context.Context, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error) {
+	return []flow.TrafficTimeBucket{
+		{Timestamp: start.UTC(), Bytes: 1000, Packets: 10, Flows: 2},
+	}, m.Err
+}
+
 func (m *MockFlowRepository) UpsertDevice(ctx context.Context, ip string, hostname string, lastSeen time.Time) error {
 	return nil
 }
@@ -175,6 +189,11 @@ func (m *MockFlowRepository) UpdateDeviceLabel(ctx context.Context, ip string, l
 }
 
 func (m *MockFlowRepository) GetDevice(ctx context.Context, ip string) (*storage.Device, error) {
+	for _, d := range m.Devices {
+		if d.IP == ip {
+			return &d, m.Err
+		}
+	}
 	return nil, m.Err
 }
 
@@ -223,6 +242,57 @@ func (m *MockFlowRepository) GetActiveAnomalies(ctx context.Context, since time.
 	return []storage.Anomaly{
 		{ID: 123, IP: "192.168.1.10", Type: "TRAFFIC_SPIKE", Status: "active", CreatedAt: time.Now()},
 	}, m.Err
+}
+
+func (m *MockFlowRepository) SaveAuditLog(ctx context.Context, action string, details string) error {
+	return m.Err
+}
+
+func (m *MockFlowRepository) ListAuditLogs(ctx context.Context, limit int) ([]storage.AuditLog, error) {
+	return []storage.AuditLog{
+		{ID: 1, Timestamp: time.Now(), Action: "update_label", Details: "Updated label"},
+	}, m.Err
+}
+
+func (m *MockFlowRepository) GetAnomaliesForIP(ctx context.Context, ip string, limit int) ([]storage.Anomaly, error) {
+	var filtered []storage.Anomaly
+	for _, a := range m.Anomalies {
+		if a.IP == ip {
+			filtered = append(filtered, a)
+			if len(filtered) >= limit {
+				break
+			}
+		}
+	}
+	if len(filtered) == 0 && len(m.Anomalies) > 0 {
+		for _, a := range m.Anomalies {
+			filtered = append(filtered, a)
+			if len(filtered) >= limit {
+				break
+			}
+		}
+	}
+	return filtered, m.Err
+}
+
+func (m *MockFlowRepository) GetDeviceTrafficTimeSeries(ctx context.Context, ip string, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error) {
+	return []flow.TrafficTimeBucket{
+		{Timestamp: start.UTC(), Bytes: 500, Packets: 5, Flows: 1},
+	}, m.Err
+}
+
+func (m *MockFlowRepository) GetDeviceTopPeers(ctx context.Context, ip string, start, end time.Time, limit int) ([]flow.TopResult, error) {
+	if m.Destinations == nil {
+		return []flow.TopResult{}, m.Err
+	}
+	return m.Destinations, m.Err
+}
+
+func (m *MockFlowRepository) GetDeviceTopPorts(ctx context.Context, ip string, start, end time.Time, limit int) ([]flow.TopResult, error) {
+	if m.Ports == nil {
+		return []flow.TopResult{}, m.Err
+	}
+	return m.Ports, m.Err
 }
 
 func TestParseQueryParams_Valid(t *testing.T) {
@@ -279,9 +349,12 @@ func TestHandleTopTalkers(t *testing.T) {
 		Ports: []flow.TopResult{
 			{Key: "53", Bytes: 500, Packets: 5, Flows: 1},
 		},
+		Protocols: []flow.TopResult{
+			{Key: "17", Bytes: 500, Packets: 5, Flows: 1},
+		},
 	}
 
-	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil, nil, nil, nil, "")
 
 	// 1. Sources check
 	req := httptest.NewRequest(http.MethodGet, "/api/top/sources", nil)
@@ -327,12 +400,58 @@ func TestHandleTopTalkers(t *testing.T) {
 	if len(portRes) != 1 || portRes[0].Key != "53" {
 		t.Errorf("unexpected ports output: %v", portRes)
 	}
+
+	// 4. Protocols check
+	req = httptest.NewRequest(http.MethodGet, "/api/top/protocols", nil)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected OK, got %d", w.Code)
+	}
+	var protocolRes []flow.TopResult
+	if err := json.Unmarshal(w.Body.Bytes(), &protocolRes); err != nil {
+		t.Fatalf("failed decoding: %v", err)
+	}
+	if len(protocolRes) != 1 || protocolRes[0].Key != "17" {
+		t.Errorf("unexpected protocols output: %v", protocolRes)
+	}
+}
+
+func TestHandleTrafficTimeSeries(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockRepo := &MockFlowRepository{}
+	server := NewAPIServer(cfg, logger, nil, mockRepo, nil, nil, nil, nil, nil, nil, "")
+
+	start := time.Now().Add(-1 * time.Hour).UTC().Format(time.RFC3339)
+	end := time.Now().UTC().Format(time.RFC3339)
+	req := httptest.NewRequest(http.MethodGet, "/api/traffic/timeseries?start="+start+"&end="+end+"&bucket_seconds=300", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result []flow.TrafficTimeBucket
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("failed decoding traffic time series: %v", err)
+	}
+	if len(result) != 1 || result[0].Bytes != 1000 || result[0].Packets != 10 || result[0].Flows != 2 {
+		t.Fatalf("unexpected traffic time series result: %+v", result)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/traffic/timeseries?bucket_seconds=17", nil)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected invalid bucket to return 400, got %d", w.Code)
+	}
 }
 
 func TestHandleUI(t *testing.T) {
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	server := NewAPIServer(cfg, logger, nil, nil, nil, nil, nil)
+	server := NewAPIServer(cfg, logger, nil, nil, nil, nil, nil, nil, nil, nil, "")
 
 	// Fetch root "/"
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -372,7 +491,7 @@ func TestHandleDevices(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockRepo := &MockFlowRepository{}
 
-	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil, nil, nil, nil, "")
 
 	// 1. GET /api/devices
 	req := httptest.NewRequest(http.MethodGet, "/api/devices", nil)
@@ -425,7 +544,7 @@ func TestHandleDeviceBaseline(t *testing.T) {
 	}
 	_ = engine.LoadBaselines(context.Background())
 
-	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, engine, nil)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, engine, nil, nil, nil, nil, "")
 
 	// 1. GET /api/devices/192.168.1.10/baseline (valid)
 	req := httptest.NewRequest(http.MethodGet, "/api/devices/192.168.1.10/baseline", nil)
@@ -459,7 +578,7 @@ func TestHandleAnomalies(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockRepo := &MockFlowRepository{}
 
-	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil, nil, nil, nil, "")
 
 	// 1. GET /api/anomalies
 	req := httptest.NewRequest(http.MethodGet, "/api/anomalies?limit=10", nil)
@@ -512,7 +631,7 @@ func TestHandleListRiskDevices(t *testing.T) {
 	}
 
 	riskEng := risk.NewRiskEngine(mockRepo)
-	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, riskEng)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, riskEng, nil, nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/risk/devices", nil)
 	w := httptest.NewRecorder()
@@ -531,4 +650,401 @@ func TestHandleListRiskDevices(t *testing.T) {
 	}
 }
 
+func TestHandleListAuditLogs(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockRepo := &MockFlowRepository{}
 
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil, nil, nil, nil, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/audit-logs?limit=10", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status OK, got %d", w.Code)
+	}
+
+	var results []storage.AuditLog
+	if err := json.Unmarshal(w.Body.Bytes(), &results); err != nil {
+		t.Fatalf("failed decoding audit logs: %v", err)
+	}
+	if len(results) != 1 || results[0].Action != "update_label" {
+		t.Errorf("unexpected audit logs list: %+v", results)
+	}
+}
+
+func TestHandleGetFirewallRules(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockRepo := &MockFlowRepository{}
+
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil, nil, nil, nil, "")
+
+	// Test missing/invalid IP
+	req := httptest.NewRequest(http.MethodGet, "/api/firewall/rules", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request, got %d", w.Code)
+	}
+
+	// Test valid IP
+	req = httptest.NewRequest(http.MethodGet, "/api/firewall/rules?ip=192.168.1.100", nil)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", w.Code)
+	}
+
+	var results map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &results); err != nil {
+		t.Fatalf("failed decoding firewall rules templates: %v", err)
+	}
+	if results["ip"] != "192.168.1.100" || results["mikrotik"] == "" || results["unifi"] == "" || results["opnsense"] == "" {
+		t.Errorf("unexpected firewall templates result: %+v", results)
+	}
+}
+
+func TestHandleSettings(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "api_settings_test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockRepo := &MockFlowRepository{}
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil, nil, nil, nil, configPath)
+
+	// 1. GET settings
+	req := httptest.NewRequest(http.MethodGet, "/api/settings", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", w.Code)
+	}
+
+	var current SettingsPayload
+	if err := json.Unmarshal(w.Body.Bytes(), &current); err != nil {
+		t.Fatalf("failed to decode current settings: %v", err)
+	}
+	if current.Port != "8080" || current.FirstRunCompleted {
+		t.Errorf("unexpected current settings: %+v", current)
+	}
+
+	// 2. POST settings
+	newSettings := SettingsPayload{
+		Port:              "9090",
+		NetflowPort:       3000,
+		SflowPort:         4000,
+		StorageDir:        "/tmp/foo",
+		LogLevel:          "debug",
+		Environment:       "development",
+		LocalSubnets:      []string{"192.168.10.0/24"},
+		WebhookURL:        "https://example.invalid/hook",
+		WebhookFormat:     "generic",
+		WebhookHeaders:    map[string]string{"Authorization": "Bearer test"},
+		StorageBackend:    "duckdb",
+		FirstRunCompleted: true,
+	}
+
+	bodyBytes, _ := json.Marshal(newSettings)
+	req = httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader(string(bodyBytes)))
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d with body: %s", w.Code, w.Body.String())
+	}
+
+	// Verify settings were updated in memory
+	if server.cfg.Port != "9090" || server.cfg.StorageBackend != "duckdb" || !server.cfg.FirstRunCompleted {
+		t.Errorf("expected updated server configuration, got %+v", server.cfg)
+	}
+	if server.cfg.WebhookHeaders["Authorization"] != "Bearer test" {
+		t.Errorf("expected webhook headers to update in memory, got %+v", server.cfg.WebhookHeaders)
+	}
+
+	// Verify settings were persisted on disk
+	loadedConfig, err := config.LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("failed loading saved config: %v", err)
+	}
+	if loadedConfig.Port != "9090" || !loadedConfig.FirstRunCompleted {
+		t.Errorf("expected loaded config to have updated values, got %+v", loadedConfig)
+	}
+	if loadedConfig.WebhookHeaders["Authorization"] != "Bearer test" {
+		t.Errorf("expected loaded config to persist webhook headers, got %+v", loadedConfig.WebhookHeaders)
+	}
+}
+
+func TestAuthSetupLoginAndProtectedAPI(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "api_auth_test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	cfg := config.DefaultConfig()
+	cfg.FirstRunCompleted = true
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockColl := &MockCollector{}
+	server := NewAPIServer(cfg, logger, mockColl, nil, nil, nil, nil, nil, nil, nil, configPath)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/exporters", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected protected API to require auth, got %d", w.Code)
+	}
+
+	setupBody := `{"password":"correct horse battery"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/setup", strings.NewReader(setupBody))
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected setup 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if server.cfg.AdminPasswordHash == "" || strings.Contains(server.cfg.AdminPasswordHash, "correct horse battery") {
+		t.Fatalf("expected stored password hash, got %q", server.cfg.AdminPasswordHash)
+	}
+	setupCookie := w.Result().Cookies()[0]
+
+	req = httptest.NewRequest(http.MethodGet, "/api/exporters", nil)
+	req.AddCookie(setupCookie)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected authenticated API request to succeed, got %d", w.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	req.AddCookie(setupCookie)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected logout 200, got %d", w.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/exporters", nil)
+	req.AddCookie(setupCookie)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected logged-out cookie to be rejected, got %d", w.Code)
+	}
+
+	loginBody := `{"password":"correct horse battery"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(loginBody))
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected login 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAuthRejectsShortPasswordAndInvalidLogin(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.FirstRunCompleted = true
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	server := NewAPIServer(cfg, logger, nil, nil, nil, nil, nil, nil, nil, nil, "")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/setup", strings.NewReader(`{"password":"short"}`))
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected short password 400, got %d", w.Code)
+	}
+
+	hash, err := hashPassword("correct horse battery")
+	if err != nil {
+		t.Fatalf("failed hashing password: %v", err)
+	}
+	server.cfg.AdminPasswordHash = hash
+
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"password":"wrong password"}`))
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected invalid login 401, got %d", w.Code)
+	}
+}
+
+func TestHandleTestAlert(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockRepo := &MockFlowRepository{}
+
+	receivedChan := make(chan []byte, 1)
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ := io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+		receivedChan <- bodyBytes
+	}))
+	defer mockServer.Close()
+
+	engine := webhook.NewWebhookEngine(mockServer.URL, "generic", nil, false, "", "", logger)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil, nil, nil, engine, "")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/settings/test-alert", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", w.Code)
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed decoding test alert response: %v", err)
+	}
+	if resp["status"] != "test alert dispatched successfully" {
+		t.Errorf("unexpected status message: %s", resp["status"])
+	}
+
+	select {
+	case body := <-receivedChan:
+		var anomaly storage.Anomaly
+		if err := json.Unmarshal(body, &anomaly); err != nil {
+			t.Fatalf("failed to unmarshal test anomaly: %v", err)
+		}
+		if anomaly.Type != "test_alert" || anomaly.IP != "192.168.1.99" {
+			t.Errorf("unexpected anomaly in test alert: %+v", anomaly)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout waiting for test alert webhook dispatch")
+	}
+}
+
+func TestHandleMetrics(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockRepo := &MockFlowRepository{}
+
+	// Seed mock device and anomaly
+	mockRepo.Devices = []storage.Device{
+		{IP: "192.168.1.100", Hostname: "tv.local", Label: "IoT"},
+	}
+	mockRepo.Anomalies = []storage.Anomaly{
+		{IP: "192.168.1.100", Type: "ddos", Severity: "high", Status: "active", CreatedAt: time.Now()},
+	}
+
+	// Create a mock collector
+	coll := collector.NewFlowCollector(cfg, logger, nil)
+
+	server := NewAPIServer(cfg, logger, coll, mockRepo, mockRepo, nil, nil, nil, nil, nil, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status OK, got %d", w.Code)
+	}
+
+	contentType := w.Header().Get("Content-Type")
+	if !strings.Contains(contentType, "text/plain") {
+		t.Errorf("expected text/plain Content-Type, got %q", contentType)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "flowguard_collector_packets_total") {
+		t.Error("expected flowguard_collector_packets_total metric in output")
+	}
+	if !strings.Contains(body, "flowguard_discovered_devices_total 1") {
+		t.Error("expected flowguard_discovered_devices_total 1 metric in output")
+	}
+	if !strings.Contains(body, `flowguard_active_anomalies{severity="high",type="ddos"} 1`) {
+		t.Error("expected active anomalies metrics matching mock setup")
+	}
+}
+
+func TestHandleGetDeviceProfileAndFlows(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockRepo := &MockFlowRepository{}
+
+	// Setup mock data
+	ip := "192.168.1.10"
+	mockRepo.Devices = []storage.Device{
+		{IP: ip, Hostname: "test.local", Label: "Discovered Device", Vendor: "Apple", FirstSeen: time.Now(), LastSeen: time.Now()},
+	}
+	mockRepo.Baseline = &storage.DeviceBaseline{
+		IP:        ip,
+		MeanBytes: 12345.0,
+		UpdatedAt: time.Now().Truncate(time.Second),
+	}
+	mockRepo.Anomalies = []storage.Anomaly{
+		{ID: 10, IP: ip, Type: "TRAFFIC_SPIKE", Severity: "high", Status: "active", CreatedAt: time.Now()},
+	}
+
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil, nil, nil, nil, "")
+
+	// 1. Test GET /api/devices/{ip} (profile)
+	req := httptest.NewRequest(http.MethodGet, "/api/devices/"+ip, nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status OK, got %d", w.Code)
+	}
+
+	var profile map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &profile); err != nil {
+		t.Fatalf("failed decoding profile: %v", err)
+	}
+
+	if profile["ip"] != ip {
+		t.Errorf("expected IP %s, got %v", ip, profile["ip"])
+	}
+	if profile["subnet_vlan"] == nil {
+		t.Error("expected subnet_vlan to be present")
+	}
+	if profile["risk"] == nil {
+		t.Error("expected risk to be present")
+	}
+
+	// 2. Test GET /api/devices/{ip}/flows
+	req = httptest.NewRequest(http.MethodGet, "/api/devices/"+ip+"/flows?bucket_seconds=60", nil)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status OK, got %d", w.Code)
+	}
+
+	var flows map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &flows); err != nil {
+		t.Fatalf("failed decoding flows: %v", err)
+	}
+
+	if flows["time_series"] == nil {
+		t.Error("expected time_series to be present")
+	}
+	if flows["top_peers"] == nil {
+		t.Error("expected top_peers to be present")
+	}
+	if flows["top_ports"] == nil {
+		t.Error("expected top_ports to be present")
+	}
+
+	// 3. Test invalid IP format
+	req = httptest.NewRequest(http.MethodGet, "/api/devices/invalid-ip", nil)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected StatusBadRequest (400), got %d", w.Code)
+	}
+
+	// 4. Test device not found
+	req = httptest.NewRequest(http.MethodGet, "/api/devices/1.2.3.4", nil)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected StatusNotFound (404), got %d", w.Code)
+	}
+}

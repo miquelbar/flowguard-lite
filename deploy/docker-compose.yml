@@ -13,11 +13,11 @@ services:
       - "2055:2055/udp"    # NetFlow / IPFIX collector
       - "6343:6343/udp"    # sFlow collector
     volumes:
-      - flowguard_data:/data
+      - ../dev-data:/data
     environment:
       - FLOWGUARD_LOG_LEVEL=info
       - FLOWGUARD_ENV=production
 
-volumes:
-  flowguard_data:
-    driver: local
+# volumes:
+#   flowguard_data:
+#     driver: local

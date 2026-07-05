@@ -96,6 +96,18 @@ func (m *MockDeviceRepository) GetActiveAnomalies(ctx context.Context, since tim
 	return []storage.Anomaly{}, nil
 }
 
+func (m *MockDeviceRepository) SaveAuditLog(ctx context.Context, action string, details string) error {
+	return nil
+}
+
+func (m *MockDeviceRepository) ListAuditLogs(ctx context.Context, limit int) ([]storage.AuditLog, error) {
+	return []storage.AuditLog{}, nil
+}
+
+func (m *MockDeviceRepository) GetAnomaliesForIP(ctx context.Context, ip string, limit int) ([]storage.Anomaly, error) {
+	return []storage.Anomaly{}, nil
+}
+
 type MockFlowProcessor struct {
 	mu     sync.Mutex
 	Events []*flow.FlowEvent

@@ -1,10 +1,13 @@
 # Makefile for FlowGuard Lite
 # Supports both native local execution and Dockerized workflows.
 
-.PHONY: all setup build test lint dev clean docker-build docker-up docker-test docker-export
+.PHONY: all setup generate build test lint dev clean docker-build docker-up docker-test docker-ui-test docker-export
+
+-include .env
+export
 
 # Default target
-all: build
+all: generate build
 
 # 1. Setup local Git exclusions for private developer workspace files
 setup:
@@ -16,9 +19,13 @@ setup:
 	@git status --porcelain
 
 # 2. Native compile and run targets
+generate:
+	@echo "Generating configuration JSON schema validation assets..."
+	go generate ./...
+
 build:
 	@echo "Building Go backend natively..."
-	go build -o bin/flowguard ./cmd/flowguard
+	go build -tags production -o bin/flowguard ./cmd/flowguard
 
 test:
 	@echo "Running native Go tests..."
@@ -31,7 +38,7 @@ lint:
 
 dev:
 	@echo "Running Go backend natively in development mode..."
-	go run ./cmd/flowguard -config config.yaml
+	go run -tags !production ./cmd/flowguard -config config.yaml
 
 clean:
 	@echo "Cleaning native build artifacts..."
@@ -50,6 +57,11 @@ docker-up:
 docker-test:
 	@echo "Running tests in a containerized environment..."
 	docker run --rm flowguard:latest go test -v ./...
+
+docker-ui-test:
+	@echo "Running UI JavaScript checks in Dockerized Node..."
+	@test -n "$(NODE_DOCKER_IMAGE)" || (echo "NODE_DOCKER_IMAGE is not set. Copy .env.example to .env or export NODE_DOCKER_IMAGE." && exit 1)
+	docker run --rm -v "$(PWD):/work" -w /work $(NODE_DOCKER_IMAGE) node --check internal/ui/assets/app.js
 
 docker-export:
 	@echo "Exporting production Docker image to tar archive..."

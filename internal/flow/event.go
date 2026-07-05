@@ -28,3 +28,11 @@ type TopResult struct {
 	Packets uint64 `json:"packets"`
 	Flows   uint64 `json:"flows"`
 }
+
+// TrafficTimeBucket represents aggregate traffic counters for a bounded time bucket.
+type TrafficTimeBucket struct {
+	Timestamp time.Time `json:"timestamp"`
+	Bytes     uint64    `json:"bytes"`
+	Packets   uint64    `json:"packets"`
+	Flows     uint64    `json:"flows"`
+}

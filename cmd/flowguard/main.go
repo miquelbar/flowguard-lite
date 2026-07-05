@@ -21,6 +21,7 @@ import (
 	"github.com/flowguard/flowguard/internal/risk"
 	"github.com/flowguard/flowguard/internal/storage"
 	"github.com/flowguard/flowguard/internal/suricata"
+	"github.com/flowguard/flowguard/internal/webhook"
 )
 
 func main() {
@@ -39,12 +40,26 @@ func main() {
 	log := logger.InitLogger(cfg.LogLevel, cfg.Environment)
 	log.Info("Starting FlowGuard Lite daemon...", slog.String("env", cfg.Environment), slog.String("log_level", cfg.LogLevel))
 
-	// 4. Initialize storage repository
-	repo, err := storage.NewSQLiteRepository(cfg.StorageDir, log)
-	if err != nil {
-		log.Error("Failed to initialize SQLite repository", slog.String("error", err.Error()))
-		os.Exit(1)
+	// 4. Initialize storage repository based on choice
+	var repo storage.StorageRepository
+	if cfg.StorageBackend == "duckdb" {
+		repo, err = storage.NewDuckDBRepository(cfg.StorageDir, log)
+		if err != nil {
+			log.Error("Failed to initialize DuckDB repository", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		log.Info("Initialized DuckDB storage backend")
+	} else {
+		repo, err = storage.NewSQLiteRepository(cfg.StorageDir, log)
+		if err != nil {
+			log.Error("Failed to initialize SQLite repository", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		log.Info("Initialized SQLite storage backend (daily shards)")
 	}
+
+	// Traps conditional developer database seeding flag
+	handleSeed(repo, log, cfg, *configPath)
 
 	// Run storage retention cleanup once on startup (7-day default limit)
 	if err := repo.CleanupRetention(7); err != nil {
@@ -128,8 +143,15 @@ func main() {
 	// 14. Initialize Threat Risk Scoring Engine
 	riskEngine := risk.NewRiskEngine(repo)
 
+	// 14b. Initialize Webhook Engine (always registered to support dynamic configuration reloads)
+	webhookEngine := webhook.NewWebhookEngine(cfg.WebhookURL, cfg.WebhookFormat, cfg.WebhookHeaders, cfg.TelegramEnabled, cfg.TelegramToken, cfg.TelegramChatID, log)
+	repo.RegisterAnomalyCallback(func(a *storage.Anomaly) {
+		webhookEngine.SendAnomalyAlert(context.Background(), a)
+	})
+	log.Info("Webhook Engine started and registered post-anomaly trigger callbacks")
+
 	// 15. Initialize API HTTP server
-	server := api.NewAPIServer(cfg, log, coll, repo, repo, baselineEngine, riskEngine)
+	server := api.NewAPIServer(cfg, log, coll, repo, repo, baselineEngine, riskEngine, profiler, ddosDetector, webhookEngine, *configPath)
 
 	// 16. Run HTTP server in a separate goroutine so we can trap signals concurrently
 	serverErrChan := make(chan error, 1)

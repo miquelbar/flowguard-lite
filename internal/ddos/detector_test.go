@@ -63,6 +63,29 @@ func (m *MockDeviceRepository) GetActiveAnomalies(ctx context.Context, since tim
 	return []storage.Anomaly{}, nil
 }
 
+func (m *MockDeviceRepository) SaveAuditLog(ctx context.Context, action string, details string) error {
+	return nil
+}
+
+func (m *MockDeviceRepository) ListAuditLogs(ctx context.Context, limit int) ([]storage.AuditLog, error) {
+	return []storage.AuditLog{}, nil
+}
+
+func (m *MockDeviceRepository) GetAnomaliesForIP(ctx context.Context, ip string, limit int) ([]storage.Anomaly, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var filtered []storage.Anomaly
+	for _, a := range m.Anomalies {
+		if a.IP == ip {
+			filtered = append(filtered, a)
+			if len(filtered) >= limit {
+				break
+			}
+		}
+	}
+	return filtered, nil
+}
+
 func TestDDoSDetector_DetectionAndDeduplication(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	repo := &MockDeviceRepository{}

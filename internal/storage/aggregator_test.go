@@ -12,7 +12,7 @@ import (
 )
 
 type MockFlowRepository struct {
-	mu     sync.Mutex
+	mu      sync.Mutex
 	Batches map[string][]flow.FlowEvent
 }
 
@@ -39,6 +39,26 @@ func (m *MockFlowRepository) GetTopDestinations(ctx context.Context, start, end 
 }
 
 func (m *MockFlowRepository) GetTopPorts(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error) {
+	return nil, nil
+}
+
+func (m *MockFlowRepository) GetTopProtocols(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error) {
+	return nil, nil
+}
+
+func (m *MockFlowRepository) GetTrafficTimeSeries(ctx context.Context, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error) {
+	return nil, nil
+}
+
+func (m *MockFlowRepository) GetDeviceTrafficTimeSeries(ctx context.Context, ip string, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error) {
+	return nil, nil
+}
+
+func (m *MockFlowRepository) GetDeviceTopPeers(ctx context.Context, ip string, start, end time.Time, limit int) ([]flow.TopResult, error) {
+	return nil, nil
+}
+
+func (m *MockFlowRepository) GetDeviceTopPorts(ctx context.Context, ip string, start, end time.Time, limit int) ([]flow.TopResult, error) {
 	return nil, nil
 }
 

@@ -7,14 +7,18 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/flowguard/flowguard/internal/baseline"
 	"github.com/flowguard/flowguard/internal/collector"
 	"github.com/flowguard/flowguard/internal/config"
+	"github.com/flowguard/flowguard/internal/ddos"
+	"github.com/flowguard/flowguard/internal/device"
 	"github.com/flowguard/flowguard/internal/risk"
 	"github.com/flowguard/flowguard/internal/storage"
 	"github.com/flowguard/flowguard/internal/ui"
+	"github.com/flowguard/flowguard/internal/webhook"
 )
 
 // CollectorProvider defines the contract for fetching collector stats and exporters.
@@ -33,14 +37,21 @@ type APIServer struct {
 	deviceRepo     storage.DeviceRepository
 	baselineEngine *baseline.BaselineEngine
 	riskEngine     *risk.RiskEngine
+	profiler       *device.DeviceProfiler
+	ddosDetector   *ddos.DDoSDetector
+	webhookEngine  *webhook.WebhookEngine
+	configPath     string
+	authMu         sync.Mutex
+	sessions       map[string]authSession
+	loginAttempts  map[string]loginAttempt
 }
 
 // HealthResponse represents the structure of health check outputs.
 type HealthResponse struct {
-	Status      string          `json:"status"`
-	Environment string          `json:"environment"`
-	Timestamp   string          `json:"timestamp"`
-	Version     string          `json:"version"`
+	Status      string           `json:"status"`
+	Environment string           `json:"environment"`
+	Timestamp   string           `json:"timestamp"`
+	Version     string           `json:"version"`
 	Collector   *collector.Stats `json:"collector,omitempty"`
 }
 
@@ -53,6 +64,10 @@ func NewAPIServer(
 	deviceRepo storage.DeviceRepository,
 	baselineEngine *baseline.BaselineEngine,
 	riskEngine *risk.RiskEngine,
+	profiler *device.DeviceProfiler,
+	ddosDetector *ddos.DDoSDetector,
+	webhookEngine *webhook.WebhookEngine,
+	configPath string,
 ) *APIServer {
 	mux := http.NewServeMux()
 	s := &APIServer{
@@ -63,9 +78,14 @@ func NewAPIServer(
 		deviceRepo:     deviceRepo,
 		baselineEngine: baselineEngine,
 		riskEngine:     riskEngine,
+		profiler:       profiler,
+		ddosDetector:   ddosDetector,
+		webhookEngine:  webhookEngine,
+		configPath:     configPath,
+		sessions:       make(map[string]authSession),
+		loginAttempts:  make(map[string]loginAttempt),
 		server: &http.Server{
 			Addr:         ":" + cfg.Port,
-			Handler:      mux,
 			ReadTimeout:  10 * time.Second,
 			WriteTimeout: 10 * time.Second,
 			IdleTimeout:  120 * time.Second,
@@ -75,15 +95,20 @@ func NewAPIServer(
 	// Dynamic routing matching PLAN.md
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/api/health", s.handleHealth)
+	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	mux.HandleFunc("/api/exporters", s.handleExporters)
 	mux.HandleFunc("/api/top/sources", s.handleTopSources)
 	mux.HandleFunc("/api/top/destinations", s.handleTopDestinations)
 	mux.HandleFunc("/api/top/ports", s.handleTopPorts)
+	mux.HandleFunc("/api/top/protocols", s.handleTopProtocols)
+	mux.HandleFunc("GET /api/traffic/timeseries", s.handleTrafficTimeSeries)
 
 	// Device inventory endpoints (Go 1.22+ wildcard patterns)
 	mux.HandleFunc("GET /api/devices", s.handleListDevices)
+	mux.HandleFunc("GET /api/devices/{ip}", s.handleGetDeviceProfile)
 	mux.HandleFunc("PUT /api/devices/{ip}/label", s.handleUpdateDeviceLabel)
 	mux.HandleFunc("GET /api/devices/{ip}/baseline", s.handleGetDeviceBaseline)
+	mux.HandleFunc("GET /api/devices/{ip}/flows", s.handleGetDeviceFlows)
 
 	// Anomaly detection endpoints (Go 1.22+ wildcard patterns)
 	mux.HandleFunc("GET /api/anomalies", s.handleListAnomalies)
@@ -92,7 +117,23 @@ func NewAPIServer(
 	// Threat risk scoring endpoints (Go 1.22+ wildcard patterns)
 	mux.HandleFunc("GET /api/risk/devices", s.handleListRiskDevices)
 
+	// Security audit log endpoints (Go 1.22+ wildcard patterns)
+	mux.HandleFunc("GET /api/audit-logs", s.handleListAuditLogs)
+
+	// Firewall rules templates export (Go 1.22+ wildcard patterns)
+	mux.HandleFunc("GET /api/firewall/rules", s.handleGetFirewallRules)
+
+	// Settings configuration endpoints (Go 1.22+ wildcard patterns)
+	mux.HandleFunc("GET /api/settings", s.handleGetSettings)
+	mux.HandleFunc("POST /api/settings", s.handlePostSettings)
+	mux.HandleFunc("POST /api/settings/test-alert", s.handleTestAlert)
+	mux.HandleFunc("GET /api/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("POST /api/auth/setup", s.handleAuthSetup)
+	mux.HandleFunc("POST /api/auth/login", s.handleAuthLogin)
+	mux.HandleFunc("POST /api/auth/logout", s.handleAuthLogout)
+
 	mux.Handle("/", ui.Handler())
+	s.server.Handler = s.authMiddleware(mux)
 
 	return s
 }

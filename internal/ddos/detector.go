@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"strings"
+
 	"github.com/flowguard/flowguard/internal/config"
 	"github.com/flowguard/flowguard/internal/flow"
 	"github.com/flowguard/flowguard/internal/storage"
@@ -276,4 +278,19 @@ func (d *DDoSDetector) triggerAlert(ip string, alertType string, reason string, 
 			d.logger.Error("Failed saving triggered DDoS anomaly into database", slog.String("error", err.Error()))
 		}
 	}()
+}
+
+// UpdateLocalSubnets dynamically re-configures the local subnets list at runtime.
+func (d *DDoSDetector) UpdateLocalSubnets(subnets []string) {
+	var parsed []*net.IPNet
+	for _, cidr := range subnets {
+		_, ipNet, err := net.ParseCIDR(strings.TrimSpace(cidr))
+		if err == nil {
+			parsed = append(parsed, ipNet)
+		}
+	}
+	d.mu.Lock()
+	d.localSubnets = parsed
+	d.mu.Unlock()
+	d.logger.Info("Dynamically updated DDoSDetector local subnets", slog.Int("count", len(parsed)))
 }
