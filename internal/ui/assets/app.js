@@ -871,6 +871,26 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         previewHtml += `<div style="margin-bottom: 0.5rem;">${behavior}</div>`;
 
+        // 1.5 Describe action behavior
+        let actionExplain = "";
+        if (suppressed) {
+            actionExplain = "Silences matching alerts completely (suppresses all notifications).";
+        } else {
+            actionExplain = "Keeps matching alerts active.";
+            if (severity) {
+                if (severity === "low") {
+                    actionExplain += " Alert on Low and above (all alerts).";
+                } else if (severity === "medium") {
+                    actionExplain += " Alert only on Medium and High (Low alerts will be silenced).";
+                } else if (severity === "high") {
+                    actionExplain += " Alert only on High (Low and Medium alerts will be silenced).";
+                }
+            } else {
+                actionExplain += " Alert on all severities (no minimum threshold).";
+            }
+        }
+        previewHtml += `<div style="margin-bottom: 0.5rem; border-left: 2px solid var(--accent-color); padding-left: 0.5rem; font-style: italic; color: var(--text-secondary);">${actionExplain}</div>`;
+
         // 2. State precedence rank
         let rankText = "";
         let rankColor = "";

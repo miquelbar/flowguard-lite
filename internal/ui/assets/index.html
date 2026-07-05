@@ -650,12 +650,12 @@
                                 </div>
 
                                 <div class="form-group">
-                                    <label for="policy-severity-threshold">Severity Threshold</label>
+                                    <label for="policy-severity-threshold">Minimum Severity to Alert</label>
                                     <select id="policy-severity-threshold" class="form-control" style="background-color: var(--surface-color); color: var(--text-color);">
-                                        <option value="">No Filter (Default)</option>
-                                        <option value="low">Keep only Low and above</option>
-                                        <option value="medium">Keep only Medium and above</option>
-                                        <option value="high">Keep only High</option>
+                                        <option value="">Alert on all severities</option>
+                                        <option value="low">Low and above</option>
+                                        <option value="medium">Medium and above (Silence Low)</option>
+                                        <option value="high">High only (Silence Low & Medium)</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
