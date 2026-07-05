@@ -38,7 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let policiesData = [];
     let selectedPolicyId = null;
     let auditLogPage = 0;
-    const auditLogPageSize = 10;
+    let auditLogPageSize = 10;
 
     // Navigation elements
     const navDashboard = document.getElementById("nav-dashboard");
@@ -1985,6 +1985,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Handle Search/Pagination for audit logs
     document.getElementById("search-audit-logs").addEventListener("input", () => {
+        auditLogPage = 0;
+        renderAuditLogs();
+    });
+    document.getElementById("select-audit-limit").addEventListener("change", (e) => {
+        auditLogPageSize = parseInt(e.target.value, 10);
         auditLogPage = 0;
         renderAuditLogs();
     });

@@ -739,6 +739,15 @@
                         <div class="search-box">
                             <input type="text" id="search-audit-logs" placeholder="Search logs..." class="form-control" style="width: 250px; height: 36px; padding: 0 0.75rem; font-size: 0.875rem;">
                         </div>
+                        <div style="display: flex; gap: 0.35rem; align-items: center;">
+                            <span class="text-muted" style="font-size: 0.875rem;">Show:</span>
+                            <select id="select-audit-limit" class="form-control" style="width: 75px; height: 36px; font-size: 0.875rem; padding: 0 0.5rem; background-color: var(--surface-color); color: var(--text-color);">
+                                <option value="10">10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
                         <div id="audit-pagination-stats" class="text-muted" style="font-size: 0.875rem;">
                             Showing 0-0 of 0 logs
                         </div>
