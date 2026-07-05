@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/api"
 	"github.com/flowguard/flowguard/internal/anomaly"
+	"github.com/flowguard/flowguard/internal/api"
 	"github.com/flowguard/flowguard/internal/baseline"
 	"github.com/flowguard/flowguard/internal/collector"
 	"github.com/flowguard/flowguard/internal/config"

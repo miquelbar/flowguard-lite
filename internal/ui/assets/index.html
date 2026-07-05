@@ -63,6 +63,20 @@
                     </svg>
                     <span class="nav-text">Alerts</span>
                 </button>
+                <button id="nav-policies" class="nav-link">
+                    <svg class="icon nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="4" y1="21" x2="4" y2="14"/>
+                        <line x1="4" y1="10" x2="4" y2="3"/>
+                        <line x1="12" y1="21" x2="12" y2="12"/>
+                        <line x1="12" y1="8" x2="12" y2="3"/>
+                        <line x1="20" y1="21" x2="20" y2="16"/>
+                        <line x1="20" y1="12" x2="20" y2="3"/>
+                        <line x1="1" y1="14" x2="7" y2="14"/>
+                        <line x1="9" y1="8" x2="15" y2="8"/>
+                        <line x1="17" y1="16" x2="23" y2="16"/>
+                    </svg>
+                    <span class="nav-text">Policies</span>
+                </button>
                 <button id="nav-audit" class="nav-link">
                     <svg class="icon nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -442,6 +456,14 @@
                                 </div>
                             </div>
 
+                            <!-- Applied Policies -->
+                            <div class="detail-section">
+                                <h4>Applied Policies</h4>
+                                <div id="device-policies-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                    <div class="text-muted text-center" style="font-size: 0.813rem; padding: 0.5rem; border: 1px dashed var(--border-color); border-radius: 6px;">No applied policies</div>
+                                </div>
+                            </div>
+
                             <!-- Firewall Templates -->
                             <div class="detail-section">
                                 <h4>Firewall Control Template</h4>
@@ -546,6 +568,162 @@
                                     <!-- Triage Action Buttons dynamically populated -->
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <!-- VIEW 3.5: Policies Configuration -->
+        <div id="view-policies" class="view-content">
+            <main class="dashboard-main device-split-layout">
+                <!-- Left Side: Policies list -->
+                <section class="panel panel-left-devices">
+                    <div class="panel-header flex-header">
+                        <div>
+                            <h2>Traffic Treatment Policies</h2>
+                            <p class="panel-subtitle text-muted">Override anomaly behavior and silence noisy devices/alerts</p>
+                        </div>
+                        <div>
+                            <button id="btn-add-policy" class="btn-primary">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"/>
+                                    <line x1="5" y1="12" x2="19" y2="12"/>
+                                </svg>
+                                Add Policy
+                            </button>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="table-container">
+                            <table id="tbl-policies">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Scope</th>
+                                        <th>Target</th>
+                                        <th>Status</th>
+                                        <th class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted">Loading policies...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Right Side: Policy Details / Editor -->
+                <section class="panel panel-right-devices" id="panel-policy-details">
+                    <div class="panel-header flex-header">
+                        <h2 id="policy-details-title">Policy Editor</h2>
+                        <button id="btn-close-policy-details" class="btn-secondary mobile-only" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Close</button>
+                    </div>
+                    <div class="panel-body flex-column-body" style="overflow-y: auto;">
+                        <div id="policy-details-empty" class="text-center text-muted pad-large">
+                            Select a policy from the list or click "Add Policy" to configure custom alerts tuning rules.
+                        </div>
+                        <div id="policy-details-content" class="hidden">
+                            <form id="form-policy-editor" class="flex-column-form" style="display: flex; flex-direction: column; gap: 0.75rem; width: 100%;">
+                                <input type="hidden" id="policy-id">
+                                
+                                <div class="form-group">
+                                    <label for="policy-name">Policy Name</label>
+                                    <input type="text" id="policy-name" placeholder="e.g. Silence Storage Backups" class="form-control" required maxlength="100">
+                                </div>
+
+                                <div class="form-group-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                    <div class="form-group">
+                                        <label for="policy-scope">Scope</label>
+                                        <select id="policy-scope" class="form-control" style="background-color: var(--surface-color); color: var(--text-color);">
+                                            <option value="global">Global (all nodes)</option>
+                                            <option value="ip">Single IP Address</option>
+                                            <option value="subnet">Subnet (CIDR)</option>
+                                            <option value="alert_type">Alert Type</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="policy-target" id="lbl-policy-target">Target</label>
+                                        <input type="text" id="policy-target" placeholder="e.g. 192.168.1.15" class="form-control">
+                                    </div>
+                                </div>
+
+                                <div class="form-group-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                    <div class="form-group">
+                                        <label for="policy-severity-threshold">Severity Threshold</label>
+                                        <select id="policy-severity-threshold" class="form-control" style="background-color: var(--surface-color); color: var(--text-color);">
+                                            <option value="">No Filter (Default)</option>
+                                            <option value="low">Keep only Low and above</option>
+                                            <option value="medium">Keep only Medium and above</option>
+                                            <option value="high">Keep only High</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="policy-cooldown">Cooldown Period</label>
+                                        <select id="policy-cooldown" class="form-control" style="background-color: var(--surface-color); color: var(--text-color);">
+                                            <option value="0">Disabled (always alert)</option>
+                                            <option value="60">1 Minute</option>
+                                            <option value="300">5 Minutes</option>
+                                            <option value="1800">30 Minutes</option>
+                                            <option value="3600">1 Hour</option>
+                                            <option value="86400">24 Hours</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="form-group-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                    <div class="form-group">
+                                        <label for="policy-quiet-hours-start">Quiet Hours Start</label>
+                                        <input type="text" id="policy-quiet-hours-start" placeholder="HH:MM (e.g. 22:00)" class="form-control">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="policy-quiet-hours-end">Quiet Hours End</label>
+                                        <input type="text" id="policy-quiet-hours-end" placeholder="HH:MM (e.g. 06:00)" class="form-control">
+                                    </div>
+                                </div>
+
+                                <div class="form-group" style="margin-bottom: 0.25rem;">
+                                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                        <input type="checkbox" id="policy-suppressed">
+                                        <span><strong>Silence Alerts Completely</strong> (suppress all notifications)</span>
+                                    </label>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Route Notifications to Channels</label>
+                                    <div class="checkbox-group" style="display: flex; gap: 1rem; margin-top: 0.25rem;">
+                                        <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.875rem;">
+                                            <input type="checkbox" class="policy-channel-checkbox" value="slack">
+                                            <span>Slack</span>
+                                        </label>
+                                        <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.875rem;">
+                                            <input type="checkbox" class="policy-channel-checkbox" value="telegram">
+                                            <span>Telegram</span>
+                                        </label>
+                                        <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.875rem;">
+                                            <input type="checkbox" class="policy-channel-checkbox" value="webhook">
+                                            <span>Generic Webhook</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Precedence / Previews Panel -->
+                                <div class="precedence-panel" style="border: 1px solid var(--border-color); padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.1); margin-top: 0.25rem; font-size: 0.813rem;">
+                                    <h4 style="margin: 0 0 0.35rem 0; font-size: 0.875rem;">Conflict & Precedence Status</h4>
+                                    <div id="policy-precedence-preview" class="text-muted">
+                                        Fill in the form to view matching targets and precedence rank.
+                                    </div>
+                                </div>
+
+                                <div class="form-actions" style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                    <button type="submit" class="btn-primary" style="flex: 2;" id="btn-save-policy">Save Policy</button>
+                                    <button type="button" class="btn-secondary" style="flex: 1;" id="btn-cancel-policy">Cancel</button>
+                                    <button type="button" class="btn-secondary btn-danger" style="flex: 1; background-color: rgba(244,63,94,0.1); border-color: rgba(244,63,94,0.2); color: #f43f5e;" id="btn-delete-policy">Delete</button>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </section>

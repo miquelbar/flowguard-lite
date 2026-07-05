@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
         "#/devices": "devices",
         "#/alerts": "anomalies",
         "#/anomalies": "anomalies",
+        "#/policies": "policies",
         "#/audit": "audit",
         "#/settings": "settings"
     };
@@ -15,6 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
         "dashboard": "#/traffic",
         "devices": "#/devices",
         "anomalies": "#/alerts",
+        "policies": "#/policies",
         "audit": "#/audit",
         "settings": "#/settings"
     };
@@ -33,6 +35,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let activeTrafficMetric = "bytes";
     let selectedDeviceIP = null;
     let selectedAnomalyId = null;
+    let policiesData = [];
+    let selectedPolicyId = null;
     let auditLogPage = 0;
     const auditLogPageSize = 10;
 
@@ -40,12 +44,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const navDashboard = document.getElementById("nav-dashboard");
     const navDevices = document.getElementById("nav-devices");
     const navAnomalies = document.getElementById("nav-anomalies");
+    const navPolicies = document.getElementById("nav-policies");
     const navAudit = document.getElementById("nav-audit");
     const navSettings = document.getElementById("nav-settings");
     
     const viewDashboard = document.getElementById("view-dashboard");
     const viewDevices = document.getElementById("view-devices");
     const viewAnomalies = document.getElementById("view-anomalies");
+    const viewPolicies = document.getElementById("view-policies");
     const viewAudit = document.getElementById("view-audit");
     const viewSettings = document.getElementById("view-settings");
     const viewWizard = document.getElementById("view-wizard");
@@ -125,6 +131,30 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Toast elements
     const toastContainer = document.getElementById("toast-container");
+
+    // Policies view elements
+    const tblPolicies = document.getElementById("tbl-policies") ? document.getElementById("tbl-policies").querySelector("tbody") : null;
+    const btnAddPolicy = document.getElementById("btn-add-policy");
+    const panelPolicyDetails = document.getElementById("panel-policy-details");
+    const policyDetailsEmpty = document.getElementById("policy-details-empty");
+    const policyDetailsContent = document.getElementById("policy-details-content");
+    const policyDetailsTitle = document.getElementById("policy-details-title");
+    const btnClosePolicyDetails = document.getElementById("btn-close-policy-details");
+
+    const formPolicyEditor = document.getElementById("form-policy-editor");
+    const inputPolicyId = document.getElementById("policy-id");
+    const inputPolicyName = document.getElementById("policy-name");
+    const selectPolicyScope = document.getElementById("policy-scope");
+    const inputPolicyTarget = document.getElementById("policy-target");
+    const labelPolicyTarget = document.getElementById("lbl-policy-target");
+    const selectPolicySeverityThreshold = document.getElementById("policy-severity-threshold");
+    const selectPolicyCooldown = document.getElementById("policy-cooldown");
+    const inputPolicyQuietHoursStart = document.getElementById("policy-quiet-hours-start");
+    const inputPolicyQuietHoursEnd = document.getElementById("policy-quiet-hours-end");
+    const inputPolicySuppressed = document.getElementById("policy-suppressed");
+    const policyPrecedencePreview = document.getElementById("policy-precedence-preview");
+    const btnCancelPolicy = document.getElementById("btn-cancel-policy");
+    const devicePoliciesList = document.getElementById("device-policies-list");
 
     // Helper: format bytes into human-readable representation
     function formatBytes(bytes) {
@@ -320,6 +350,18 @@ document.addEventListener("DOMContentLoaded", () => {
             renderThreatRisk();
         } catch (err) {
             console.error("Error fetching threat risk scores: ", err);
+        }
+    }
+
+    // Fetch Policies configuration
+    async function fetchPolicies() {
+        try {
+            const resp = await fetch("/api/policies");
+            if (!resp.ok) throw new Error("Policies query failed");
+            policiesData = await resp.json();
+            renderPolicies();
+        } catch (err) {
+            console.error("Error fetching policies: ", err);
         }
     }
 
@@ -656,6 +698,374 @@ document.addEventListener("DOMContentLoaded", () => {
         }).join('');
     }
 
+    // Render policies table
+    function renderPolicies() {
+        if (!tblPolicies) return;
+        if (policiesData.length === 0) {
+            tblPolicies.innerHTML = `<tr><td colspan="5" class="text-center text-muted pad-large">No policies configured yet.</td></tr>`;
+            return;
+        }
+
+        tblPolicies.innerHTML = policiesData.map(p => {
+            const isSelected = selectedPolicyId === p.id;
+            const suppressedText = p.suppressed 
+                ? '<span class="badge badge-label text-warning" style="background-color: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.2);">Silenced</span>' 
+                : '<span class="badge badge-label text-success" style="background-color: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.2);">Active</span>';
+            const scopeBadge = `<span class="badge badge-label" style="background-color: rgba(56,189,248,0.1); border-color: rgba(56,189,248,0.2); color: #38bdf8;">${p.scope}</span>`;
+            return `
+                <tr data-id="${p.id}" class="${isSelected ? 'selected' : ''}" style="cursor: pointer;">
+                    <td class="font-semibold">${escapeHtml(p.name)}</td>
+                    <td>${scopeBadge}</td>
+                    <td class="text-muted font-mono" style="font-size: 0.813rem;">${escapeHtml(p.target || "(all)")}</td>
+                    <td>${suppressedText}</td>
+                    <td class="text-center">
+                        <button class="btn-secondary btn-select-policy" data-id="${p.id}">Select</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        // Listeners for selection
+        tblPolicies.querySelectorAll("tr").forEach(row => {
+            row.addEventListener("click", (e) => {
+                if (e.target.tagName === "BUTTON") return;
+                const id = parseInt(row.getAttribute("data-id"));
+                selectPolicyId(id);
+            });
+        });
+
+        tblPolicies.querySelectorAll(".btn-select-policy").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                const id = parseInt(e.target.getAttribute("data-id"));
+                selectPolicyId(id);
+            });
+        });
+    }
+
+    function selectPolicyId(id) {
+        selectedPolicyId = id;
+        const p = policiesData.find(x => x.id === id);
+        if (p) {
+            selectPolicy(p);
+        } else {
+            resetPolicyDetails();
+        }
+        renderPolicies();
+    }
+
+    function selectPolicy(p) {
+        selectedPolicyId = p.id;
+        inputPolicyId.value = p.id;
+        inputPolicyName.value = p.name;
+        selectPolicyScope.value = p.scope;
+        inputPolicyTarget.value = p.target || "";
+        selectPolicySeverityThreshold.value = p.severity_threshold || "";
+        selectPolicyCooldown.value = p.cooldown_seconds || "0";
+        inputPolicyQuietHoursStart.value = p.quiet_hours_start || "";
+        inputPolicyQuietHoursEnd.value = p.quiet_hours_end || "";
+        inputPolicySuppressed.checked = p.suppressed;
+
+        // Set channel checkboxes
+        const channels = p.notification_channels || [];
+        document.querySelectorAll(".policy-channel-checkbox").forEach(cb => {
+            cb.checked = channels.includes(cb.value);
+        });
+
+        // Update labels
+        updateTargetFieldLabel();
+
+        const btnDelete = document.getElementById("btn-delete-policy");
+        if (btnDelete) btnDelete.classList.remove("hidden");
+
+        policyDetailsTitle.textContent = `Edit Policy: ${p.name}`;
+        policyDetailsEmpty.classList.add("hidden");
+        policyDetailsContent.classList.remove("hidden");
+
+        // Precedence & conflict display
+        updatePrecedencePreview();
+    }
+
+    function startAddPolicy() {
+        selectedPolicyId = "new";
+        inputPolicyId.value = "";
+        inputPolicyName.value = "";
+        selectPolicyScope.value = "global";
+        inputPolicyTarget.value = "";
+        selectPolicySeverityThreshold.value = "";
+        selectPolicyCooldown.value = "0";
+        inputPolicyQuietHoursStart.value = "";
+        inputPolicyQuietHoursEnd.value = "";
+        inputPolicySuppressed.checked = false;
+
+        document.querySelectorAll(".policy-channel-checkbox").forEach(cb => {
+            cb.checked = false;
+        });
+
+        updateTargetFieldLabel();
+
+        const btnDelete = document.getElementById("btn-delete-policy");
+        if (btnDelete) btnDelete.classList.add("hidden");
+
+        policyDetailsTitle.textContent = "New Policy";
+        policyDetailsEmpty.classList.add("hidden");
+        policyDetailsContent.classList.remove("hidden");
+
+        updatePrecedencePreview();
+        renderPolicies();
+    }
+
+    function resetPolicyDetails() {
+        selectedPolicyId = null;
+        if (policyDetailsEmpty) policyDetailsEmpty.classList.remove("hidden");
+        if (policyDetailsContent) policyDetailsContent.classList.add("hidden");
+    }
+
+    function updateTargetFieldLabel() {
+        const scope = selectPolicyScope.value;
+        if (scope === "global") {
+            inputPolicyTarget.disabled = true;
+            inputPolicyTarget.value = "";
+            inputPolicyTarget.required = false;
+            labelPolicyTarget.innerHTML = 'Target <span class="text-muted">(N/A for Global)</span>';
+            inputPolicyTarget.placeholder = "All traffic and alerts";
+        } else if (scope === "ip") {
+            inputPolicyTarget.disabled = false;
+            inputPolicyTarget.required = true;
+            labelPolicyTarget.innerHTML = 'Device IP Address <span class="text-danger">*</span>';
+            inputPolicyTarget.placeholder = "e.g. 192.168.1.50";
+        } else if (scope === "subnet") {
+            inputPolicyTarget.disabled = false;
+            inputPolicyTarget.required = true;
+            labelPolicyTarget.innerHTML = 'Subnet / VLAN CIDR <span class="text-danger">*</span>';
+            inputPolicyTarget.placeholder = "e.g. 192.168.1.0/24";
+        } else if (scope === "alert_type") {
+            inputPolicyTarget.disabled = false;
+            inputPolicyTarget.required = true;
+            labelPolicyTarget.innerHTML = 'Alert Type / Rule Name <span class="text-danger">*</span>';
+            inputPolicyTarget.placeholder = "e.g. port_scan, outbound_volume";
+        }
+    }
+
+    // Dynamic precedence overlap preview
+    function updatePrecedencePreview() {
+        if (!policyPrecedencePreview) return;
+        const scope = selectPolicyScope.value;
+        const target = inputPolicyTarget.value.trim();
+        const suppressed = inputPolicySuppressed.checked;
+        const severity = selectPolicySeverityThreshold.value;
+        const startQH = inputPolicyQuietHoursStart.value.trim();
+        const endQH = inputPolicyQuietHoursEnd.value.trim();
+
+        let previewHtml = "";
+
+        // 1. Describe current policy behavior
+        let behavior = "<strong>Scope Preview:</strong> ";
+        if (scope === "global") {
+            behavior += "Applies globally to all traffic and anomalies.";
+        } else if (scope === "ip") {
+            behavior += `Applies exclusively to device <code>${escapeHtml(target || "IP address")}</code>.`;
+        } else if (scope === "subnet") {
+            behavior += `Applies to all devices belonging to subnet CIDR range <code>${escapeHtml(target || "CIDR")}</code>.`;
+        } else if (scope === "alert_type") {
+            behavior += `Applies to alert events with alert type ID or signature matching <code>${escapeHtml(target || "type")}</code>.`;
+        }
+        previewHtml += `<div style="margin-bottom: 0.5rem;">${behavior}</div>`;
+
+        // 2. State precedence rank
+        let rankText = "";
+        let rankColor = "";
+        if (scope === "ip") {
+            rankText = "IP Scope (Priority 4/4 - Highest)";
+            rankColor = "#10b981"; // green
+        } else if (scope === "subnet") {
+            rankText = "Subnet Scope (Priority 3/4 - High)";
+            rankColor = "#38bdf8"; // sky blue
+        } else if (scope === "alert_type") {
+            rankText = "Alert Type Scope (Priority 2/4 - Medium)";
+            rankColor = "#fb923c"; // orange
+        } else {
+            rankText = "Global Scope (Priority 1/4 - Lowest)";
+            rankColor = "#94a3b8"; // slate
+        }
+        previewHtml += `<div style="margin-bottom: 0.5rem;"><strong>Precedence Rank:</strong> <span style="color: ${rankColor}; font-weight: 600;">${rankText}</span></div>`;
+
+        // 3. Highlight overlap & conflict checks
+        let conflicts = [];
+        const currentId = inputPolicyId.value ? parseInt(inputPolicyId.value) : null;
+
+        for (const other of policiesData) {
+            if (other.id === currentId) continue;
+            
+            // Overlap check rules
+            let overlaps = false;
+            if (scope === "global" && other.scope === "global") {
+                overlaps = true;
+            } else if (scope === "ip" && other.scope === "ip" && target === other.target && target !== "") {
+                overlaps = true;
+            } else if (scope === "subnet" && other.scope === "subnet" && target === other.target && target !== "") {
+                overlaps = true;
+            } else if (scope === "alert_type" && other.scope === "alert_type" && target === other.target && target !== "") {
+                overlaps = true;
+            } else if (scope === "ip" && other.scope === "subnet" && target !== "" && other.target !== "") {
+                overlaps = true;
+            }
+
+            if (overlaps) {
+                let priorityExplain = "";
+                let scopePriority = { "ip": 4, "subnet": 3, "alert_type": 2, "global": 1 };
+                let myP = scopePriority[scope] || 0;
+                let otherP = scopePriority[other.scope] || 0;
+
+                if (myP > otherP) {
+                    priorityExplain = `(This policy overrides "${escapeHtml(other.name)}")`;
+                } else if (myP < otherP) {
+                    priorityExplain = `(This policy is overridden by "${escapeHtml(other.name)}")`;
+                } else {
+                    priorityExplain = `(Identical scopes; first created rule matches or wins depending on db load order)`;
+                }
+
+                conflicts.push(`<li>Overlaps with <strong>${escapeHtml(other.name)}</strong> [${other.scope}] - <span style="font-style: italic;">${priorityExplain}</span></li>`);
+            }
+        }
+
+        if (conflicts.length > 0) {
+            previewHtml += `
+                <div style="margin-top: 0.5rem; border-top: 1px solid var(--border-color); padding-top: 0.5rem;">
+                    <strong class="text-warning">Overlapping Rules detected (${conflicts.length}):</strong>
+                    <ul style="margin: 0.25rem 0 0 1rem; padding: 0; list-style-type: disc;">
+                        ${conflicts.join('')}
+                    </ul>
+                </div>
+            `;
+        } else {
+            previewHtml += `<div style="margin-top: 0.5rem; color: #10b981;">No active conflicts or overlapping policies.</div>`;
+        }
+
+        policyPrecedencePreview.innerHTML = previewHtml;
+    }
+
+    // Escape HTML helper
+    function escapeHtml(str) {
+        if (!str) return "";
+        return str
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    async function savePolicySubmit(e) {
+        e.preventDefault();
+        const id = inputPolicyId.value;
+        const name = inputPolicyName.value.trim();
+        const scope = selectPolicyScope.value;
+        const target = inputPolicyTarget.value.trim();
+        const severityThreshold = selectPolicySeverityThreshold.value;
+        const cooldownSeconds = parseInt(selectPolicyCooldown.value);
+        const quietHoursStart = inputPolicyQuietHoursStart.value.trim();
+        const quietHoursEnd = inputPolicyQuietHoursEnd.value.trim();
+        const suppressed = inputPolicySuppressed.checked;
+
+        // Gather channels
+        const notificationChannels = [];
+        document.querySelectorAll(".policy-channel-checkbox").forEach(cb => {
+            if (cb.checked) notificationChannels.push(cb.value);
+        });
+
+        // Client-side validations
+        if (!name) {
+            showToast("Policy name is required", "error");
+            return;
+        }
+
+        if (scope === "ip" && !/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(target)) {
+            showToast("Target must be a valid IPv4 address", "error");
+            return;
+        }
+
+        if (scope === "subnet" && !/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}\/[0-9]{1,2}$/.test(target)) {
+            showToast("Target must be a valid CIDR network block (e.g. 192.168.1.0/24)", "error");
+            return;
+        }
+
+        if (scope === "alert_type" && !target) {
+            showToast("Target alert type name is required", "error");
+            return;
+        }
+
+        if (quietHoursStart && !/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(quietHoursStart)) {
+            showToast("Quiet Hours Start must match HH:MM format", "error");
+            return;
+        }
+
+        if (quietHoursEnd && !/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(quietHoursEnd)) {
+            showToast("Quiet Hours End must match HH:MM format", "error");
+            return;
+        }
+
+        const payload = {
+            name,
+            scope,
+            target,
+            severity_threshold: severityThreshold || null,
+            cooldown_seconds: cooldownSeconds,
+            quiet_hours_start: quietHoursStart || null,
+            quiet_hours_end: quietHoursEnd || null,
+            suppressed,
+            notification_channels: notificationChannels
+        };
+
+        if (id) {
+            payload.id = parseInt(id);
+        }
+
+        try {
+            const method = id ? "PUT" : "POST";
+            const url = id ? `/api/policies/${id}` : "/api/policies";
+            const resp = await fetch(url, {
+                method,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+
+            if (!resp.ok) {
+                const errData = await resp.json();
+                throw new Error(errData.error || "Save policy request failed");
+            }
+
+            const saved = await resp.json();
+            showToast(`Policy "${saved.name}" saved successfully`);
+            selectedPolicyId = saved.id;
+            await fetchPolicies();
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function deletePolicyClick() {
+        const id = inputPolicyId.value;
+        if (!id) return;
+        
+        if (!confirm("Are you sure you want to delete this policy?")) {
+            return;
+        }
+
+        try {
+            const resp = await fetch(`/api/policies/${id}`, { method: "DELETE" });
+            if (!resp.ok) {
+                const errData = await resp.json();
+                throw new Error(errData.error || "Delete policy request failed");
+            }
+            showToast("Policy deleted successfully");
+            selectedPolicyId = null;
+            resetPolicyDetails();
+            await fetchPolicies();
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
     // Render Device list to table
     function renderDevices() {
         const query = inputDeviceSearch.value.trim().toLowerCase();
@@ -888,6 +1298,39 @@ document.addEventListener("DOMContentLoaded", () => {
                         No alerts history
                     </div>
                 `;
+            }
+
+            // Populate applied policies
+            if (devicePoliciesList) {
+                const polSummary = profile.policy_summary || {};
+                const matchingPolicies = polSummary.policies || [];
+                if (matchingPolicies.length > 0) {
+                    devicePoliciesList.innerHTML = matchingPolicies.map(p => {
+                        const statusClass = p.suppressed ? "status-silenced" : "status-active";
+                        const statusText = p.suppressed ? "Silenced" : "Active";
+                        const badgeClass = p.scope === "ip" ? "badge-high" : (p.scope === "subnet" ? "badge-medium" : "badge-low");
+                        return `
+                            <div class="device-alert-item" style="border-left: 3px solid var(--accent-color); padding: 0.4rem 0.6rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                                <div style="flex-grow: 1;">
+                                    <div style="display: flex; gap: 0.4rem; align-items: center; margin-bottom: 0.15rem;">
+                                        <span class="badge ${badgeClass}" style="font-size: 0.65rem; padding: 0.1rem 0.25rem;">${p.scope}</span>
+                                        <span style="font-size: 0.65rem; color: var(--text-muted); font-family: monospace;">${escapeHtml(p.target || "global")}</span>
+                                    </div>
+                                    <div style="font-weight: 600; font-size: 0.75rem; color: var(--text-primary);">${escapeHtml(p.name)}</div>
+                                </div>
+                                <div style="flex-shrink: 0; font-size: 0.7rem; font-weight: 600; text-transform: uppercase;" class="${statusClass}">
+                                    ${statusText}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    devicePoliciesList.innerHTML = `
+                        <div class="text-muted text-center" style="font-size: 0.813rem; padding: 0.5rem; border: 1px dashed var(--border-color); border-radius: 6px;">
+                            No applied policies
+                        </div>
+                    `;
+                }
             }
 
         } catch (err) {
@@ -1277,6 +1720,16 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         } else if (activeView === "anomalies") {
             await fetchAnomalies();
+        } else if (activeView === "policies") {
+            await fetchPolicies();
+            if (selectedPolicyId !== null) {
+                const p = policiesData.find(x => x.id === selectedPolicyId);
+                if (p) {
+                    selectPolicy(p);
+                } else {
+                    resetPolicyDetails();
+                }
+            }
         } else if (activeView === "audit") {
             await fetchAuditLogs();
         } else if (activeView === "settings") {
@@ -1309,6 +1762,7 @@ document.addEventListener("DOMContentLoaded", () => {
             dashboard: ["Traffic", "Flow telemetry, risk signals, and local device activity"],
             devices: ["Devices", "Local inventory, labels, and learned baselines"],
             anomalies: ["Alerts", "Behavior changes that need review"],
+            policies: ["Policies", "Define custom treatment rules for devices and alerts"],
             audit: ["Audit", "Configuration changes and alert review history"],
             settings: ["Settings", "Runtime configuration for this FlowGuard node"]
         };
@@ -1320,6 +1774,7 @@ document.addEventListener("DOMContentLoaded", () => {
         navDashboard.classList.remove("active");
         navDevices.classList.remove("active");
         navAnomalies.classList.remove("active");
+        navPolicies.classList.remove("active");
         navAudit.classList.remove("active");
         navSettings.classList.remove("active");
 
@@ -1327,6 +1782,7 @@ document.addEventListener("DOMContentLoaded", () => {
         viewDashboard.classList.remove("active");
         viewDevices.classList.remove("active");
         viewAnomalies.classList.remove("active");
+        viewPolicies.classList.remove("active");
         viewAudit.classList.remove("active");
         viewSettings.classList.remove("active");
 
@@ -1339,6 +1795,9 @@ document.addEventListener("DOMContentLoaded", () => {
         } else if (viewName === "anomalies") {
             navAnomalies.classList.add("active");
             viewAnomalies.classList.add("active");
+        } else if (viewName === "policies") {
+            navPolicies.classList.add("active");
+            viewPolicies.classList.add("active");
         } else if (viewName === "audit") {
             navAudit.classList.add("active");
             viewAudit.classList.add("active");
@@ -1354,6 +1813,7 @@ document.addEventListener("DOMContentLoaded", () => {
     navDashboard.addEventListener("click", () => { window.location.hash = "#/traffic"; });
     navDevices.addEventListener("click", () => { window.location.hash = "#/devices"; });
     navAnomalies.addEventListener("click", () => { window.location.hash = "#/alerts"; });
+    navPolicies.addEventListener("click", () => { window.location.hash = "#/policies"; });
     navAudit.addEventListener("click", () => { window.location.hash = "#/audit"; });
     navSettings.addEventListener("click", () => { window.location.hash = "#/settings"; });
 
@@ -1648,6 +2108,51 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (err) {
             showToast("Test alert failed: " + err.message, "error");
         }
+    });
+
+    // Policies Section Event Listeners
+    if (btnAddPolicy) {
+        btnAddPolicy.addEventListener("click", startAddPolicy);
+    }
+    if (btnCancelPolicy) {
+        btnCancelPolicy.addEventListener("click", resetPolicyDetails);
+    }
+    const btnDeletePolicy = document.getElementById("btn-delete-policy");
+    if (btnDeletePolicy) {
+        btnDeletePolicy.addEventListener("click", deletePolicyClick);
+    }
+    if (btnClosePolicyDetails) {
+        btnClosePolicyDetails.addEventListener("click", () => {
+            resetPolicyDetails();
+            renderPolicies();
+        });
+    }
+    if (selectPolicyScope) {
+        selectPolicyScope.addEventListener("change", () => {
+            updateTargetFieldLabel();
+            updatePrecedencePreview();
+        });
+    }
+    if (formPolicyEditor) {
+        formPolicyEditor.addEventListener("submit", savePolicySubmit);
+    }
+    const formPolicyInputs = [
+        inputPolicyName,
+        inputPolicyTarget,
+        selectPolicySeverityThreshold,
+        selectPolicyCooldown,
+        inputPolicyQuietHoursStart,
+        inputPolicyQuietHoursEnd,
+        inputPolicySuppressed
+    ];
+    formPolicyInputs.forEach(input => {
+        if (input) {
+            input.addEventListener("input", updatePrecedencePreview);
+            input.addEventListener("change", updatePrecedencePreview);
+        }
+    });
+    document.querySelectorAll(".policy-channel-checkbox").forEach(cb => {
+        cb.addEventListener("change", updatePrecedencePreview);
     });
 
     // Wizard Setup Form Submit

@@ -21,11 +21,11 @@ type JSONSchemaProperty struct {
 }
 
 type JSONSchema struct {
-	Schema      string                         `json:"$schema"`
-	Title       string                         `json:"title"`
-	Type        string                         `json:"type"`
-	Properties  map[string]*JSONSchemaProperty `json:"properties"`
-	Required    []string                       `json:"required"`
+	Schema     string                         `json:"$schema"`
+	Title      string                         `json:"title"`
+	Type       string                         `json:"type"`
+	Properties map[string]*JSONSchemaProperty `json:"properties"`
+	Required   []string                       `json:"required"`
 }
 
 func main() {
@@ -117,7 +117,7 @@ func main() {
 			}
 
 			properties[yamlTag] = prop
-			
+
 			// Mark standard configurations as required fields
 			if yamlTag != "webhook_url" && yamlTag != "webhook_format" && yamlTag != "suricata_eve_path" {
 				requiredFields = append(requiredFields, yamlTag)

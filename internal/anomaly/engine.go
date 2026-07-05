@@ -30,7 +30,7 @@ type AnomalyEngine struct {
 	localSubnets []*net.IPNet
 
 	// In-memory cache to deduplicate alerts triggered in the last 15 minutes
-	mu             sync.Mutex
+	mu                sync.Mutex
 	alertDeduplicator map[string]time.Time
 }
 

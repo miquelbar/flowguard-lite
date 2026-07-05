@@ -141,6 +141,7 @@ func TestHandleExporters(t *testing.T) {
 }
 
 type MockFlowRepository struct {
+	storage.DeviceRepository
 	Sources      []flow.TopResult
 	Destinations []flow.TopResult
 	Ports        []flow.TopResult
@@ -293,6 +294,30 @@ func (m *MockFlowRepository) GetDeviceTopPorts(ctx context.Context, ip string, s
 		return []flow.TopResult{}, m.Err
 	}
 	return m.Ports, m.Err
+}
+
+func (m *MockFlowRepository) SavePolicy(ctx context.Context, p *storage.Policy) error {
+	return m.Err
+}
+
+func (m *MockFlowRepository) DeletePolicy(ctx context.Context, id int64) error {
+	return m.Err
+}
+
+func (m *MockFlowRepository) GetPolicy(ctx context.Context, id int64) (*storage.Policy, error) {
+	return nil, m.Err
+}
+
+func (m *MockFlowRepository) ListPolicies(ctx context.Context) ([]storage.Policy, error) {
+	return []storage.Policy{}, m.Err
+}
+
+func (m *MockFlowRepository) HasRecentAnomaly(ctx context.Context, ip string, anomalyType string, since time.Time) (bool, error) {
+	return false, m.Err
+}
+
+func (m *MockFlowRepository) GetPoliciesForIP(ctx context.Context, ip string) ([]storage.Policy, error) {
+	return []storage.Policy{}, m.Err
 }
 
 func TestParseQueryParams_Valid(t *testing.T) {

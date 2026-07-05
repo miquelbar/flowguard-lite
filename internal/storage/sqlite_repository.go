@@ -3,9 +3,11 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -103,6 +105,22 @@ func NewSQLiteRepository(dataDir string, logger *slog.Logger) (*SQLiteRepository
 			details TEXT NOT NULL
 		);
 		CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs (timestamp DESC);
+
+		CREATE TABLE IF NOT EXISTS policies (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			scope TEXT NOT NULL,
+			target TEXT NOT NULL,
+			severity_threshold TEXT NOT NULL DEFAULT '',
+			suppressed INTEGER NOT NULL DEFAULT 0,
+			cooldown_seconds INTEGER NOT NULL DEFAULT 0,
+			quiet_hours_start TEXT NOT NULL DEFAULT '',
+			quiet_hours_end TEXT NOT NULL DEFAULT '',
+			notification_channels TEXT NOT NULL DEFAULT '[]',
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_policies_scope ON policies (scope);
 	`)
 	if err != nil {
 		metaDB.Close()
@@ -572,6 +590,11 @@ func (r *SQLiteRepository) SaveAnomaly(ctx context.Context, a *Anomaly) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Evaluate policies to potentially silence the anomaly before saving
+	if err := r.evaluateAnomalyPoliciesLocked(ctx, a); err != nil {
+		r.logger.Warn("Failed to evaluate anomaly policies", slog.String("ip", a.IP), slog.String("type", a.Type), slog.String("error", err.Error()))
+	}
+
 	createdStr := a.CreatedAt.Format(time.RFC3339)
 	updatedStr := a.UpdatedAt.Format(time.RFC3339)
 
@@ -887,11 +910,7 @@ func (r *SQLiteRepository) RegisterAnomalyCallback(cb func(a *Anomaly)) {
 	r.onSaveAnomaly = append(r.onSaveAnomaly, cb)
 }
 
-// SaveAuditLog writes a security or configuration audit record.
-func (r *SQLiteRepository) SaveAuditLog(ctx context.Context, action string, details string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
+func (r *SQLiteRepository) saveAuditLogLocked(ctx context.Context, action string, details string) error {
 	tsStr := time.Now().Format(time.RFC3339)
 	_, err := r.metaDB.ExecContext(ctx, `
 		INSERT INTO audit_logs (timestamp, action, details) VALUES (?, ?, ?)
@@ -900,6 +919,13 @@ func (r *SQLiteRepository) SaveAuditLog(ctx context.Context, action string, deta
 		return fmt.Errorf("failed to save audit log: %w", err)
 	}
 	return nil
+}
+
+// SaveAuditLog writes a security or configuration audit record.
+func (r *SQLiteRepository) SaveAuditLog(ctx context.Context, action string, details string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.saveAuditLogLocked(ctx, action, details)
 }
 
 // ListAuditLogs returns a list of recent audit log records.
@@ -1088,4 +1114,331 @@ func (r *SQLiteRepository) GetDeviceTopPorts(ctx context.Context, ip string, sta
 	}
 
 	return sortAndLimit(merged, limit), nil
+}
+
+// SavePolicy persists or updates a custom policy.
+func (r *SQLiteRepository) SavePolicy(ctx context.Context, p *Policy) error {
+	if err := p.Validate(); err != nil {
+		return fmt.Errorf("invalid policy: %w", err)
+	}
+
+	channelsJSON, err := json.Marshal(p.NotificationChannels)
+	if err != nil {
+		return fmt.Errorf("failed to marshal channels: %w", err)
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	now := time.Now()
+	p.UpdatedAt = now
+
+	if p.ID == 0 {
+		p.CreatedAt = now
+		query := `INSERT INTO policies (name, scope, target, severity_threshold, suppressed, cooldown_seconds, quiet_hours_start, quiet_hours_end, notification_channels, created_at, updated_at)
+		          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		res, err := r.metaDB.ExecContext(ctx, query, p.Name, p.Scope, p.Target, p.SeverityThreshold, boolToInt(p.Suppressed), p.CooldownSeconds, p.QuietHoursStart, p.QuietHoursEnd, string(channelsJSON), p.CreatedAt, p.UpdatedAt)
+		if err != nil {
+			return fmt.Errorf("failed to insert policy: %w", err)
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("failed to get insert ID: %w", err)
+		}
+		p.ID = id
+		r.logger.Info("Created new policy", slog.Int64("id", p.ID), slog.String("name", p.Name))
+	} else {
+		query := `UPDATE policies SET name = ?, scope = ?, target = ?, severity_threshold = ?, suppressed = ?, cooldown_seconds = ?, quiet_hours_start = ?, quiet_hours_end = ?, notification_channels = ?, updated_at = ?
+		          WHERE id = ?`
+		res, err := r.metaDB.ExecContext(ctx, query, p.Name, p.Scope, p.Target, p.SeverityThreshold, boolToInt(p.Suppressed), p.CooldownSeconds, p.QuietHoursStart, p.QuietHoursEnd, string(channelsJSON), p.UpdatedAt, p.ID)
+		if err != nil {
+			return fmt.Errorf("failed to update policy: %w", err)
+		}
+		rows, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return fmt.Errorf("policy not found")
+		}
+		r.logger.Info("Updated policy", slog.Int64("id", p.ID), slog.String("name", p.Name))
+	}
+
+	// Audit change
+	auditDetails := fmt.Sprintf("Policy Name: %s, Scope: %s, Target: %s, Suppressed: %t, Cooldown: %d", p.Name, p.Scope, p.Target, p.Suppressed, p.CooldownSeconds)
+	_ = r.saveAuditLogLocked(ctx, "save_policy", auditDetails)
+
+	return nil
+}
+
+// DeletePolicy removes a policy by ID.
+func (r *SQLiteRepository) DeletePolicy(ctx context.Context, id int64) error {
+	p, err := r.GetPolicy(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	_, err = r.metaDB.ExecContext(ctx, "DELETE FROM policies WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("failed to delete policy: %w", err)
+	}
+
+	r.logger.Info("Deleted policy", slog.Int64("id", id))
+
+	// Audit change
+	auditDetails := fmt.Sprintf("Policy Name: %s, Scope: %s, Target: %s", p.Name, p.Scope, p.Target)
+	_ = r.saveAuditLogLocked(ctx, "delete_policy", auditDetails)
+
+	return nil
+}
+
+// GetPolicy retrieves a policy by ID.
+func (r *SQLiteRepository) GetPolicy(ctx context.Context, id int64) (*Policy, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	row := r.metaDB.QueryRowContext(ctx, "SELECT id, name, scope, target, severity_threshold, suppressed, cooldown_seconds, quiet_hours_start, quiet_hours_end, notification_channels, created_at, updated_at FROM policies WHERE id = ?", id)
+
+	var p Policy
+	var suppressedInt int
+	var channelsStr string
+	err := row.Scan(&p.ID, &p.Name, &p.Scope, &p.Target, &p.SeverityThreshold, &suppressedInt, &p.CooldownSeconds, &p.QuietHoursStart, &p.QuietHoursEnd, &channelsStr, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("policy not found")
+		}
+		return nil, fmt.Errorf("failed to scan policy: %w", err)
+	}
+	p.Suppressed = suppressedInt > 0
+	_ = json.Unmarshal([]byte(channelsStr), &p.NotificationChannels)
+	if p.NotificationChannels == nil {
+		p.NotificationChannels = []string{}
+	}
+
+	return &p, nil
+}
+
+// ListPolicies lists all active policies.
+func (r *SQLiteRepository) ListPolicies(ctx context.Context) ([]Policy, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.listPoliciesLocked(ctx)
+}
+
+func (r *SQLiteRepository) listPoliciesLocked(ctx context.Context) ([]Policy, error) {
+	rows, err := r.metaDB.QueryContext(ctx, "SELECT id, name, scope, target, severity_threshold, suppressed, cooldown_seconds, quiet_hours_start, quiet_hours_end, notification_channels, created_at, updated_at FROM policies ORDER BY scope, name")
+	if err != nil {
+		return nil, fmt.Errorf("failed query policies: %w", err)
+	}
+	defer rows.Close()
+
+	var policies []Policy
+	for rows.Next() {
+		var p Policy
+		var suppressedInt int
+		var channelsStr string
+		err := rows.Scan(&p.ID, &p.Name, &p.Scope, &p.Target, &p.SeverityThreshold, &suppressedInt, &p.CooldownSeconds, &p.QuietHoursStart, &p.QuietHoursEnd, &channelsStr, &p.CreatedAt, &p.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed scan policy row: %w", err)
+		}
+		p.Suppressed = suppressedInt > 0
+		_ = json.Unmarshal([]byte(channelsStr), &p.NotificationChannels)
+		if p.NotificationChannels == nil {
+			p.NotificationChannels = []string{}
+		}
+		policies = append(policies, p)
+	}
+
+	return policies, nil
+}
+
+// HasRecentAnomaly checks if an anomaly of matching IP and Type was created within the last cooldown period.
+func (r *SQLiteRepository) HasRecentAnomaly(ctx context.Context, ip string, anomalyType string, since time.Time) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.hasRecentAnomalyLocked(ctx, ip, anomalyType, since)
+}
+
+func (r *SQLiteRepository) hasRecentAnomalyLocked(ctx context.Context, ip string, anomalyType string, since time.Time) (bool, error) {
+	var count int
+	err := r.metaDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM anomalies WHERE ip = ? AND type = ? AND created_at >= ?", ip, anomalyType, since.Format(time.RFC3339)).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// evaluateAnomalyPoliciesLocked checks all policies and updates the anomaly status to "silenced" if matching rules suppress it.
+func (r *SQLiteRepository) evaluateAnomalyPoliciesLocked(ctx context.Context, a *Anomaly) error {
+	policies, err := r.listPoliciesLocked(ctx)
+	if err != nil {
+		return err
+	}
+
+	// 1. Find matching policies
+	var matchedPolicies []Policy
+	for _, p := range policies {
+		matches := false
+		switch p.Scope {
+		case "global":
+			matches = true
+		case "ip":
+			matches = p.Target == a.IP
+		case "subnet":
+			_, ipNet, err := net.ParseCIDR(p.Target)
+			if err == nil {
+				ipObj := net.ParseIP(a.IP)
+				if ipObj != nil && ipNet.Contains(ipObj) {
+					matches = true
+				}
+			}
+		case "alert_type":
+			matches = p.Target == a.Type
+		}
+
+		if matches {
+			matchedPolicies = append(matchedPolicies, p)
+		}
+	}
+
+	if len(matchedPolicies) == 0 {
+		return nil
+	}
+
+	// 2. Precedence sort
+	scopePriority := func(scope string) int {
+		switch scope {
+		case "ip":
+			return 4
+		case "subnet":
+			return 3
+		case "alert_type":
+			return 2
+		case "global":
+			return 1
+		default:
+			return 0
+		}
+	}
+
+	var bestPolicy Policy
+	bestPriority := -1
+	for _, p := range matchedPolicies {
+		prio := scopePriority(p.Scope)
+		if prio > bestPriority {
+			bestPriority = prio
+			bestPolicy = p
+		} else if prio == bestPriority {
+			if p.ID > bestPolicy.ID {
+				bestPolicy = p
+			}
+		}
+	}
+
+	// 3. Evaluate bestPolicy
+	suppress := false
+	if bestPolicy.Suppressed {
+		suppress = true
+		r.logger.Info("Anomaly suppressed by policy silence rule", slog.Int64("policy_id", bestPolicy.ID), slog.String("policy_name", bestPolicy.Name))
+	}
+
+	if !suppress && bestPolicy.SeverityThreshold != "" {
+		sevPriority := func(sev string) int {
+			switch strings.ToLower(sev) {
+			case "high":
+				return 3
+			case "medium":
+				return 2
+			case "low":
+				return 1
+			default:
+				return 0
+			}
+		}
+		if sevPriority(a.Severity) < sevPriority(bestPolicy.SeverityThreshold) {
+			suppress = true
+			r.logger.Info("Anomaly suppressed: severity below policy threshold", slog.Int64("policy_id", bestPolicy.ID), slog.String("severity", a.Severity), slog.String("threshold", bestPolicy.SeverityThreshold))
+		}
+	}
+
+	if !suppress && bestPolicy.QuietHoursStart != "" && bestPolicy.QuietHoursEnd != "" {
+		if isTimeInQuietHours(a.CreatedAt, bestPolicy.QuietHoursStart, bestPolicy.QuietHoursEnd) {
+			suppress = true
+			r.logger.Info("Anomaly suppressed: triggered during quiet hours", slog.Int64("policy_id", bestPolicy.ID), slog.String("start", bestPolicy.QuietHoursStart), slog.String("end", bestPolicy.QuietHoursEnd))
+		}
+	}
+
+	if !suppress && bestPolicy.CooldownSeconds > 0 {
+		since := a.CreatedAt.Add(-time.Duration(bestPolicy.CooldownSeconds) * time.Second)
+		hasRecent, err := r.hasRecentAnomalyLocked(ctx, a.IP, a.Type, since)
+		if err == nil && hasRecent {
+			suppress = true
+			r.logger.Info("Anomaly suppressed: matching anomaly occurred within cooldown period", slog.Int64("policy_id", bestPolicy.ID), slog.Int("cooldown_seconds", bestPolicy.CooldownSeconds))
+		}
+	}
+
+	if suppress {
+		a.Status = "silenced"
+	}
+
+	return nil
+}
+
+func isTimeInQuietHours(t time.Time, startStr, endStr string) bool {
+	if startStr == "" || endStr == "" {
+		return false
+	}
+	startParts := strings.Split(startStr, ":")
+	endParts := strings.Split(endStr, ":")
+	if len(startParts) != 2 || len(endParts) != 2 {
+		return false
+	}
+
+	var startH, startM, endH, endM int
+	fmt.Sscanf(startStr, "%d:%d", &startH, &startM)
+	fmt.Sscanf(endStr, "%d:%d", &endH, &endM)
+
+	curH, curM, _ := t.Clock()
+	startVal := startH*60 + startM
+	endVal := endH*60 + endM
+	curVal := curH*60 + curM
+
+	if startVal <= endVal {
+		return curVal >= startVal && curVal <= endVal
+	} else {
+		return curVal >= startVal || curVal <= endVal
+	}
+}
+
+// GetPoliciesForIP returns all matching policies (global, subnet, IP) for a specific IP.
+func (r *SQLiteRepository) GetPoliciesForIP(ctx context.Context, ip string) ([]Policy, error) {
+	policies, err := r.ListPolicies(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var matched []Policy
+	for _, p := range policies {
+		matches := false
+		switch p.Scope {
+		case "global":
+			matches = true
+		case "ip":
+			matches = p.Target == ip
+		case "subnet":
+			_, ipNet, err := net.ParseCIDR(p.Target)
+			if err == nil {
+				ipObj := net.ParseIP(ip)
+				if ipObj != nil && ipNet.Contains(ipObj) {
+					matches = true
+				}
+			}
+		}
+		if matches {
+			matched = append(matched, p)
+		}
+	}
+	return matched, nil
 }

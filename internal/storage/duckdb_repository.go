@@ -3,10 +3,13 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -75,6 +78,22 @@ func NewDuckDBRepository(dataDir string, logger *slog.Logger) (*DuckDBRepository
 			timestamp TIMESTAMP NOT NULL,
 			action VARCHAR NOT NULL,
 			details VARCHAR NOT NULL
+		);
+
+		CREATE SEQUENCE IF NOT EXISTS seq_policies_id;
+		CREATE TABLE IF NOT EXISTS policies (
+			id INTEGER DEFAULT nextval('seq_policies_id') PRIMARY KEY,
+			name VARCHAR NOT NULL,
+			scope VARCHAR NOT NULL,
+			target VARCHAR NOT NULL,
+			severity_threshold VARCHAR NOT NULL DEFAULT '',
+			suppressed INTEGER NOT NULL DEFAULT 0,
+			cooldown_seconds INTEGER NOT NULL DEFAULT 0,
+			quiet_hours_start VARCHAR NOT NULL DEFAULT '',
+			quiet_hours_end VARCHAR NOT NULL DEFAULT '',
+			notification_channels VARCHAR NOT NULL DEFAULT '[]',
+			created_at TIMESTAMP NOT NULL,
+			updated_at TIMESTAMP NOT NULL
 		);
 
 		CREATE TABLE IF NOT EXISTS flow_aggregates (
@@ -493,6 +512,11 @@ func (r *DuckDBRepository) SaveAnomaly(ctx context.Context, a *Anomaly) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Evaluate policies to potentially silence the anomaly before saving
+	if err := r.evaluateAnomalyPoliciesLocked(ctx, a); err != nil {
+		r.logger.Warn("Failed to evaluate anomaly policies in DuckDB", slog.String("ip", a.IP), slog.String("type", a.Type), slog.String("error", err.Error()))
+	}
+
 	var lastId int64
 	err := r.db.QueryRowContext(ctx, `
 		INSERT INTO anomalies (ip, type, description, severity, status, created_at, updated_at)
@@ -596,11 +620,7 @@ func (r *DuckDBRepository) RegisterAnomalyCallback(cb func(a *Anomaly)) {
 	r.onSaveAnomaly = append(r.onSaveAnomaly, cb)
 }
 
-// SaveAuditLog writes a security audit record.
-func (r *DuckDBRepository) SaveAuditLog(ctx context.Context, action string, details string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
+func (r *DuckDBRepository) saveAuditLogLocked(ctx context.Context, action string, details string) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO audit_logs (timestamp, action, details) VALUES (?, ?, ?)
 	`, time.Now(), action, details)
@@ -608,6 +628,13 @@ func (r *DuckDBRepository) SaveAuditLog(ctx context.Context, action string, deta
 		return fmt.Errorf("failed to save audit log: %w", err)
 	}
 	return nil
+}
+
+// SaveAuditLog writes a security audit record.
+func (r *DuckDBRepository) SaveAuditLog(ctx context.Context, action string, details string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.saveAuditLogLocked(ctx, action, details)
 }
 
 // ListAuditLogs returns a list of recent audit log records.
@@ -771,4 +798,300 @@ func (r *DuckDBRepository) GetDeviceTopPorts(ctx context.Context, ip string, sta
 		results = []flow.TopResult{}
 	}
 	return results, nil
+}
+
+// SavePolicy persists or updates a custom policy in DuckDB.
+func (r *DuckDBRepository) SavePolicy(ctx context.Context, p *Policy) error {
+	if err := p.Validate(); err != nil {
+		return fmt.Errorf("invalid policy: %w", err)
+	}
+
+	channelsJSON, err := json.Marshal(p.NotificationChannels)
+	if err != nil {
+		return fmt.Errorf("failed to marshal channels: %w", err)
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	now := time.Now()
+	p.UpdatedAt = now
+
+	if p.ID == 0 {
+		p.CreatedAt = now
+		query := `INSERT INTO policies (name, scope, target, severity_threshold, suppressed, cooldown_seconds, quiet_hours_start, quiet_hours_end, notification_channels, created_at, updated_at)
+		          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+		err := r.db.QueryRowContext(ctx, query, p.Name, p.Scope, p.Target, p.SeverityThreshold, boolToInt(p.Suppressed), p.CooldownSeconds, p.QuietHoursStart, p.QuietHoursEnd, string(channelsJSON), p.CreatedAt, p.UpdatedAt).Scan(&p.ID)
+		if err != nil {
+			return fmt.Errorf("failed to insert policy: %w", err)
+		}
+		r.logger.Info("Created new policy in DuckDB", slog.Int64("id", p.ID), slog.String("name", p.Name))
+	} else {
+		query := `UPDATE policies SET name = ?, scope = ?, target = ?, severity_threshold = ?, suppressed = ?, cooldown_seconds = ?, quiet_hours_start = ?, quiet_hours_end = ?, notification_channels = ?, updated_at = ?
+		          WHERE id = ?`
+		res, err := r.db.ExecContext(ctx, query, p.Name, p.Scope, p.Target, p.SeverityThreshold, boolToInt(p.Suppressed), p.CooldownSeconds, p.QuietHoursStart, p.QuietHoursEnd, string(channelsJSON), p.UpdatedAt, p.ID)
+		if err != nil {
+			return fmt.Errorf("failed to update policy: %w", err)
+		}
+		rows, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return fmt.Errorf("policy not found")
+		}
+		r.logger.Info("Updated policy in DuckDB", slog.Int64("id", p.ID), slog.String("name", p.Name))
+	}
+
+	// Audit change
+	auditDetails := fmt.Sprintf("Policy Name: %s, Scope: %s, Target: %s, Suppressed: %t, Cooldown: %d", p.Name, p.Scope, p.Target, p.Suppressed, p.CooldownSeconds)
+	_ = r.saveAuditLogLocked(ctx, "save_policy", auditDetails)
+
+	return nil
+}
+
+// DeletePolicy removes a policy by ID in DuckDB.
+func (r *DuckDBRepository) DeletePolicy(ctx context.Context, id int64) error {
+	p, err := r.GetPolicy(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	_, err = r.db.ExecContext(ctx, "DELETE FROM policies WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("failed to delete policy: %w", err)
+	}
+
+	r.logger.Info("Deleted policy from DuckDB", slog.Int64("id", id))
+
+	// Audit change
+	auditDetails := fmt.Sprintf("Policy Name: %s, Scope: %s, Target: %s", p.Name, p.Scope, p.Target)
+	_ = r.saveAuditLogLocked(ctx, "delete_policy", auditDetails)
+
+	return nil
+}
+
+// GetPolicy retrieves a policy by ID in DuckDB.
+func (r *DuckDBRepository) GetPolicy(ctx context.Context, id int64) (*Policy, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	row := r.db.QueryRowContext(ctx, "SELECT id, name, scope, target, severity_threshold, suppressed, cooldown_seconds, quiet_hours_start, quiet_hours_end, notification_channels, created_at, updated_at FROM policies WHERE id = ?", id)
+
+	var p Policy
+	var suppressedInt int
+	var channelsStr string
+	err := row.Scan(&p.ID, &p.Name, &p.Scope, &p.Target, &p.SeverityThreshold, &suppressedInt, &p.CooldownSeconds, &p.QuietHoursStart, &p.QuietHoursEnd, &channelsStr, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("policy not found")
+		}
+		return nil, fmt.Errorf("failed to scan policy: %w", err)
+	}
+	p.Suppressed = suppressedInt > 0
+	_ = json.Unmarshal([]byte(channelsStr), &p.NotificationChannels)
+	if p.NotificationChannels == nil {
+		p.NotificationChannels = []string{}
+	}
+
+	return &p, nil
+}
+
+// ListPolicies lists all active policies in DuckDB.
+func (r *DuckDBRepository) ListPolicies(ctx context.Context) ([]Policy, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.listPoliciesLocked(ctx)
+}
+
+func (r *DuckDBRepository) listPoliciesLocked(ctx context.Context) ([]Policy, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT id, name, scope, target, severity_threshold, suppressed, cooldown_seconds, quiet_hours_start, quiet_hours_end, notification_channels, created_at, updated_at FROM policies ORDER BY scope, name")
+	if err != nil {
+		return nil, fmt.Errorf("failed query policies: %w", err)
+	}
+	defer rows.Close()
+
+	var policies []Policy
+	for rows.Next() {
+		var p Policy
+		var suppressedInt int
+		var channelsStr string
+		err := rows.Scan(&p.ID, &p.Name, &p.Scope, &p.Target, &p.SeverityThreshold, &suppressedInt, &p.CooldownSeconds, &p.QuietHoursStart, &p.QuietHoursEnd, &channelsStr, &p.CreatedAt, &p.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed scan policy row: %w", err)
+		}
+		p.Suppressed = suppressedInt > 0
+		_ = json.Unmarshal([]byte(channelsStr), &p.NotificationChannels)
+		if p.NotificationChannels == nil {
+			p.NotificationChannels = []string{}
+		}
+		policies = append(policies, p)
+	}
+
+	return policies, nil
+}
+
+// HasRecentAnomaly checks if an anomaly of matching IP and Type was created within the last cooldown period.
+func (r *DuckDBRepository) HasRecentAnomaly(ctx context.Context, ip string, anomalyType string, since time.Time) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.hasRecentAnomalyLocked(ctx, ip, anomalyType, since)
+}
+
+func (r *DuckDBRepository) hasRecentAnomalyLocked(ctx context.Context, ip string, anomalyType string, since time.Time) (bool, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM anomalies WHERE ip = ? AND type = ? AND created_at >= ?", ip, anomalyType, since).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// evaluateAnomalyPoliciesLocked checks all policies and updates the anomaly status to "silenced" if matching rules suppress it.
+func (r *DuckDBRepository) evaluateAnomalyPoliciesLocked(ctx context.Context, a *Anomaly) error {
+	policies, err := r.listPoliciesLocked(ctx)
+	if err != nil {
+		return err
+	}
+
+	// 1. Find matching policies
+	var matchedPolicies []Policy
+	for _, p := range policies {
+		matches := false
+		switch p.Scope {
+		case "global":
+			matches = true
+		case "ip":
+			matches = p.Target == a.IP
+		case "subnet":
+			_, ipNet, err := net.ParseCIDR(p.Target)
+			if err == nil {
+				ipObj := net.ParseIP(a.IP)
+				if ipObj != nil && ipNet.Contains(ipObj) {
+					matches = true
+				}
+			}
+		case "alert_type":
+			matches = p.Target == a.Type
+		}
+
+		if matches {
+			matchedPolicies = append(matchedPolicies, p)
+		}
+	}
+
+	if len(matchedPolicies) == 0 {
+		return nil
+	}
+
+	// 2. Precedence sort
+	scopePriority := func(scope string) int {
+		switch scope {
+		case "ip":
+			return 4
+		case "subnet":
+			return 3
+		case "alert_type":
+			return 2
+		case "global":
+			return 1
+		default:
+			return 0
+		}
+	}
+
+	var bestPolicy Policy
+	bestPriority := -1
+	for _, p := range matchedPolicies {
+		prio := scopePriority(p.Scope)
+		if prio > bestPriority {
+			bestPriority = prio
+			bestPolicy = p
+		} else if prio == bestPriority {
+			if p.ID > bestPolicy.ID {
+				bestPolicy = p
+			}
+		}
+	}
+
+	// 3. Evaluate bestPolicy
+	suppress := false
+	if bestPolicy.Suppressed {
+		suppress = true
+		r.logger.Info("Anomaly suppressed by policy silence rule in DuckDB", slog.Int64("policy_id", bestPolicy.ID), slog.String("policy_name", bestPolicy.Name))
+	}
+
+	if !suppress && bestPolicy.SeverityThreshold != "" {
+		sevPriority := func(sev string) int {
+			switch strings.ToLower(sev) {
+			case "high":
+				return 3
+			case "medium":
+				return 2
+			case "low":
+				return 1
+			default:
+				return 0
+			}
+		}
+		if sevPriority(a.Severity) < sevPriority(bestPolicy.SeverityThreshold) {
+			suppress = true
+			r.logger.Info("Anomaly suppressed in DuckDB: severity below policy threshold", slog.Int64("policy_id", bestPolicy.ID), slog.String("severity", a.Severity), slog.String("threshold", bestPolicy.SeverityThreshold))
+		}
+	}
+
+	if !suppress && bestPolicy.QuietHoursStart != "" && bestPolicy.QuietHoursEnd != "" {
+		if isTimeInQuietHours(a.CreatedAt, bestPolicy.QuietHoursStart, bestPolicy.QuietHoursEnd) {
+			suppress = true
+			r.logger.Info("Anomaly suppressed in DuckDB: triggered during quiet hours", slog.Int64("policy_id", bestPolicy.ID), slog.String("start", bestPolicy.QuietHoursStart), slog.String("end", bestPolicy.QuietHoursEnd))
+		}
+	}
+
+	if !suppress && bestPolicy.CooldownSeconds > 0 {
+		since := a.CreatedAt.Add(-time.Duration(bestPolicy.CooldownSeconds) * time.Second)
+		hasRecent, err := r.hasRecentAnomalyLocked(ctx, a.IP, a.Type, since)
+		if err == nil && hasRecent {
+			suppress = true
+			r.logger.Info("Anomaly suppressed in DuckDB: matching anomaly occurred within cooldown period", slog.Int64("policy_id", bestPolicy.ID), slog.Int("cooldown_seconds", bestPolicy.CooldownSeconds))
+		}
+	}
+
+	if suppress {
+		a.Status = "silenced"
+	}
+
+	return nil
+}
+
+// GetPoliciesForIP returns all matching policies (global, subnet, IP) for a specific IP.
+func (r *DuckDBRepository) GetPoliciesForIP(ctx context.Context, ip string) ([]Policy, error) {
+	policies, err := r.ListPolicies(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var matched []Policy
+	for _, p := range policies {
+		matches := false
+		switch p.Scope {
+		case "global":
+			matches = true
+		case "ip":
+			matches = p.Target == ip
+		case "subnet":
+			_, ipNet, err := net.ParseCIDR(p.Target)
+			if err == nil {
+				ipObj := net.ParseIP(ip)
+				if ipObj != nil && ipNet.Contains(ipObj) {
+					matches = true
+				}
+			}
+		}
+		if matches {
+			matched = append(matched, p)
+		}
+	}
+	return matched, nil
 }

@@ -70,6 +70,11 @@ func (w *WebhookEngine) UpdateConfig(url string, format string, headers map[stri
 
 // SendAnomalyAlert formats and dispatches a JSON payload asynchronously to all active alert channels.
 func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.Anomaly) {
+	if anomaly.Status == "silenced" {
+		w.logger.Debug("Anomaly is silenced by policy, skipping webhook alert dispatch", slog.Int64("id", anomaly.ID))
+		return
+	}
+
 	w.mu.RLock()
 	url := w.url
 	format := w.format

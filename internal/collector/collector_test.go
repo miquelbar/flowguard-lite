@@ -203,7 +203,7 @@ func TestFlowCollector_QueueOverflow(t *testing.T) {
 
 	// Simulate listen receipt
 	c.rawPacketsChan <- &rawPacket{} // fill queue
-	
+
 	// Staging overflow
 	c.statsMu.Lock()
 	c.receivedCount++

@@ -14,6 +14,7 @@ import (
 )
 
 type MockDeviceRepository struct {
+	storage.DeviceRepository
 	Anomalies []storage.Anomaly
 	mu        sync.Mutex
 }
@@ -89,7 +90,7 @@ func (m *MockDeviceRepository) GetAnomaliesForIP(ctx context.Context, ip string,
 func TestDDoSDetector_DetectionAndDeduplication(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	repo := &MockDeviceRepository{}
-	
+
 	cfg := config.DefaultConfig()
 	cfg.LocalSubnets = []string{"192.168.1.0/24"}
 	cfg.DDoSThresholdPPS = 100

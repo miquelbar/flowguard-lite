@@ -2026,7 +2026,8 @@ body.sidebar-collapsed #btn-toggle-sidebar svg {
 
     /* Mobile details pane as a full-screen overlay modal */
     #panel-anomaly-details,
-    #panel-device-details {
+    #panel-device-details,
+    #panel-policy-details {
         position: fixed;
         top: 0;
         left: 0;
@@ -2042,7 +2043,8 @@ body.sidebar-collapsed #btn-toggle-sidebar svg {
     }
 
     #panel-anomaly-details:has(#anomaly-details-content:not(.hidden)),
-    #panel-device-details:has(#device-details-content:not(.hidden)) {
+    #panel-device-details:has(#device-details-content:not(.hidden)),
+    #panel-policy-details:has(#policy-details-content:not(.hidden)) {
         display: flex !important;
     }
 }

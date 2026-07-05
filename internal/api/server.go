@@ -128,6 +128,12 @@ func NewAPIServer(
 	mux.HandleFunc("POST /api/settings", s.handlePostSettings)
 	mux.HandleFunc("POST /api/settings/test-alert", s.handleTestAlert)
 	mux.HandleFunc("GET /api/auth/status", s.handleAuthStatus)
+
+	// Policy configuration endpoints (Go 1.22+ wildcard patterns)
+	mux.HandleFunc("GET /api/policies", s.handleListPolicies)
+	mux.HandleFunc("POST /api/policies", s.handleSavePolicy)
+	mux.HandleFunc("PUT /api/policies/{id}", s.handleSavePolicy)
+	mux.HandleFunc("DELETE /api/policies/{id}", s.handleDeletePolicy)
 	mux.HandleFunc("POST /api/auth/setup", s.handleAuthSetup)
 	mux.HandleFunc("POST /api/auth/login", s.handleAuthLogin)
 	mux.HandleFunc("POST /api/auth/logout", s.handleAuthLogout)

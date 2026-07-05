@@ -14,6 +14,7 @@ import (
 )
 
 type MockDeviceRepository struct {
+	storage.DeviceRepository
 	Device    *storage.Device
 	Baseline  *storage.DeviceBaseline
 	SavedBas  *storage.DeviceBaseline

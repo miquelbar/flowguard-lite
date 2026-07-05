@@ -27,12 +27,12 @@ type ExporterMetadata struct {
 
 // Collector stats reporting structure.
 type Stats struct {
-	PacketsReceived  uint64 `json:"packets_received"`
-	PacketsDropped   uint64 `json:"packets_dropped"`
-	DecodeErrors     uint64 `json:"decode_errors"`
-	QueueDepth       int    `json:"queue_depth"`
-	PacketsNetflow   uint64 `json:"packets_netflow,omitempty"`
-	PacketsSflow     uint64 `json:"packets_sflow,omitempty"`
+	PacketsReceived uint64 `json:"packets_received"`
+	PacketsDropped  uint64 `json:"packets_dropped"`
+	DecodeErrors    uint64 `json:"decode_errors"`
+	QueueDepth      int    `json:"queue_depth"`
+	PacketsNetflow  uint64 `json:"packets_netflow,omitempty"`
+	PacketsSflow    uint64 `json:"packets_sflow,omitempty"`
 }
 
 // FlowCollector manages the UDP listeners and decoding workers.
@@ -174,12 +174,12 @@ func (c *FlowCollector) GetStats() Stats {
 	c.statsMu.Lock()
 	defer c.statsMu.Unlock()
 	return Stats{
-		PacketsReceived:  c.receivedCount,
-		PacketsDropped:   c.droppedCount,
-		DecodeErrors:     c.decodeErrCount,
-		QueueDepth:       len(c.rawPacketsChan),
-		PacketsNetflow:   c.receivedNetflowCount,
-		PacketsSflow:     c.receivedSflowCount,
+		PacketsReceived: c.receivedCount,
+		PacketsDropped:  c.droppedCount,
+		DecodeErrors:    c.decodeErrCount,
+		QueueDepth:      len(c.rawPacketsChan),
+		PacketsNetflow:  c.receivedNetflowCount,
+		PacketsSflow:    c.receivedSflowCount,
 	}
 }
 

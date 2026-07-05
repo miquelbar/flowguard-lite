@@ -20,8 +20,8 @@ type dnsCacheEntry struct {
 
 // DeviceProfiler inspects traffic flow events, identifies local devices, and resolves hostnames.
 type DeviceProfiler struct {
-	repo         storage.DeviceRepository
-	logger       *slog.Logger
+	repo          storage.DeviceRepository
+	logger        *slog.Logger
 	nextProcessor flow.FlowProcessor
 
 	// Subnet filters

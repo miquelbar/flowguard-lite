@@ -10,6 +10,7 @@ import (
 )
 
 type MockDeviceRepository struct {
+	storage.DeviceRepository
 	Devices   []storage.Device
 	Anomalies []storage.Anomaly
 	mu        sync.Mutex

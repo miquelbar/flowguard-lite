@@ -2,10 +2,71 @@ package storage
 
 import (
 	"context"
+	"fmt"
+	"net"
+	"regexp"
 	"time"
 
 	"github.com/flowguard/flowguard/internal/flow"
 )
+
+// Validate checks policy properties against safety rules to prevent unbounded queries or destructive loops.
+func (p *Policy) Validate() error {
+	if p.Name == "" {
+		return fmt.Errorf("policy name cannot be empty")
+	}
+	if len(p.Name) > 100 {
+		return fmt.Errorf("policy name exceeds maximum length of 100 characters")
+	}
+	switch p.Scope {
+	case "global":
+		if p.Target != "" {
+			return fmt.Errorf("global policy target must be empty")
+		}
+	case "ip":
+		if net.ParseIP(p.Target) == nil {
+			return fmt.Errorf("invalid target IP address: %s", p.Target)
+		}
+	case "subnet":
+		_, _, err := net.ParseCIDR(p.Target)
+		if err != nil {
+			return fmt.Errorf("invalid target CIDR subnet: %s, error: %w", p.Target, err)
+		}
+	case "alert_type":
+		if p.Target == "" {
+			return fmt.Errorf("alert_type policy target cannot be empty")
+		}
+		if len(p.Target) > 100 {
+			return fmt.Errorf("target alert type exceeds maximum length of 100 characters")
+		}
+	default:
+		return fmt.Errorf("invalid policy scope: %s", p.Scope)
+	}
+
+	switch p.SeverityThreshold {
+	case "", "low", "medium", "high":
+		// OK
+	default:
+		return fmt.Errorf("invalid severity threshold: %s", p.SeverityThreshold)
+	}
+
+	if p.CooldownSeconds < 0 || p.CooldownSeconds > 2592000 {
+		return fmt.Errorf("cooldown period must be between 0 and 30 days (2,592,000 seconds)")
+	}
+
+	timeRegex := regexp.MustCompile(`^(?:[01]\d|2[0-3]):[0-5]\d$`)
+	if p.QuietHoursStart != "" && !timeRegex.MatchString(p.QuietHoursStart) {
+		return fmt.Errorf("invalid quiet hours start format, must be HH:MM")
+	}
+	if p.QuietHoursEnd != "" && !timeRegex.MatchString(p.QuietHoursEnd) {
+		return fmt.Errorf("invalid quiet hours end format, must be HH:MM")
+	}
+	if (p.QuietHoursStart != "" && p.QuietHoursEnd == "") || (p.QuietHoursStart == "" && p.QuietHoursEnd != "") {
+		return fmt.Errorf("both quiet hours start and end must be set, or both empty")
+	}
+
+	return nil
+}
 
 // Device represents a discovered local network node.
 type Device struct {
@@ -39,6 +100,22 @@ type Anomaly struct {
 	Status      string    `json:"status"` // "active", "acknowledged", "silenced"
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// Policy represents a user-defined rule specifying how FlowGuard handles alerts/devices in scopes.
+type Policy struct {
+	ID                   int64     `json:"id"`
+	Name                 string    `json:"name"`
+	Scope                string    `json:"scope"`              // "global", "subnet", "ip", "alert_type"
+	Target               string    `json:"target"`             // IP, subnet CIDR, or alert type
+	SeverityThreshold    string    `json:"severity_threshold"` // "low", "medium", "high", or ""
+	Suppressed           bool      `json:"suppressed"`
+	CooldownSeconds      int       `json:"cooldown_seconds"`
+	QuietHoursStart      string    `json:"quiet_hours_start"`     // "HH:MM"
+	QuietHoursEnd        string    `json:"quiet_hours_end"`       // "HH:MM"
+	NotificationChannels []string  `json:"notification_channels"` // serialized as JSON array text in DB
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 // AuditLog represents a security review or configuration action logged for auditing.
@@ -119,6 +196,24 @@ type DeviceRepository interface {
 
 	// GetAnomaliesForIP queries recent anomalies associated with a specific IP.
 	GetAnomaliesForIP(ctx context.Context, ip string, limit int) ([]Anomaly, error)
+
+	// SavePolicy persists or updates a custom policy.
+	SavePolicy(ctx context.Context, p *Policy) error
+
+	// DeletePolicy removes a policy by ID.
+	DeletePolicy(ctx context.Context, id int64) error
+
+	// GetPolicy retrieves a policy by ID.
+	GetPolicy(ctx context.Context, id int64) (*Policy, error)
+
+	// ListPolicies lists all active policies.
+	ListPolicies(ctx context.Context) ([]Policy, error)
+
+	// HasRecentAnomaly checks if an anomaly of matching IP and Type was created within the last cooldown period.
+	HasRecentAnomaly(ctx context.Context, ip string, anomalyType string, since time.Time) (bool, error)
+
+	// GetPoliciesForIP returns all matching policies (global, subnet, IP) for a specific IP.
+	GetPoliciesForIP(ctx context.Context, ip string) ([]Policy, error)
 }
 
 // Manager defines the interface for managing database shards and schema maintenance.
@@ -136,4 +231,11 @@ type StorageRepository interface {
 	DeviceRepository
 	Manager
 	RegisterAnomalyCallback(cb func(a *Anomaly))
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

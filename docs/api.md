@@ -247,3 +247,68 @@ Updates the configuration keys and saves them to `config.yaml` on disk.
 
 *   **Request Body JSON Schema:** (Same as GET response)
 *   **Response Status:** `200 OK` (Returns the updated config)
+
+---
+
+## 5. Policy Configuration
+
+### GET `/api/policies`
+Lists all active policies.
+
+*   **Response Status:** `200 OK`
+*   **Example Response:**
+```json
+[
+  {
+    "id": 1,
+    "name": "Silence Port Scans",
+    "scope": "alert_type",
+    "target": "port_scan",
+    "severity_threshold": "medium",
+    "suppressed": true,
+    "cooldown_seconds": 60,
+    "quiet_hours_start": "22:00",
+    "quiet_hours_end": "06:00",
+    "notification_channels": ["slack", "telegram"],
+    "created_at": "2026-07-05T14:40:00Z",
+    "updated_at": "2026-07-05T14:40:00Z"
+  }
+]
+```
+
+### POST `/api/policies`
+Creates a new policy.
+
+*   **Request Body JSON:**
+```json
+{
+  "name": "Silence Port Scans",
+  "scope": "alert_type",
+  "target": "port_scan",
+  "severity_threshold": "medium",
+  "suppressed": true,
+  "cooldown_seconds": 60,
+  "quiet_hours_start": "22:00",
+  "quiet_hours_end": "06:00",
+  "notification_channels": ["slack", "telegram"]
+}
+```
+*   **Response Status:** `200 OK` (Returns the created policy object with populated `id`, `created_at` and `updated_at`)
+
+### PUT `/api/policies/{id}`
+Updates an existing policy.
+
+*   **Request Body JSON:** (Same as POST payload, optionally including fields to edit)
+*   **Response Status:** `200 OK` (Returns the updated policy object)
+*   **Failure Response:** `400 Bad Request` if payload is invalid (e.g. invalid quiet hours format, missing name, or invalid target format).
+
+### DELETE `/api/policies/{id}`
+Deletes a policy by its ID.
+
+*   **Response Status:** `200 OK`
+*   **Example Response:**
+```json
+{
+  "status": "deleted"
+}
+```

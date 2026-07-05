@@ -13,6 +13,7 @@ import (
 )
 
 type MockDeviceRepository struct {
+	storage.DeviceRepository
 	mu      sync.Mutex
 	Devices map[string]*storage.Device
 }

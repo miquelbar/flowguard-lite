@@ -22,7 +22,7 @@ type BaselineEngine struct {
 	minPacketsThreshold uint64
 	minPeersThreshold   int
 
-	mu             sync.RWMutex
+	mu              sync.RWMutex
 	cachedBaselines map[string]*storage.DeviceBaseline
 }
 
