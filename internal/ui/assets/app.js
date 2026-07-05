@@ -103,6 +103,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const inputDetailLabel = document.getElementById("input-detail-label");
     const baselineStatsContent = document.getElementById("baseline-stats-content");
     const detailRiskBadgeContainer = document.getElementById("detail-risk-badge-container");
+    const detailSubnet = document.getElementById("detail-subnet");
+    const detailFirstSeen = document.getElementById("detail-first-seen");
+    const detailLastSeen = document.getElementById("detail-last-seen");
+    const deviceChartContainer = document.getElementById("device-chart-container");
+    const tblDevicePeers = document.getElementById("tbl-device-peers").querySelector("tbody");
+    const tblDevicePorts = document.getElementById("tbl-device-ports").querySelector("tbody");
+    const deviceAlertsList = document.getElementById("device-alerts-list");
+    const btnDeviceFwRules = document.getElementById("btn-device-fw-rules");
 
     // Anomaly Detail elements
     const anomalyDetailsEmpty = document.getElementById("anomaly-details-empty");
@@ -596,7 +604,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 <tr style="cursor: pointer;" class="threat-device-row" data-ip="${dev.ip}">
                     <td>
                         <div class="risk-device-cell">
-                            <span class="risk-device-ip">${dev.ip}</span>
+                            <span class="risk-device-ip"><a href="#/devices/${dev.ip}" class="ip-link">${dev.ip}</a></span>
                             ${dev.label ? `<span class="badge badge-label risk-device-label">${dev.label}</span>` : ''}
                         </div>
                     </td>
@@ -608,10 +616,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Clicking a threat device row navigates to devices page and selects it
         tblThreatRisk.querySelectorAll(".threat-device-row").forEach(row => {
-            row.addEventListener("click", () => {
+            row.addEventListener("click", (e) => {
+                if (e.target.tagName === "A") return;
                 const ip = row.getAttribute("data-ip");
-                selectedDeviceIP = ip;
-                switchView("devices");
+                window.location.hash = `#/devices/${ip}`;
             });
         });
     }
@@ -630,9 +638,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
         tblTopTalkers.innerHTML = filtered.map(item => {
             const percentage = (item.bytes / maxBytes) * 100;
+            const isIP = activeTab === "sources" || activeTab === "destinations";
+            const keyHtml = isIP ? `<a href="#/devices/${item.key}" class="ip-link">${item.key}</a>` : item.key;
             return `
                 <tr>
-                    <td class="font-semibold">${item.key}</td>
+                    <td class="font-semibold">${keyHtml}</td>
                     <td class="text-right">${formatNumber(item.flows)}</td>
                     <td class="text-right">${formatNumber(item.packets)}</td>
                     <td class="text-right">${formatBytes(item.bytes)}</td>
@@ -664,7 +674,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const isSelected = selectedDeviceIP === dev.ip;
             return `
                 <tr data-ip="${dev.ip}" class="${isSelected ? 'selected' : ''}">
-                    <td class="font-semibold">${dev.ip}</td>
+                    <td class="font-semibold"><a href="#/devices/${dev.ip}" class="ip-link">${dev.ip}</a></td>
                     <td class="text-muted">${dev.hostname || "<i>Unresolved</i>"}</td>
                     <td>${dev.label ? `<span class="badge badge-label">${dev.label}</span>` : '<span class="text-muted">-</span>'}</td>
                     <td class="text-center">
@@ -677,96 +687,262 @@ document.addEventListener("DOMContentLoaded", () => {
         // Attach select click listeners to row and action button
         tblDevices.querySelectorAll("tr").forEach(row => {
             row.addEventListener("click", (e) => {
-                if (e.target.tagName === "BUTTON") return;
+                if (e.target.tagName === "BUTTON" || e.target.tagName === "A") return;
                 const ip = row.getAttribute("data-ip");
-                selectDevice(ip);
+                window.location.hash = `#/devices/${ip}`;
             });
         });
 
         tblDevices.querySelectorAll(".btn-select-device").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 const ip = e.target.getAttribute("data-ip");
-                selectDevice(ip);
+                window.location.hash = `#/devices/${ip}`;
             });
         });
     }
 
-    // Select device and load baseline details
+    // Draw a simplified traffic timeline chart for the device using SVG
+    function drawDeviceTrafficChart(timeSeries) {
+        if (!deviceChartContainer) return;
+        const width = 360;
+        const height = 120;
+        const pad = { top: 10, right: 12, bottom: 22, left: 52 };
+        const plotW = width - pad.left - pad.right;
+        const plotH = height - pad.top - pad.bottom;
+        deviceChartContainer.innerHTML = "";
+
+        const points = (timeSeries || []).map(item => ({
+            ts: new Date(item.bucket_ts).getTime(),
+            value: Number(item.bytes || 0),
+            raw: item
+        })).filter(item => Number.isFinite(item.ts));
+
+        if (points.length === 0) {
+            deviceChartContainer.innerHTML = `<span class="text-muted" style="font-size: 0.813rem;">No traffic data recorded</span>`;
+            return;
+        }
+
+        const minTs = Math.min(...points.map(p => p.ts));
+        const maxTs = Math.max(...points.map(p => p.ts));
+        const maxValue = Math.max(...points.map(p => p.value), 1);
+        const tsSpan = Math.max(maxTs - minTs, 1);
+        const xFor = ts => pad.left + ((ts - minTs) / tsSpan) * plotW;
+        const yFor = value => pad.top + plotH - (value / maxValue) * plotH;
+
+        // Draw simplified horizontal grid lines (3 lines: min, mid, max)
+        const gridLines = [0, 0.5, 1].map(frac => {
+            const y = pad.top + plotH - (frac * plotH);
+            const label = formatBytes(maxValue * frac);
+            return `<line x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" class="chart-grid" style="stroke: var(--border-color); stroke-dasharray: 2 2;"></line>
+                    <text x="${pad.left - 6}" y="${y + 3}" text-anchor="end" class="chart-axis" style="font-size: 0.65rem;">${label}</text>`;
+        }).join("");
+
+        const pathData = points.map((p, idx) => `${idx === 0 ? "M" : "L"} ${xFor(p.ts).toFixed(2)} ${yFor(p.value).toFixed(2)}`).join(" ");
+        const areaData = `${pathData} L ${xFor(points[points.length - 1].ts).toFixed(2)} ${pad.top + plotH} L ${xFor(points[0].ts).toFixed(2)} ${pad.top + plotH} Z`;
+        
+        const firstLabel = formatShortTime(new Date(minTs));
+        const lastLabel = formatShortTime(new Date(maxTs));
+
+        const svgContent = `
+            <svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" style="overflow: visible;">
+                <defs>
+                    <linearGradient id="deviceAreaFill" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0%" stop-color="var(--primary-color)" stop-opacity="0.15"></stop>
+                        <stop offset="100%" stop-color="var(--primary-color)" stop-opacity="0.01"></stop>
+                    </linearGradient>
+                </defs>
+                ${gridLines}
+                <path d="${areaData}" fill="url(#deviceAreaFill)"></path>
+                <path d="${pathData}" class="chart-line" style="stroke: var(--primary-color); stroke-width: 1.5; fill: none;"></path>
+                ${points.map(p => `<circle cx="${xFor(p.ts).toFixed(2)}" cy="${yFor(p.value).toFixed(2)}" r="2" class="chart-point" style="stroke: var(--primary-color);"><title>${new Date(p.raw.bucket_ts).toLocaleTimeString()} - Bytes: ${formatBytes(p.value)}</title></circle>`).join("")}
+                <text x="${pad.left}" y="${height - 4}" class="chart-axis" style="font-size: 0.65rem;">${firstLabel}</text>
+                <text x="${width - pad.right}" y="${height - 4}" text-anchor="end" class="chart-axis" style="font-size: 0.65rem;">${lastLabel}</text>
+            </svg>
+        `;
+        deviceChartContainer.innerHTML = svgContent;
+    }
+
+    // Select device and load profile details
     async function selectDevice(ip) {
         selectedDeviceIP = ip;
         renderDevices(); // Highlight row
         
-        const dev = devicesData.find(d => d.ip === ip);
-        if (!dev) return;
-
         detailsEmpty.classList.add("hidden");
         detailsContent.classList.remove("hidden");
         
-        detailIp.textContent = dev.ip;
-        detailHost.textContent = dev.hostname ? `Reverse DNS: ${dev.hostname}` : "Reverse DNS: Unresolved";
-        inputDetailLabel.value = dev.label || "";
-
-        // Display current active risk badge
-        const riskDev = riskDevicesData.find(r => r.ip === ip);
-        if (riskDev) {
-            const badgeClass = riskDev.risk_level === "high" ? "risk-badge-high" : (riskDev.risk_level === "medium" ? "risk-badge-medium" : "risk-badge-low");
-            detailRiskBadgeContainer.innerHTML = `<span class="risk-badge ${badgeClass}" title="Active alerts: ${riskDev.active_alert_count}">Risk Index: ${riskDev.risk_score}</span>`;
-        } else {
-            detailRiskBadgeContainer.innerHTML = `<span class="risk-badge risk-badge-low">Risk Index: 0</span>`;
-        }
-
-        // Fetch behavioral baseline
+        detailIp.textContent = ip;
+        detailHost.textContent = "Loading device profile...";
+        detailSubnet.textContent = "-";
+        detailFirstSeen.textContent = "-";
+        detailLastSeen.textContent = "-";
+        detailRiskBadgeContainer.innerHTML = "";
+        deviceChartContainer.innerHTML = `<span class="text-muted" style="font-size: 0.813rem;">Loading timeline...</span>`;
+        tblDevicePeers.innerHTML = `<tr><td colspan="2" class="text-muted text-center" style="font-size: 0.75rem;">Loading peers...</td></tr>`;
+        tblDevicePorts.innerHTML = `<tr><td colspan="2" class="text-muted text-center" style="font-size: 0.75rem;">Loading ports...</td></tr>`;
+        deviceAlertsList.innerHTML = `<div class="text-muted text-center" style="font-size: 0.813rem; padding: 0.5rem;">Loading alerts...</div>`;
         baselineStatsContent.innerHTML = `<p class="text-muted text-center">Loading baseline profile...</p>`;
-        
+
+        btnDeviceFwRules.onclick = () => {
+            openFirewallModal(ip);
+        };
+
+        // 1. Fetch Profile details
         try {
-            const resp = await fetch(`/api/devices/${ip}/baseline`);
-            if (resp.status === 404) {
+            const resp = await fetch(`/api/devices/${ip}`);
+            if (!resp.ok) throw new Error("Failed fetching device profile");
+            const profile = await resp.json();
+
+            detailHost.textContent = profile.hostname ? `Reverse DNS: ${profile.hostname}` : "Reverse DNS: Unresolved";
+            inputDetailLabel.value = profile.label || "";
+            detailSubnet.textContent = profile.subnet_vlan || "Unknown";
+            detailFirstSeen.textContent = profile.first_seen ? formatTime(profile.first_seen) : "-";
+            detailLastSeen.textContent = profile.last_seen ? formatTime(profile.last_seen) : "-";
+
+            const riskInfo = profile.risk || { risk_score: 0, risk_level: "low", active_alert_count: 0 };
+            const badgeClass = riskInfo.risk_level === "high" ? "risk-badge-high" : (riskInfo.risk_level === "medium" ? "risk-badge-medium" : "risk-badge-low");
+            detailRiskBadgeContainer.innerHTML = `<span class="risk-badge ${badgeClass}" title="Active alerts: ${riskInfo.active_alert_count}">Risk Index: ${riskInfo.risk_score}</span>`;
+
+            // Populate baseline stats
+            if (profile.baseline) {
+                const baseline = profile.baseline;
+                const byteLimit = baseline.mean_bytes + (3 * baseline.stddev_bytes);
+                const packetLimit = baseline.mean_packets + (3 * baseline.stddev_packets);
+                const peerLimit = baseline.mean_peers + (3 * baseline.stddev_peers);
+
+                baselineStatsContent.innerHTML = `
+                    <div class="baseline-stat-row">
+                        <span class="metric-name">Average Bytes/Min</span>
+                        <span class="metric-value">${formatBytes(baseline.mean_bytes)}</span>
+                    </div>
+                    <div class="baseline-stat-row">
+                        <span class="metric-name">Traffic Limit (Mean + 3σ)</span>
+                        <span class="metric-value text-warning" style="font-weight:700;">${formatBytes(byteLimit)}</span>
+                    </div>
+                    <div class="baseline-stat-row">
+                        <span class="metric-name">Average Packets/Min</span>
+                        <span class="metric-value">${formatNumber(Math.round(baseline.mean_packets))} pkts</span>
+                    </div>
+                    <div class="baseline-stat-row">
+                        <span class="metric-name">Packet Limit (Mean + 3σ)</span>
+                        <span class="metric-value text-warning" style="font-weight:700;">${formatNumber(Math.round(packetLimit))} pkts</span>
+                    </div>
+                    <div class="baseline-stat-row">
+                        <span class="metric-name">Average Peers/Min</span>
+                        <span class="metric-value">${baseline.mean_peers.toFixed(1)}</span>
+                    </div>
+                    <div class="baseline-stat-row">
+                        <span class="metric-name">Peer Limit (Mean + 3σ)</span>
+                        <span class="metric-value text-warning" style="font-weight:700;">${Math.round(peerLimit)} peers</span>
+                    </div>
+                    <p class="text-muted text-right" style="font-size:0.75rem; margin-top:0.5rem;">
+                        Baseline updated: ${formatTime(baseline.updated_at)}
+                    </p>
+                `;
+            } else {
                 baselineStatsContent.innerHTML = `
                     <div class="text-center text-muted pad-large" style="border: 1px dashed rgba(255,255,255,0.08); border-radius: 8px;">
                         No baseline computed yet.<br>
                         <span style="font-size: 0.75rem;">Profile will generate once at least 5 minutes of active traffic flows are aggregated.</span>
                     </div>
                 `;
-                return;
             }
-            if (!resp.ok) throw new Error("Failed fetching device baseline");
-            const baseline = await resp.json();
 
-            const byteLimit = baseline.mean_bytes + (3 * baseline.stddev_bytes);
-            const packetLimit = baseline.mean_packets + (3 * baseline.stddev_packets);
-            const peerLimit = baseline.mean_peers + (3 * baseline.stddev_peers);
+            // Populate device alerts history
+            if (profile.anomalies && profile.anomalies.length > 0) {
+                deviceAlertsList.innerHTML = profile.anomalies.map(anom => {
+                    const statusClass = `status-${anom.status}`;
+                    const badgeClass = anom.severity === "high" ? "badge-high" : (anom.severity === "medium" ? "badge-medium" : "badge-low");
+                    return `
+                        <div class="device-alert-item sev-${anom.severity}">
+                            <div style="flex-grow: 1; margin-right: 0.5rem;">
+                                <div style="display: flex; gap: 0.4rem; align-items: center; margin-bottom: 0.15rem;">
+                                    <span class="badge ${badgeClass}" style="font-size: 0.65rem; padding: 0.1rem 0.25rem;">${anom.type}</span>
+                                    <span class="${statusClass}" style="font-size: 0.65rem; padding: 0.1rem 0.25rem;">${anom.status}</span>
+                                </div>
+                                <div style="font-weight: 500; font-size: 0.75rem; color: var(--text-primary); margin-bottom: 0.15rem;">${anom.description}</div>
+                                <div class="text-muted" style="font-size: 0.65rem;">${new Date(anom.created_at).toLocaleString()}</div>
+                            </div>
+                            <div class="device-alert-actions" style="display: flex; gap: 0.25rem; flex-shrink: 0;">
+                                ${anom.status === 'active' ?
+                                    `<button class="btn-secondary btn-device-alert-triage" data-id="${anom.id}" data-action="acknowledged" style="font-size: 0.65rem; padding: 0.2rem 0.4rem;">Ack</button>
+                                     <button class="btn-secondary btn-device-alert-triage" data-id="${anom.id}" data-action="silenced" style="font-size: 0.65rem; padding: 0.2rem 0.4rem;">Silence</button>` :
+                                    `<button class="btn-secondary btn-device-alert-triage" data-id="${anom.id}" data-action="active" style="font-size: 0.65rem; padding: 0.2rem 0.4rem;">Reactivate</button>`
+                                }
+                            </div>
+                        </div>
+                    `;
+                }).join('');
 
-            baselineStatsContent.innerHTML = `
-                <div class="baseline-stat-row">
-                    <span class="metric-name">Average Bytes/Min</span>
-                    <span class="metric-value">${formatBytes(baseline.mean_bytes)}</span>
-                </div>
-                <div class="baseline-stat-row">
-                    <span class="metric-name">Traffic Limit (Mean + 3σ)</span>
-                    <span class="metric-value text-warning" style="font-weight:700;">${formatBytes(byteLimit)}</span>
-                </div>
-                <div class="baseline-stat-row">
-                    <span class="metric-name">Average Packets/Min</span>
-                    <span class="metric-value">${formatNumber(Math.round(baseline.mean_packets))} pkts</span>
-                </div>
-                <div class="baseline-stat-row">
-                    <span class="metric-name">Packet Limit (Mean + 3σ)</span>
-                    <span class="metric-value text-warning" style="font-weight:700;">${formatNumber(Math.round(packetLimit))} pkts</span>
-                </div>
-                <div class="baseline-stat-row">
-                    <span class="metric-name">Average Peers/Min</span>
-                    <span class="metric-value">${baseline.mean_peers.toFixed(1)}</span>
-                </div>
-                <div class="baseline-stat-row">
-                    <span class="metric-name">Peer Limit (Mean + 3σ)</span>
-                    <span class="metric-value text-warning" style="font-weight:700;">${Math.round(peerLimit)} peers</span>
-                </div>
-                <p class="text-muted text-right" style="font-size:0.75rem; margin-top:0.5rem;">
-                    Baseline updated: ${formatTime(baseline.updated_at)}
-                </p>
-            `;
+                // Bind click handlers to triage buttons inside alerts list
+                deviceAlertsList.querySelectorAll(".btn-device-alert-triage").forEach(btn => {
+                    btn.addEventListener("click", async (e) => {
+                        const id = btn.getAttribute("data-id");
+                        const action = btn.getAttribute("data-action");
+                        await updateAnomalyStatus(id, action);
+                        selectDevice(ip);
+                    });
+                });
+            } else {
+                deviceAlertsList.innerHTML = `
+                    <div class="text-muted text-center" style="font-size: 0.813rem; padding: 0.5rem; border: 1px dashed var(--border-color); border-radius: 6px;">
+                        No alerts history
+                    </div>
+                `;
+            }
+
         } catch (err) {
-            baselineStatsContent.innerHTML = `<p class="text-danger text-center">Failed to load baseline: ${err.message}</p>`;
+            console.error("Error loading device profile context: ", err);
+            detailHost.textContent = "Error loading profile details";
+        }
+
+        // 2. Fetch flows time series, peers and destination ports
+        try {
+            const range = trafficRangeConfig();
+            const params = new URLSearchParams({
+                start: range.start.toISOString(),
+                end: range.end.toISOString(),
+                bucket: range.bucket.toString(),
+                limit: "10"
+            });
+
+            const resp = await fetch(`/api/devices/${ip}/flows?${params.toString()}`);
+            if (!resp.ok) throw new Error("Failed fetching flows details");
+            const flowsData = await resp.json();
+
+            // Populate Top Peers
+            if (flowsData.top_peers && flowsData.top_peers.length > 0) {
+                tblDevicePeers.innerHTML = flowsData.top_peers.map(peer => {
+                    return `
+                        <tr>
+                            <td class="font-semibold"><a href="#/devices/${peer.key}" class="ip-link">${peer.key}</a></td>
+                            <td>${formatBytes(peer.value)}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } else {
+                tblDevicePeers.innerHTML = `<tr><td colspan="2" class="text-muted text-center" style="font-size: 0.75rem;">No active peers in this range</td></tr>`;
+            }
+
+            // Populate Top Destination Ports
+            if (flowsData.top_ports && flowsData.top_ports.length > 0) {
+                tblDevicePorts.innerHTML = flowsData.top_ports.map(port => {
+                    return `
+                        <tr>
+                            <td class="font-semibold">Port ${port.key}</td>
+                            <td>${formatBytes(port.value)}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } else {
+                tblDevicePorts.innerHTML = `<tr><td colspan="2" class="text-muted text-center" style="font-size: 0.75rem;">No active ports in this range</td></tr>`;
+            }
+
+            // Draw SVG chart
+            drawDeviceTrafficChart(flowsData.time_series);
+
+        } catch (err) {
+            console.error("Error loading device traffic timeline/flows: ", err);
+            deviceChartContainer.innerHTML = `<span class="text-danger" style="font-size: 0.813rem;">Failed to load traffic history</span>`;
         }
     }
 
@@ -790,10 +966,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             showToast(`Label updated for ${selectedDeviceIP}.`);
             await fetchDevices();
-            const dev = devicesData.find(d => d.ip === selectedDeviceIP);
-            if (dev) {
-                inputDetailLabel.value = dev.label || "";
-            }
+            selectDevice(selectedDeviceIP);
         } catch (err) {
             showToast(err.message, "error");
         }
@@ -884,7 +1057,7 @@ document.addEventListener("DOMContentLoaded", () => {
             
             return `
                 <tr class="anomaly-row ${isSelected ? 'selected' : ''}" data-id="${anom.id}" style="cursor: pointer;">
-                    <td class="font-semibold">${anom.ip}</td>
+                    <td class="font-semibold"><a href="#/devices/${anom.ip}" class="ip-link">${anom.ip}</a></td>
                     <td><span class="badge ${badgeClass}">${anom.type}</span></td>
                     <td style="text-transform: capitalize;"><span class="sev-dot sev-${anom.severity}"></span>${anom.severity}</td>
                     <td>${formatTime(anom.created_at)}</td>
@@ -1112,9 +1285,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Switch between SPA views
-    function switchView(viewName) {
+    function parseHashRoute() {
+        const hash = window.location.hash || "#/traffic";
+        if (hash.startsWith("#/devices/")) {
+            const ip = hash.substring("#/devices/".length);
+            return { viewName: "devices", ip: ip };
+        }
+        const viewName = routeViews[hash] || "dashboard";
+        return { viewName, ip: null };
+    }
+
+    function switchView(viewName, ip = null) {
         activeView = viewName;
-        const targetHash = viewRoutes[viewName];
+        if (ip) {
+            selectedDeviceIP = ip;
+        }
+        const targetHash = ip ? `#/devices/${ip}` : viewRoutes[viewName];
         if (targetHash && window.location.hash !== targetHash) {
             window.location.hash = targetHash;
         }
@@ -1173,9 +1359,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Handle URL Hash changes
     window.addEventListener("hashchange", () => {
-        const hash = window.location.hash || "#/traffic";
-        const viewName = routeViews[hash] || "dashboard";
-        switchView(viewName);
+        const route = parseHashRoute();
+        switchView(route.viewName, route.ip);
     });
 
     // Handle Manual Refresh
@@ -1524,9 +1709,8 @@ document.addEventListener("DOMContentLoaded", () => {
     async function initAuthenticatedApp() {
         await fetchSettings();
         if (settingsData && settingsData.first_run_completed) {
-            const hash = window.location.hash || "#/traffic";
-            const viewName = routeViews[hash] || "dashboard";
-            switchView(viewName);
+            const route = parseHashRoute();
+            switchView(route.viewName, route.ip);
             autoRefreshTimer = setInterval(loadData, 5000);
         }
     }

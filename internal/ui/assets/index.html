@@ -382,12 +382,70 @@
                                 </div>
                             </form>
 
+                            <!-- Device Context -->
+                            <div class="detail-section">
+                                <h4>Device Context</h4>
+                                <div class="anomaly-meta-grid" style="display: grid; grid-template-columns: 1fr; gap: 0.65rem; border: 1px solid var(--border-color); padding: 0.75rem; border-radius: 8px; font-size: 0.813rem;">
+                                    <div><span class="text-muted">Subnet/VLAN:</span> <span id="detail-subnet" class="font-semibold">-</span></div>
+                                    <div><span class="text-muted">First Seen:</span> <span id="detail-first-seen">-</span></div>
+                                    <div><span class="text-muted">Last Seen:</span> <span id="detail-last-seen">-</span></div>
+                                </div>
+                            </div>
+
+                            <!-- Traffic History Timeline -->
+                            <div class="detail-section">
+                                <h4>Traffic History (Timeline)</h4>
+                                <div id="device-chart-container" style="min-height: 120px; background: rgba(0,0,0,0.1); border-radius: 6px; border: 1px solid var(--border-color); padding: 0.5rem; display: flex; align-items: center; justify-content: center;">
+                                    <span class="text-muted" style="font-size: 0.813rem;">Loading timeline...</span>
+                                </div>
+                            </div>
+
+                            <!-- Top Peers and Ports Grid -->
+                            <div class="detail-section" style="display: grid; grid-template-columns: 1fr; gap: 0.75rem;">
+                                <div>
+                                    <h4 style="margin-bottom: 0.4rem;">Top Peers</h4>
+                                    <div class="table-container" style="max-height: 150px; overflow-y: auto;">
+                                        <table class="compact-table" id="tbl-device-peers">
+                                            <thead>
+                                                <tr><th>Peer IP</th><th>Volume</th></tr>
+                                            </thead>
+                                            <tbody><tr><td colspan="2" class="text-muted text-center" style="font-size: 0.75rem;">No active peers</td></tr></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h4 style="margin-bottom: 0.4rem;">Top Destination Ports</h4>
+                                    <div class="table-container" style="max-height: 150px; overflow-y: auto;">
+                                        <table class="compact-table" id="tbl-device-ports">
+                                            <thead>
+                                                <tr><th>Port</th><th>Volume</th></tr>
+                                            </thead>
+                                            <tbody><tr><td colspan="2" class="text-muted text-center" style="font-size: 0.75rem;">No active ports</td></tr></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Baseline Card -->
                             <div class="detail-section">
                                 <h4>Behavioral Baseline Limits (1-Min Window)</h4>
                                 <div class="baseline-stats" id="baseline-stats-content">
                                     <!-- Stats inserted dynamically -->
                                 </div>
+                            </div>
+
+                            <!-- Device Specific Alerts -->
+                            <div class="detail-section">
+                                <h4>Alerts History</h4>
+                                <div id="device-alerts-list" class="device-alerts-list" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;">
+                                    <div class="text-muted text-center" style="font-size: 0.813rem; padding: 0.5rem; border: 1px dashed var(--border-color); border-radius: 6px;">No alerts history</div>
+                                </div>
+                            </div>
+
+                            <!-- Firewall Templates -->
+                            <div class="detail-section">
+                                <h4>Firewall Control Template</h4>
+                                <button class="btn-primary btn-block-rules" id="btn-device-fw-rules" style="width: 100%; display: flex; justify-content: center; align-items: center;">Generate Firewall Rule</button>
                             </div>
                         </div>
                     </div>
