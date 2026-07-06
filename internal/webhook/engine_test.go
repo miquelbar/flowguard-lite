@@ -38,19 +38,16 @@ func TestWebhookEngine_Dispatch(t *testing.T) {
 			},
 		},
 		{
+			// "telegram" format is deprecated — it now falls back to generic JSON.
+			// Telegram alerts are dispatched via the native Bot API path (token+chatID), not via webhook format.
 			format: "telegram",
 			validateFunc: func(t *testing.T, body []byte) {
-				var payload map[string]interface{}
-				if err := json.Unmarshal(body, &payload); err != nil {
-					t.Fatalf("failed to unmarshal Telegram payload: %v", err)
+				var anomaly storage.Anomaly
+				if err := json.Unmarshal(body, &anomaly); err != nil {
+					t.Fatalf("expected deprecated telegram format to fall back to generic anomaly JSON, unmarshal failed: %v", err)
 				}
-				text, ok := payload["text"].(string)
-				if !ok || text == "" {
-					t.Errorf("expected 'text' field in Telegram payload, got: %v", payload)
-				}
-				mode, ok := payload["parse_mode"].(string)
-				if !ok || mode != "Markdown" {
-					t.Errorf("expected 'parse_mode' equal to 'Markdown', got: %v", payload)
+				if anomaly.IP != "192.168.1.10" || anomaly.Type != "TRAFFIC_SPIKE" {
+					t.Errorf("unexpected generic fallback anomaly fields: %+v", anomaly)
 				}
 			},
 		},

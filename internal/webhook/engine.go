@@ -141,15 +141,11 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 	if len(activeRules) == 0 {
 		if url != "" {
 			var payload interface{}
-			switch format {
-			case "slack":
+			// "telegram" format is deprecated in favour of the native Bot path below.
+			// If a user saved format="telegram" previously, treat it as generic.
+			if format == "slack" {
 				payload = map[string]interface{}{"text": messageText}
-			case "telegram":
-				payload = map[string]interface{}{
-					"text":       messageText,
-					"parse_mode": "Markdown",
-				}
-			default:
+			} else {
 				payload = anomaly
 			}
 			bodyBytes, err := json.Marshal(payload)
@@ -255,21 +251,12 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 					continue
 				}
 				var payload interface{}
-				if ch == "slack" {
+				// ch=="slack" always uses Slack payload format regardless of global format setting.
+				// ch=="webhook" uses the global format (only "slack" or generic; "telegram" is deprecated).
+				if ch == "slack" || format == "slack" {
 					payload = map[string]interface{}{"text": messageText}
 				} else {
-					// Use global format for generic webhook routing
-					switch format {
-					case "slack":
-						payload = map[string]interface{}{"text": messageText}
-					case "telegram":
-						payload = map[string]interface{}{
-							"text":       messageText,
-							"parse_mode": "Markdown",
-						}
-					default:
-						payload = anomaly
-					}
+					payload = anomaly
 				}
 				bodyBytes, err := json.Marshal(payload)
 				if err != nil {

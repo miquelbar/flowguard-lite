@@ -1168,44 +1168,62 @@
                     <!-- 7. Notifications & Routing -->
                     <section id="settings-notifications" class="settings-card hidden">
                         <div class="settings-card-header">
-                            <h3>Notifications & Routing</h3>
-                            <p>Outbound webhook credentials and Telegram configuration</p>
+                            <h3>Notifications &amp; Routing</h3>
+                            <p>Configure outbound alert channels. FlowGuard supports Slack/Discord webhooks and Telegram Bot alerts.</p>
                         </div>
                         <form id="form-settings-webhook">
-                            <div class="form-group" style="margin-bottom: 1rem;">
-                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Webhook URL</label>
-                                <input type="url" id="setting-webhook-url" class="form-control" style="width: 100%;" placeholder="https://hooks.slack.com/...">
-                            </div>
-                            <div class="form-group" style="margin-bottom: 1rem;">
-                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Webhook Format</label>
-                                <select id="setting-webhook-format" class="form-control" style="width: 100%;">
-                                    <option value="generic">Generic JSON Payload</option>
-                                    <option value="slack">Slack / Discord Compatible</option>
-                                    <option value="telegram">Telegram Bot Compatible</option>
-                                </select>
-                            </div>
 
-                            <div style="border-top: 1px solid var(--border-color); margin: 1.5rem 0; padding-top: 1rem;">
-                                <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);">Custom Webhook Headers (Authentication)</h4>
-                                <p class="text-muted" style="font-size: 0.75rem; margin-bottom: 0.75rem; line-height: 1.25;">Add custom headers for webhook auth (e.g., Key: <code>Authorization</code>, Value: <code>Bearer token123</code>)</p>
-                                <div id="webhook-headers-list" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem;">
-                                    <!-- Dynamically inserted header rows -->
-                                </div>
-                                <button type="button" id="btn-add-webhook-header" class="btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; width: auto; align-self: flex-start; height: auto;">Add Header</button>
-                            </div>
-
-                            <div style="border-top: 1px solid var(--border-color); margin: 1.5rem 0; padding-top: 1rem;">
-                                <div class="form-group" style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                                    <input type="checkbox" id="setting-telegram-enabled" style="width: auto; cursor: pointer;">
-                                    <label for="setting-telegram-enabled" style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0; cursor: pointer; user-select: none;">Enable Direct Telegram Bot Alerts</label>
+                            <!-- Block A: Slack / Discord / Generic Webhook -->
+                            <div style="margin-bottom: 1.5rem;">
+                                <h4 style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">Webhook (Slack, Discord, Generic)</h4>
+                                <p class="text-muted" style="font-size: 0.75rem; margin-bottom: 0.85rem; line-height: 1.4;">
+                                    For Slack, create an <strong>Incoming Webhook</strong> in your workspace and paste the URL below.
+                                    For Discord, enable the Webhook integration in a channel and use the <code>/slack</code> suffix on the URL.
+                                    For generic HTTP endpoints, select <em>Generic JSON</em>.
+                                </p>
+                                <div class="form-group" style="margin-bottom: 1rem;">
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Webhook URL</label>
+                                    <input type="url" id="setting-webhook-url" class="form-control" style="width: 100%;" placeholder="https://example.com/slack-webhook">
                                 </div>
                                 <div class="form-group" style="margin-bottom: 1rem;">
-                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Telegram Bot Token</label>
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Payload Format</label>
+                                    <select id="setting-webhook-format" class="form-control" style="width: 100%;">
+                                        <option value="generic">Generic JSON (full anomaly object)</option>
+                                        <option value="slack">Slack / Discord ({"text": "..."})</option>
+                                    </select>
+                                    <p class="text-muted" style="font-size: 0.72rem; margin-top: 0.3rem;">
+                                        Use <em>Slack / Discord</em> for any webhook that expects a <code>{"text": "message"}</code> payload.
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <h4 style="margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 600; color: var(--text-primary);">Custom Headers <span style="font-weight: normal; color: var(--text-secondary);">(optional, for authentication)</span></h4>
+                                    <p class="text-muted" style="font-size: 0.75rem; margin-bottom: 0.75rem; line-height: 1.25;">e.g., Key: <code>Authorization</code>, Value: <code>Bearer token123</code></p>
+                                    <div id="webhook-headers-list" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                        <!-- Dynamically inserted header rows -->
+                                    </div>
+                                    <button type="button" id="btn-add-webhook-header" class="btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; width: auto; align-self: flex-start; height: auto;">Add Header</button>
+                                </div>
+                            </div>
+
+                            <!-- Block B: Telegram Native Bot -->
+                            <div style="border-top: 1px solid var(--border-color); padding-top: 1.25rem;">
+                                <h4 style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">Telegram Bot</h4>
+                                <p class="text-muted" style="font-size: 0.75rem; margin-bottom: 0.85rem; line-height: 1.4;">
+                                    FlowGuard sends alerts directly to a Telegram chat via the Bot API.
+                                    Create a bot with <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style="color: var(--primary-color);">@BotFather</a>, copy the token, then find your Chat ID with <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" style="color: var(--primary-color);">@userinfobot</a>.
+                                </p>
+                                <div class="form-group" style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                    <input type="checkbox" id="setting-telegram-enabled" style="width: auto; cursor: pointer;">
+                                    <label for="setting-telegram-enabled" style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0; cursor: pointer; user-select: none;">Enable Telegram Bot Alerts</label>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 1rem;">
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Bot Token</label>
                                     <input type="password" id="setting-telegram-token" class="form-control" style="width: 100%;" placeholder="e.g. 123456789:ABCdef...">
                                 </div>
                                 <div class="form-group" style="margin-bottom: 1.5rem;">
-                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Telegram Chat ID</label>
-                                    <input type="text" id="setting-telegram-chat-id" class="form-control" style="width: 100%;" placeholder="e.g. -100123456789">
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Chat ID</label>
+                                    <input type="text" id="setting-telegram-chat-id" class="form-control" style="width: 100%;" placeholder="e.g. -100123456789 (group) or 12345678 (user)">
                                 </div>
                             </div>
 

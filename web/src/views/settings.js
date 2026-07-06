@@ -24,36 +24,62 @@ export function renderSettingsView() {
         if (el) el.value = val;
     };
 
+    // Helper: only populate a section if the user hasn't made unsaved changes to it.
+    // This prevents the 5-second auto-refresh from clobbering in-progress edits.
+    const noUnsaved = (section) => !state.unsavedChanges[section];
+
+    // Access (password fields always cleared for security)
     setVal("setting-access-password", "");
     setVal("setting-access-confirm", "");
-    setVal("setting-port", state.settingsData.port || "8080");
-    setVal("setting-subnets", (state.settingsData.local_subnets || []).join(", "));
-    setVal("setting-netflow", state.settingsData.netflow_port);
-    setVal("setting-sflow", state.settingsData.sflow_port);
-    setVal("setting-suricata-path", state.settingsData.suricata_eve_path || "");
-    setVal("setting-storage-dir", state.settingsData.storage_dir || "/data");
-    setVal("setting-backend", state.settingsData.storage_backend);
-    setVal("setting-retention", state.settingsData.retention_days || 7);
-    setVal("setting-threshold-pps", state.settingsData.ddos_threshold_pps || 5000);
-    setVal("setting-threshold-bps", state.settingsData.ddos_threshold_bps || 10000000);
-    setVal("setting-threshold-syn", state.settingsData.syn_flood_threshold_pps || 1000);
-    setVal("setting-threshold-udp", state.settingsData.udp_flood_threshold_pps || 3000);
-    setVal("setting-threshold-icmp", state.settingsData.icmp_flood_threshold_pps || 500);
-    setVal("setting-webhook-url", state.settingsData.webhook_url || "");
-    setVal("setting-webhook-format", state.settingsData.webhook_format || "json");
-    setVal("setting-telegram-token", state.settingsData.telegram_token || "");
-    setVal("setting-telegram-chat-id", state.settingsData.telegram_chat_id || "");
-    setVal("setting-loglevel", state.settingsData.log_level || "info");
-    setVal("setting-env", state.settingsData.environment || "production");
 
-    const tgEnabled = document.getElementById("setting-telegram-enabled");
-    if (tgEnabled) tgEnabled.checked = state.settingsData.telegram_enabled;
+    if (noUnsaved("network")) {
+        setVal("setting-port", state.settingsData.port || "8080");
+        setVal("setting-subnets", (state.settingsData.local_subnets || []).join(", "));
+    }
 
-    renderWebhookHeaders(state.settingsData.webhook_headers || {});
+    if (noUnsaved("collectors")) {
+        setVal("setting-netflow", state.settingsData.netflow_port);
+        setVal("setting-sflow", state.settingsData.sflow_port);
+        setVal("setting-suricata-path", state.settingsData.suricata_eve_path || "");
+    }
 
-    // Clear any unsaved changes badges
-    Object.keys(state.unsavedChanges).forEach(k => markUnsaved(k, false));
+    if (noUnsaved("storage")) {
+        setVal("setting-storage-dir", state.settingsData.storage_dir || "/data");
+        setVal("setting-backend", state.settingsData.storage_backend);
+        setVal("setting-retention", state.settingsData.retention_days || 7);
+    }
+
+    if (noUnsaved("thresholds")) {
+        setVal("setting-threshold-pps", state.settingsData.ddos_threshold_pps || 5000);
+        setVal("setting-threshold-bps", state.settingsData.ddos_threshold_bps || 10000000);
+        setVal("setting-threshold-syn", state.settingsData.syn_flood_threshold_pps || 1000);
+        setVal("setting-threshold-udp", state.settingsData.udp_flood_threshold_pps || 3000);
+        setVal("setting-threshold-icmp", state.settingsData.icmp_flood_threshold_pps || 500);
+    }
+
+    if (noUnsaved("notifications")) {
+        setVal("setting-webhook-url", state.settingsData.webhook_url || "");
+        setVal("setting-webhook-format", state.settingsData.webhook_format || "generic");
+        setVal("setting-telegram-token", state.settingsData.telegram_token || "");
+        setVal("setting-telegram-chat-id", state.settingsData.telegram_chat_id || "");
+        const tgEnabled = document.getElementById("setting-telegram-enabled");
+        if (tgEnabled) tgEnabled.checked = !!state.settingsData.telegram_enabled;
+        if (noUnsaved("notifications")) {
+            renderWebhookHeaders(state.settingsData.webhook_headers || {});
+        }
+    }
+
+    if (noUnsaved("system")) {
+        setVal("setting-loglevel", state.settingsData.log_level || "info");
+        setVal("setting-env", state.settingsData.environment || "production");
+    }
+
+    // Clear unsaved badges only for sections not currently being edited
+    Object.keys(state.unsavedChanges).forEach(k => {
+        if (!state.unsavedChanges[k]) markUnsaved(k, false);
+    });
 }
+
 
 function getSettingsSectionLabel(sec) {
     const labels = {
