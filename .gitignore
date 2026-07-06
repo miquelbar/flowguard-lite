@@ -30,3 +30,9 @@
 # Local dev workspace files
 /dev-data/
 /config-dev.yaml
+
+# Compiled Vite assets
+/internal/ui/assets/dist/app.js
+/internal/ui/assets/dist/styles.css
+/internal/ui/assets/dist/index.html
+/internal/ui/assets/dist/assets/
