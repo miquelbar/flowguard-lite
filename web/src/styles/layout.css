@@ -234,10 +234,13 @@
     padding: 0.35rem;
     flex-grow: 1;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .traffic-chart-panel {
     min-height: 0;
+    flex: 1;
 }
 
 .chart-controls {
@@ -254,21 +257,47 @@
     grid-template-columns: minmax(0, 1fr) 360px;
     gap: 1rem;
     align-items: stretch;
+    flex: 1;
+    overflow: hidden;
+}
+
+.traffic-chart-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    gap: 0.75rem;
+    overflow: hidden;
 }
 
 .traffic-chart-frame {
     position: relative;
-    min-height: 290px;
+    flex: 1;
+    min-height: 180px;
     border: 1px solid var(--border-color);
     border-radius: 8px;
     background: #f8fafc;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.chart-frame-label {
+    font-size: 0.688rem;
+    font-weight: 600;
+    padding: 0.35rem 0.6rem;
+    background: var(--border-highlight);
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    flex-shrink: 0;
 }
 
 .traffic-chart {
     width: 100%;
-    height: 100%;
-    min-height: 290px;
+    flex: 1;
+    min-height: 150px;
     color: var(--primary-color);
     display: block;
 }
@@ -324,19 +353,17 @@
 }
 
 .chart-tooltip {
-    position: absolute;
+    position: fixed;
     background: var(--panel-bg);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     padding: 0.5rem 0.75rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
     font-size: 0.75rem;
     font-family: var(--font-stack);
     color: var(--text-primary);
     pointer-events: none;
-    z-index: 100;
-    opacity: 0;
-    transition: opacity 0.15s ease, transform 0.1s ease;
+    z-index: 9999;
     display: none;
 }
 
