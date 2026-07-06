@@ -17,6 +17,30 @@ type EvidenceRef struct {
 	Message   string    `json:"message"`
 }
 
+// AlertContributor represents an active alert contributing to the threat risk.
+type AlertContributor struct {
+	ID           int64     `json:"id"`
+	Type         string    `json:"type"`
+	Severity     string    `json:"severity"`
+	CreatedAt    time.Time `json:"created_at"`
+	AgeHours     float64   `json:"age_hours"`
+	BaseWeight   float64   `json:"base_weight"`
+	DecayFactor  float64   `json:"decay_factor"`
+	Contribution float64   `json:"contribution"`
+	Description  string    `json:"description"`
+}
+
+// RiskBreakdown aggregates all components contributing to a device's risk score.
+type RiskBreakdown struct {
+	BaseScore        float64            `json:"base_score"`
+	CorrelationBoost float64            `json:"correlation_boost"`
+	ActiveAlertCount int                `json:"active_alert_count"`
+	AlertBreakdown   []AlertContributor `json:"alert_breakdown"`
+	LowThreshold     int                `json:"low_threshold"`
+	MediumThreshold  int                `json:"medium_threshold"`
+	HighThreshold    int                `json:"high_threshold"`
+}
+
 // DeviceRisk represents a computed security threat score, classification level, and supporting evidence.
 type DeviceRisk struct {
 	IP               string        `json:"ip"`
@@ -27,6 +51,7 @@ type DeviceRisk struct {
 	ActiveAlertCount int           `json:"active_alert_count"`
 	Explanations     []string      `json:"explanations"`
 	Evidence         []EvidenceRef `json:"evidence"`
+	Breakdown        RiskBreakdown `json:"breakdown"`
 }
 
 // RiskEngine handles threat scoring, temporal alert decay, and multi-source event correlation.
@@ -68,6 +93,7 @@ func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, er
 			continue
 		}
 
+		var alertBreakdown []AlertContributor
 		var rawScore float64
 		var explanations []string
 		var evidence []EvidenceRef
@@ -105,6 +131,19 @@ func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, er
 				Message:   a.Description,
 			})
 
+			// Add contributor details
+			alertBreakdown = append(alertBreakdown, AlertContributor{
+				ID:           a.ID,
+				Type:         a.Type,
+				Severity:     a.Severity,
+				CreatedAt:    a.CreatedAt,
+				AgeHours:     age,
+				BaseWeight:   weight,
+				DecayFactor:  decay,
+				Contribution: decayedWeight,
+				Description:  a.Description,
+			})
+
 			// Classify for correlation checks
 			if a.Type == "SURICATA_ALERT" {
 				hasSuricata = true
@@ -118,6 +157,7 @@ func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, er
 
 		// Perform correlation checks: if there is both a Suricata alert and a flow anomaly within 1 hour
 		correlated := false
+		var correlationBoost float64
 		if hasSuricata && hasFlowAnomaly {
 			for _, sTime := range suricataTimes {
 				for _, fTime := range flowAnomalyTimes {
@@ -138,7 +178,8 @@ func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, er
 
 		// Apply correlation booster
 		if correlated {
-			rawScore += 20.0
+			correlationBoost = 20.0
+			rawScore += correlationBoost
 			explanations = append(explanations, "Correlated signature-based IDS alert with flow-based anomaly within 1 hour (+20 correlation boost)")
 		}
 
@@ -163,6 +204,16 @@ func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, er
 			level = "medium"
 		}
 
+		breakdown := RiskBreakdown{
+			BaseScore:        rawScore - correlationBoost,
+			CorrelationBoost: correlationBoost,
+			ActiveAlertCount: len(anoms),
+			AlertBreakdown:   alertBreakdown,
+			LowThreshold:     0,
+			MediumThreshold:  30,
+			HighThreshold:    70,
+		}
+
 		results = append(results, DeviceRisk{
 			IP:               d.IP,
 			Label:            d.Label,
@@ -172,6 +223,7 @@ func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, er
 			ActiveAlertCount: len(anoms),
 			Explanations:     explanations,
 			Evidence:         evidence,
+			Breakdown:        breakdown,
 		})
 	}
 

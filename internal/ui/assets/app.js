@@ -116,6 +116,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const inputDetailLabel = document.getElementById("input-detail-label");
     const baselineStatsContent = document.getElementById("baseline-stats-content");
     const detailRiskBadgeContainer = document.getElementById("detail-risk-badge-container");
+    const detailRiskExplanationSection = document.getElementById("detail-risk-explanation-section");
+    const detailRiskExplanationContent = document.getElementById("detail-risk-explanation-content");
     const detailSubnet = document.getElementById("detail-subnet");
     const detailFirstSeen = document.getElementById("detail-first-seen");
     const detailLastSeen = document.getElementById("detail-last-seen");
@@ -675,12 +677,41 @@ document.addEventListener("DOMContentLoaded", () => {
 
         tblThreatRisk.innerHTML = riskDevicesData.map(dev => {
             const badgeClass = dev.risk_level === "high" ? "risk-badge-high" : (dev.risk_level === "medium" ? "risk-badge-medium" : "risk-badge-low");
+            
+            // Build dynamic summary text
+            let summaryText = "";
+            if (dev.breakdown) {
+                const parts = [];
+                const highCount = (dev.breakdown.alert_breakdown || []).filter(c => c.severity === "high").length;
+                const medCount = (dev.breakdown.alert_breakdown || []).filter(c => c.severity === "medium").length;
+                const lowCount = (dev.breakdown.alert_breakdown || []).filter(c => c.severity === "low").length;
+                
+                if (highCount > 0) parts.push(`${highCount} high`);
+                if (medCount > 0) parts.push(`${medCount} med`);
+                if (lowCount > 0) parts.push(`${lowCount} low`);
+                
+                let contributors = parts.join(", ");
+                if (contributors) {
+                    summaryText = `${contributors}`;
+                }
+                if (dev.breakdown.correlation_boost > 0) {
+                    if (summaryText) {
+                        summaryText += ` + boost (+${dev.breakdown.correlation_boost} pts)`;
+                    } else {
+                        summaryText = `Correlation boost (+${dev.breakdown.correlation_boost} pts)`;
+                    }
+                }
+            }
+
             return `
                 <tr style="cursor: pointer;" class="threat-device-row" data-ip="${dev.ip}">
                     <td>
-                        <div class="risk-device-cell">
-                            <span class="risk-device-ip"><a href="#/devices/${dev.ip}" class="ip-link">${dev.ip}</a></span>
-                            ${dev.label ? `<span class="badge badge-label risk-device-label">${dev.label}</span>` : ''}
+                        <div class="risk-device-cell" style="display: flex; flex-direction: column; gap: 0.15rem;">
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <span class="risk-device-ip"><a href="#/devices/${dev.ip}" class="ip-link">${dev.ip}</a></span>
+                                ${dev.label ? `<span class="badge badge-label risk-device-label">${dev.label}</span>` : ''}
+                            </div>
+                            ${summaryText ? `<span class="text-muted" style="font-size: 0.72rem; line-height: 1.2;">Contributors: ${summaryText}</span>` : ''}
                         </div>
                     </td>
                     <td><span class="risk-badge ${badgeClass} risk-score-badge">${dev.risk_score}</span></td>
@@ -1633,6 +1664,8 @@ document.addEventListener("DOMContentLoaded", () => {
         detailFirstSeen.textContent = "-";
         detailLastSeen.textContent = "-";
         detailRiskBadgeContainer.innerHTML = "";
+        if (detailRiskExplanationSection) detailRiskExplanationSection.classList.add("hidden");
+        if (detailRiskExplanationContent) detailRiskExplanationContent.innerHTML = "";
         deviceChartContainer.innerHTML = `<span class="text-muted" style="font-size: 0.813rem;">Loading timeline...</span>`;
         tblDevicePeers.innerHTML = `<tr><td colspan="2" class="text-muted text-center" style="font-size: 0.75rem;">Loading peers...</td></tr>`;
         tblDevicePorts.innerHTML = `<tr><td colspan="2" class="text-muted text-center" style="font-size: 0.75rem;">Loading ports...</td></tr>`;
@@ -1658,6 +1691,75 @@ document.addEventListener("DOMContentLoaded", () => {
             const riskInfo = profile.risk || { risk_score: 0, risk_level: "low", active_alert_count: 0 };
             const badgeClass = riskInfo.risk_level === "high" ? "risk-badge-high" : (riskInfo.risk_level === "medium" ? "risk-badge-medium" : "risk-badge-low");
             detailRiskBadgeContainer.innerHTML = `<span class="risk-badge ${badgeClass}" title="Active alerts: ${riskInfo.active_alert_count}">Risk Index: ${riskInfo.risk_score}</span>`;
+
+            // Render Risk Index Explanation
+            if (riskInfo.breakdown && (riskInfo.breakdown.alert_breakdown || []).length > 0) {
+                if (detailRiskExplanationSection && detailRiskExplanationContent) {
+                    const bd = riskInfo.breakdown;
+                    
+                    let html = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
+                            <span><strong>Calculated Score:</strong> <span class="risk-badge ${badgeClass}" style="padding: 0.15rem 0.4rem; font-size: 0.75rem; border-radius: 4px; vertical-align: middle;">${riskInfo.risk_score}</span></span>
+                            <span class="text-muted" style="text-transform: capitalize;"><strong>Level:</strong> ${riskInfo.risk_level}</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    `;
+
+                    // Add alert contributors
+                    (bd.alert_breakdown || []).forEach(c => {
+                        const ageMinStr = Math.round(c.age_hours * 60);
+                        let ageText = "";
+                        if (ageMinStr < 60) {
+                            ageText = `${ageMinStr} minutes ago`;
+                        } else {
+                            const ageHoursRounded = (c.age_hours).toFixed(1);
+                            ageText = `${ageHoursRounded} hours ago`;
+                        }
+
+                        const percentDecay = Math.round(c.decay_factor * 100);
+
+                        html += `
+                            <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); padding: 0.5rem; border-radius: 6px;">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.25rem;">
+                                    <span class="font-semibold" style="font-size: 0.8rem;">${escapeHtml(c.type)}</span>
+                                    <span class="badge ${c.severity === "high" ? 'badge-high' : (c.severity === "medium" ? 'badge-medium' : 'badge-low')}" style="font-size: 0.65rem; padding: 0.1rem 0.3rem;">${c.severity}</span>
+                                </div>
+                                <p style="margin: 0 0 0.4rem 0; font-size: 0.78rem; line-height: 1.35; color: var(--text-primary);">${escapeHtml(c.description)}</p>
+                                <div class="text-muted" style="display: flex; justify-content: space-between; align-items: center; font-size: 0.7rem; border-top: 1px dashed var(--border-color); padding-top: 0.25rem;">
+                                    <span>Triggered: <strong>${ageText}</strong></span>
+                                    <span>Formula: <code>${c.base_weight} (base) &times; ${percentDecay}% (decay) = +${c.contribution.toFixed(1)} pts</code></span>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    // Add correlation boost
+                    if (bd.correlation_boost > 0) {
+                        html += `
+                            <div style="background: rgba(251,146,60,0.05); border: 1px solid rgba(251,146,60,0.2); padding: 0.5rem; border-radius: 6px; color: #fb923c;">
+                                <div class="font-semibold" style="font-size: 0.8rem; margin-bottom: 0.15rem;">Correlation Boost Applied</div>
+                                <p style="margin: 0; font-size: 0.75rem; line-height: 1.3;">Correlated signature-based IDS alert (Suricata) with flow-based anomaly within 1 hour (+${bd.correlation_boost} boost)</p>
+                            </div>
+                        `;
+                    }
+
+                    // Add classification threshold explanations
+                    html += `
+                        </div>
+                        <div style="border-top: 1px solid var(--border-color); padding-top: 0.5rem; margin-top: 0.25rem; display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-secondary);">
+                            <span>Thresholds:</span>
+                            <span>Low: &lt; 30</span>
+                            <span>Medium: 30 - 69</span>
+                            <span>High: &ge; 70</span>
+                        </div>
+                    `;
+
+                    detailRiskExplanationContent.innerHTML = html;
+                    detailRiskExplanationSection.classList.remove("hidden");
+                }
+            } else {
+                if (detailRiskExplanationSection) detailRiskExplanationSection.classList.add("hidden");
+            }
 
             // Populate baseline stats
             if (profile.baseline) {
