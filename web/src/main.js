@@ -219,6 +219,17 @@ function updateThemeButtons(darkMode) {
 
 async function initAuthenticatedApp() {
     state.settingsData = await api.fetchSettings().catch(() => null);
+    const viewWizard = document.getElementById("view-wizard");
+    if (state.settingsData && !state.settingsData.first_run_completed) {
+        if (viewWizard) viewWizard.classList.remove("hidden");
+        if (window.autoRefreshTimer) {
+            clearInterval(window.autoRefreshTimer);
+            window.autoRefreshTimer = null;
+        }
+        return;
+    }
+    if (viewWizard) viewWizard.classList.add("hidden");
+
     if (state.settingsData && state.settingsData.first_run_completed) {
         // Setup router
         const routes = {
@@ -374,8 +385,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const viewWizard = document.getElementById("view-wizard");
                 if (viewWizard) viewWizard.classList.add("hidden");
                 
-                state.settingsData = await api.fetchSettings().catch(() => null);
-                window.autoRefreshTimer = setInterval(loadData, 5000);
+                await initAuthenticatedApp();
                 window.location.hash = "#/traffic";
             } catch (err) {
                 window.showToast("Setup failed: " + err.message, "error");
