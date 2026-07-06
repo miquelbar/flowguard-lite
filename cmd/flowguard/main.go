@@ -99,6 +99,11 @@ func main() {
 	// 8. Initialize Flow Collector, using the DDoS Detector as the flow entrypoint processor
 	coll := collector.NewFlowCollector(cfg, log, ddosDetector)
 
+	if cfg.Environment != "production" {
+		coll.AddExporter("192.168.1.1", time.Now().Add(-12*time.Second), 45892)
+		coll.AddExporter("192.168.1.5", time.Now().Add(-5*time.Minute), 2341)
+	}
+
 	// 9. Start Flow Collector daemon
 	if err := coll.Start(); err != nil {
 		log.Error("Failed to start Flow Collector daemon", slog.String("error", err.Error()))

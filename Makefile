@@ -47,8 +47,8 @@ clean:
 
 # 3. Docker workflow targets
 docker-build:
-	@echo "Building production multi-stage Docker image..."
-	docker build -t flowguard:latest -f deploy/Dockerfile .
+	@echo "Building production-ready Docker image..."
+	docker build -f deploy/Dockerfile -t flowguard:latest .
 
 docker-up:
 	@echo "Starting development containers via Docker Compose..."
@@ -59,12 +59,21 @@ docker-test:
 	docker run --rm flowguard:latest go test -v ./...
 
 docker-ui-test:
-	@echo "Running UI JavaScript checks in Dockerized Node..."
+	@echo "Running UI JavaScript compilation checks in Dockerized Node..."
 	@test -n "$(NODE_DOCKER_IMAGE)" || (echo "NODE_DOCKER_IMAGE is not set. Copy .env.example to .env or export NODE_DOCKER_IMAGE." && exit 1)
-	docker run --rm -v "$(PWD):/work" -w /work $(NODE_DOCKER_IMAGE) node --check internal/ui/assets/app.js
+	docker run --rm -v "$(PWD):/work" -w /work $(NODE_DOCKER_IMAGE) sh -c "cd web && npm install && npm run build && npm run lint"
 
 docker-export:
 	@echo "Exporting production Docker image to tar archive..."
 	@mkdir -p dist
 	docker save -o dist/flowguard-image.tar flowguard:latest
 	@echo "Image successfully exported to dist/flowguard-image.tar"
+
+# 4. Vite Frontend Development Targets
+ui-dev:
+	@echo "Starting Vite development server..."
+	cd web && npm install && npm run dev
+
+ui-build:
+	@echo "Building Vite production assets..."
+	cd web && npm install && npm run build

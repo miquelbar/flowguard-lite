@@ -354,3 +354,15 @@ func (c *FlowCollector) updateExporterStats(ip string) {
 	exp.LastSeen = time.Now()
 	exp.PacketCount++
 }
+
+// AddExporter registers or updates an exporter IP and its stats (useful for seeding and testing).
+func (c *FlowCollector) AddExporter(ip string, lastSeen time.Time, packets uint64) {
+	c.exportersMu.Lock()
+	defer c.exportersMu.Unlock()
+
+	c.exporters[ip] = &ExporterMetadata{
+		IP:          ip,
+		LastSeen:    lastSeen,
+		PacketCount: packets,
+	}
+}

@@ -6,12 +6,12 @@ import (
 	"net/http"
 )
 
-//go:embed assets/*
+//go:embed assets/dist/*
 var assetsFS embed.FS
 
 // Handler returns an http.Handler serving the embedded SPA static assets.
 func Handler() http.Handler {
-	subFS, err := fs.Sub(assetsFS, "assets")
+	subFS, err := fs.Sub(assetsFS, "assets/dist")
 	if err != nil {
 		// Panic on initialization error if embed syntax fails (should never happen under Go build verification)
 		panic(err)

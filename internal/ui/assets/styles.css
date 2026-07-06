@@ -535,6 +535,37 @@ body {
     stroke: var(--warning-color);
 }
 
+.chart-tooltip {
+    position: absolute;
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    font-size: 0.75rem;
+    font-family: var(--font-stack);
+    color: var(--text-primary);
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.15s ease, transform 0.1s ease;
+    display: none;
+}
+
+.chart-crosshair {
+    stroke: var(--text-muted);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+    pointer-events: none;
+}
+
+.chart-hover-dot {
+    fill: var(--primary-color);
+    stroke: var(--panel-bg);
+    stroke-width: 2;
+    pointer-events: none;
+}
+
 .chart-empty {
     position: absolute;
     inset: 0;

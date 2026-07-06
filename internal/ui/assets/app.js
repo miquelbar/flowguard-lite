@@ -108,6 +108,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const valErrors = document.getElementById("val-errors");
     const valQueue = document.getElementById("val-queue");
 
+    const valTotalVolume = document.getElementById("val-total-volume");
+    const valDevicesCount = document.getElementById("val-devices-count");
+    const valActiveAlerts = document.getElementById("val-active-alerts");
+    const valMaxRisk = document.getElementById("val-max-risk");
+
+    const headerCollectorHealth = document.getElementById("header-collector-health");
+    const bodyCollectorHealth = document.getElementById("body-collector-health");
+    const iconCollectorHealth = document.getElementById("icon-collector-health");
+
     // Table elements
     const tblExporters = document.getElementById("tbl-exporters").querySelector("tbody");
     const tblTopTalkers = document.getElementById("tbl-top-talkers").querySelector("tbody");
@@ -457,10 +466,12 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!resp.ok) throw new Error("Traffic time-series query failed");
             trafficSeriesData = await resp.json();
             renderTrafficChart();
+            updateDashboardHeroStats();
         } catch (err) {
             console.error("Error fetching traffic time series: ", err);
             trafficSeriesData = [];
             renderTrafficChart();
+            updateDashboardHeroStats();
         }
     }
 
@@ -528,12 +539,166 @@ document.addEventListener("DOMContentLoaded", () => {
             <path d="${areaData}" class="chart-area"></path>
             <path d="${pathData}" class="chart-line"></path>
             ${singleSampleGuide}
-            ${points.map(p => `<circle cx="${xFor(p.ts).toFixed(2)}" cy="${yFor(p.value).toFixed(2)}" r="${points.length === 1 ? 4.5 : 2.3}" class="chart-point"><title>${formatTime(p.raw.timestamp)} - ${activeTrafficMetric}: ${activeTrafficMetric === "bytes" ? formatBytes(p.value) : formatNumber(p.value)}</title></circle>`).join("")}
+            ${points.map(p => `<circle cx="${xFor(p.ts).toFixed(2)}" cy="${yFor(p.value).toFixed(2)}" r="${points.length === 1 ? 4.5 : 2.3}" class="chart-point"></circle>`).join("")}
             ${anomalyMarkers}
             <text x="${pad.left}" y="${height - 8}" class="chart-axis">${firstLabel}</text>
             <text x="${width - pad.right}" y="${height - 8}" text-anchor="end" class="chart-axis">${lastLabel}</text>
+            <line id="chart-crosshair" class="chart-crosshair" y1="${pad.top}" y2="${pad.top + plotH}" x1="0" x2="0" style="display: none;"></line>
+            <circle id="chart-hover-dot" r="4.5" class="chart-hover-dot" style="display: none;"></circle>
         `;
+
+        const crosshair = document.getElementById("chart-crosshair");
+        const hoverDot = document.getElementById("chart-hover-dot");
+        const tooltip = document.getElementById("chart-tooltip");
+
+        if (crosshair && hoverDot && tooltip) {
+            const onMouseMove = (e) => {
+                const rect = trafficChart.getBoundingClientRect();
+                const mouseX = ((e.clientX - rect.left) / rect.width) * width;
+                const mouseY = ((e.clientY - rect.top) / rect.height) * height;
+
+                if (mouseX < pad.left || mouseX > width - pad.right) {
+                    hideTooltip();
+                    return;
+                }
+
+                // Find nearest point
+                let nearest = null;
+                let minDist = Infinity;
+                for (const p of points) {
+                    const pX = xFor(p.ts);
+                    const dist = Math.abs(pX - mouseX);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearest = p;
+                    }
+                }
+
+                if (nearest) {
+                    const nx = xFor(nearest.ts);
+                    const ny = yFor(nearest.value);
+
+                    // Position SVG elements
+                    crosshair.setAttribute("x1", nx);
+                    crosshair.setAttribute("x2", nx);
+                    crosshair.style.display = "block";
+
+                    hoverDot.setAttribute("cx", nx);
+                    hoverDot.setAttribute("cy", ny);
+                    hoverDot.style.display = "block";
+
+                    // Formulate tooltip content
+                    const timeStr = formatTime(new Date(nearest.ts));
+                    const valFormatted = activeTrafficMetric === "bytes" ? formatBytes(nearest.value) : formatNumber(nearest.value);
+                    
+                    // Check if there are anomalies close to this timestamp (within 30 mins)
+                    let anomalyInfo = "";
+                    const nearbyAnoms = (anomaliesData || []).filter(anom => {
+                        const anomTs = new Date(anom.created_at).getTime();
+                        return Math.abs(anomTs - nearest.ts) <= 30 * 60 * 1000;
+                    });
+                    if (nearbyAnoms.length > 0) {
+                        anomalyInfo = `<div style="margin-top: 0.25rem; border-top: 1px solid var(--border-color); padding-top: 0.25rem; color: var(--danger-color); font-weight: bold;">
+                            ⚠️ Anomaly: ${nearbyAnoms[0].type} (${nearbyAnoms[0].ip})
+                        </div>`;
+                    }
+
+                    tooltip.innerHTML = `
+                        <div><strong>Time:</strong> ${timeStr}</div>
+                        <div><strong>${activeTrafficMetric.charAt(0).toUpperCase() + activeTrafficMetric.slice(1)}:</strong> ${valFormatted}</div>
+                        ${anomalyInfo}
+                    `;
+
+                    // Calculate absolute position of tooltip relative to the traffic-chart-frame
+                    const tooltipW = tooltip.offsetWidth || 150;
+                    const tooltipH = tooltip.offsetHeight || 60;
+                    
+                    // Scale coordinates back to client/pixel space relative to parent
+                    const pixelX = ((nx) / width) * rect.width;
+                    const pixelY = ((ny) / height) * rect.height;
+
+                    let left = pixelX + 15;
+                    let top = pixelY - tooltipH / 2;
+
+                    // Keep tooltip within frame boundaries
+                    if (left + tooltipW > rect.width) {
+                        left = pixelX - tooltipW - 15;
+                    }
+                    if (top < 0) {
+                        top = 10;
+                    }
+                    if (top + tooltipH > rect.height) {
+                        top = rect.height - tooltipH - 10;
+                    }
+
+                    tooltip.style.left = `${left}px`;
+                    tooltip.style.top = `${top}px`;
+                    tooltip.style.display = "block";
+                    tooltip.style.opacity = "1";
+                } else {
+                    hideTooltip();
+                }
+            };
+
+            const hideTooltip = () => {
+                crosshair.style.display = "none";
+                hoverDot.style.display = "none";
+                tooltip.style.display = "none";
+                tooltip.style.opacity = "0";
+            };
+
+            trafficChart.addEventListener("mousemove", onMouseMove);
+            trafficChart.addEventListener("mouseleave", hideTooltip);
+        }
+
         renderNetworkSignals();
+    }
+
+    function updateDashboardHeroStats() {
+        if (activeView !== "dashboard") return;
+
+        // 1. Total Traffic Volume: Sum of active Traffic Metric bytes over current timeseries
+        let totalBytes = 0;
+        if (trafficSeriesData && trafficSeriesData.length > 0) {
+            trafficSeriesData.forEach(item => {
+                totalBytes += Number(item.bytes || 0);
+            });
+        }
+        if (valTotalVolume) {
+            valTotalVolume.textContent = formatBytes(totalBytes);
+        }
+
+        // 2. Active Devices: count of distinct devices from devicesData
+        if (valDevicesCount) {
+            valDevicesCount.textContent = devicesData ? formatNumber(devicesData.length) : "0";
+        }
+
+        // 3. Active Alerts: count of active alerts from anomaliesData
+        if (valActiveAlerts) {
+            const activeCount = (anomaliesData || []).filter(a => a.status === "active").length;
+            valActiveAlerts.textContent = formatNumber(activeCount);
+        }
+
+        // 4. Max Risk Score: max score from riskDevicesData
+        if (valMaxRisk) {
+            let maxScore = 0;
+            if (riskDevicesData && riskDevicesData.length > 0) {
+                riskDevicesData.forEach(d => {
+                    if (d.risk_score > maxScore) {
+                        maxScore = d.risk_score;
+                    }
+                });
+            }
+            valMaxRisk.textContent = formatNumber(maxScore);
+            
+            // Set alert class/color for high/medium/low max risk
+            valMaxRisk.className = "stat-value";
+            if (maxScore >= 70) {
+                valMaxRisk.classList.add("text-danger");
+            } else if (maxScore >= 30) {
+                valMaxRisk.classList.add("text-warning");
+            }
+        }
     }
 
     function renderNetworkSignals() {
@@ -2276,6 +2441,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     fetchTrafficTimeSeries()
                 ]);
                 renderNetworkSignals();
+                updateDashboardHeroStats();
             } else if (activeView === "devices") {
                 await fetchDevices();
                 if (selectedDeviceIP) {
@@ -2431,6 +2597,14 @@ document.addEventListener("DOMContentLoaded", () => {
     btnRefresh.addEventListener("click", () => {
         loadData();
     });
+
+    if (headerCollectorHealth && bodyCollectorHealth && iconCollectorHealth) {
+        headerCollectorHealth.addEventListener("click", () => {
+            const isHidden = bodyCollectorHealth.style.display === "none";
+            bodyCollectorHealth.style.display = isHidden ? "block" : "none";
+            iconCollectorHealth.style.transform = isHidden ? "rotate(180deg)" : "rotate(0deg)";
+        });
+    }
 
     function applyStoredShellPreferences() {
         const sidebarCollapsed = localStorage.getItem("fg_sidebar_collapsed") === "true";
