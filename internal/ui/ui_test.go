@@ -15,7 +15,7 @@ func TestJavaScriptSyntax(t *testing.T) {
 		return
 	}
 
-	jsFile := filepath.Join("assets", "app.js")
+	jsFile := filepath.Join("assets", "dist", "app.js")
 	cmd := exec.Command(nodePath, "--check", jsFile)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
