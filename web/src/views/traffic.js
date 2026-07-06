@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { formatBytes, formatNumber, formatTime } from '../utils/format.js';
-import { renderTrafficChart } from '../components/chart.js';
+import { renderTrafficCharts } from '../components/chart.js';
 import * as api from '../api.js';
 
 export function trafficRangeConfig() {
@@ -301,7 +301,7 @@ export function renderTopTalkers() {
 }
 
 export function renderTrafficView() {
-    renderTrafficChart(renderNetworkSignals);
+    renderTrafficCharts(renderNetworkSignals);
     renderExporters();
     renderThreatRisk();
     renderTopTalkers();
@@ -327,16 +327,6 @@ export function bindTrafficEvents(onReload) {
         });
     });
 
-    // Bind traffic metric buttons (Bytes/Packets/Flows)
-    const trafficMetricButtons = document.querySelectorAll(".traffic-metric-btn");
-    trafficMetricButtons.forEach(btn => {
-        btn.addEventListener("click", (e) => {
-            trafficMetricButtons.forEach(b => b.classList.remove("active"));
-            e.target.classList.add("active");
-            state.activeTrafficMetric = e.target.getAttribute("data-metric");
-            renderTrafficView();
-        });
-    });
 
     // Bind traffic range buttons (1h/6h/24h/7d)
     const trafficRangeButtons = document.querySelectorAll(".traffic-range-btn");

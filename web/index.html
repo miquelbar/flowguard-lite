@@ -215,17 +215,26 @@
                             <button class="tab-btn traffic-range-btn active" data-range="24h">24h</button>
                             <button class="tab-btn traffic-range-btn" data-range="7d">7d</button>
                         </div>
-                        <div class="tab-buttons" id="traffic-metric-tabs">
-                            <button class="tab-btn traffic-metric-btn active" data-metric="bytes">Bytes</button>
-                            <button class="tab-btn traffic-metric-btn" data-metric="packets">Packets</button>
-                            <button class="tab-btn traffic-metric-btn" data-metric="flows">Flows</button>
-                        </div>
                     </div>
                 </div>
                 <div class="panel-body chart-panel-body">
-                    <div class="traffic-chart-frame">
-                        <svg id="traffic-chart" class="traffic-chart" viewBox="0 0 900 260" role="img" aria-label="Network traffic chart"></svg>
-                        <div id="traffic-chart-empty" class="chart-empty text-muted hidden">No traffic buckets in this range.</div>
+                    <div class="traffic-chart-container" style="display: flex; flex-direction: column; gap: 0.75rem; flex-grow: 1; min-width: 0;">
+                        <div class="traffic-chart-frame" style="min-height: 180px;">
+                            <div style="font-size: 0.688rem; font-weight: 600; padding: 0.35rem 0.5rem; background: var(--border-highlight); border-bottom: 1px solid var(--border-color); color: var(--text-secondary); letter-spacing: 0.05em; text-transform: uppercase;">Bandwidth (Bytes)</div>
+                            <svg id="traffic-chart-bytes" class="traffic-chart" viewBox="0 0 900 180" role="img" aria-label="Bandwidth chart" style="min-height: 180px;"></svg>
+                            <div id="traffic-chart-bytes-empty" class="chart-empty text-muted hidden">No traffic data.</div>
+                        </div>
+                        <div class="traffic-chart-frame" style="min-height: 180px;">
+                            <div style="font-size: 0.688rem; font-weight: 600; padding: 0.35rem 0.5rem; background: var(--border-highlight); border-bottom: 1px solid var(--border-color); color: var(--text-secondary); letter-spacing: 0.05em; text-transform: uppercase; display: flex; justify-content: space-between;">
+                                <span>Packet & Flow Rates</span>
+                                <span style="font-weight: normal; text-transform: none;">
+                                    <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #38bdf8; margin-right: 4px;"></span>Packets &nbsp;&nbsp;
+                                    <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #f59e0b; margin-right: 4px;"></span>Flows
+                                </span>
+                            </div>
+                            <svg id="traffic-chart-packets" class="traffic-chart" viewBox="0 0 900 180" role="img" aria-label="Packets & Flows chart" style="min-height: 180px;"></svg>
+                            <div id="traffic-chart-packets-empty" class="chart-empty text-muted hidden">No traffic data.</div>
+                        </div>
                         <div id="chart-tooltip" class="chart-tooltip"></div>
                     </div>
                     <div class="network-signal-grid">

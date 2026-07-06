@@ -9,7 +9,6 @@ export const state = {
     riskDevicesData: [],
     trafficSeriesData: [],
     activeTrafficRange: "24h",
-    activeTrafficMetric: "bytes",
     selectedDeviceIP: null,
     selectedAnomalyId: null,
     policiesData: [],
