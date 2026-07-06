@@ -115,7 +115,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const tblAnomalies = document.getElementById("tbl-anomalies").querySelector("tbody");
     const tblThreatRisk = document.getElementById("tbl-threat-risk").querySelector("tbody");
     
-    const tabButtons = document.querySelectorAll(".tab-btn");
+    const tabButtons = document.querySelectorAll(".filter-controls .tab-btn");
     const triageFilterButtons = document.querySelectorAll(".triage-filter-btn");
 
     // Device Detail elements
@@ -2003,12 +2003,12 @@ document.addEventListener("DOMContentLoaded", () => {
             buttonsHtml = `
                 <button class="btn-secondary btn-triage btn-ack" data-id="${anom.id}" data-action="acknowledged">Acknowledge</button>
                 <button class="btn-secondary btn-triage btn-silence" data-id="${anom.id}" data-action="silenced">Silence</button>
-                <button class="btn-primary btn-block-rules" data-ip="${anom.ip}">Firewall Template</button>
+                <button class="btn-secondary btn-block-rules" data-ip="${anom.ip}">Firewall Template</button>
             `;
         } else {
             buttonsHtml = `
                 <button class="btn-secondary btn-triage btn-reactivate" data-id="${anom.id}" data-action="active">Reactivate</button>
-                <button class="btn-primary btn-block-rules" data-ip="${anom.ip}">Firewall Template</button>
+                <button class="btn-secondary btn-block-rules" data-ip="${anom.ip}">Firewall Template</button>
             `;
         }
         anomalyDetailActions.innerHTML = buttonsHtml;
@@ -2255,58 +2255,70 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Perform full page data fetch
     async function loadData() {
-        // Fetch health unconditionally so status indicator updates on every view
-        await fetchHealth();
+        const refreshIcon = btnRefresh ? btnRefresh.querySelector("svg") : null;
+        if (btnRefresh) {
+            btnRefresh.disabled = true;
+            if (refreshIcon) refreshIcon.classList.add("icon-spin");
+        }
+        try {
+            // Fetch health unconditionally so status indicator updates on every view
+            await fetchHealth();
 
-        // Fetch threat risk ranks unconditionally as they affect indicators and badges across multiple views
-        await fetchThreatRisk();
+            // Fetch threat risk ranks unconditionally as they affect indicators and badges across multiple views
+            await fetchThreatRisk();
 
-        if (activeView === "dashboard") {
-            await Promise.all([
-                fetchExporters(),
-                fetchTopTalkers(),
-                fetchDevices(),
-                fetchAnomalies(),
-                fetchTrafficTimeSeries()
-            ]);
-            renderNetworkSignals();
-        } else if (activeView === "devices") {
-            await fetchDevices();
-            if (selectedDeviceIP) {
-                const dev = devicesData.find(d => d.ip === selectedDeviceIP);
-                if (dev) {
-                    selectDevice(selectedDeviceIP);
+            if (activeView === "dashboard") {
+                await Promise.all([
+                    fetchExporters(),
+                    fetchTopTalkers(),
+                    fetchDevices(),
+                    fetchAnomalies(),
+                    fetchTrafficTimeSeries()
+                ]);
+                renderNetworkSignals();
+            } else if (activeView === "devices") {
+                await fetchDevices();
+                if (selectedDeviceIP) {
+                    const dev = devicesData.find(d => d.ip === selectedDeviceIP);
+                    if (dev) {
+                        selectDevice(selectedDeviceIP);
+                    }
                 }
-            }
-        } else if (activeView === "anomalies") {
-            await fetchAnomalies();
-        } else if (activeView === "policies") {
-            await fetchPolicies();
-            if (selectedPolicyId !== null) {
-                const p = policiesData.find(x => x.id === selectedPolicyId);
-                if (p) {
-                    selectPolicy(p);
-                } else {
-                    resetPolicyDetails();
+            } else if (activeView === "anomalies") {
+                await fetchAnomalies();
+            } else if (activeView === "policies") {
+                await fetchPolicies();
+                if (selectedPolicyId !== null) {
+                    const p = policiesData.find(x => x.id === selectedPolicyId);
+                    if (p) {
+                        selectPolicy(p);
+                    } else {
+                        resetPolicyDetails();
+                    }
                 }
-            }
-        } else if (activeView === "notifications") {
-            await Promise.all([
-                fetchNotificationRules(),
-                fetchNotificationLogs()
-            ]);
-            if (selectedNotificationRuleId !== null) {
-                const r = notificationRulesData.find(x => x.id === selectedNotificationRuleId);
-                if (r) {
-                    selectNotificationRule(r);
-                } else {
-                    resetNotificationRuleDetails();
+            } else if (activeView === "notifications") {
+                await Promise.all([
+                    fetchNotificationRules(),
+                    fetchNotificationLogs()
+                ]);
+                if (selectedNotificationRuleId !== null) {
+                    const r = notificationRulesData.find(x => x.id === selectedNotificationRuleId);
+                    if (r) {
+                        selectNotificationRule(r);
+                    } else {
+                        resetNotificationRuleDetails();
+                    }
                 }
+            } else if (activeView === "audit") {
+                await fetchAuditLogs();
+            } else if (activeView === "settings") {
+                await fetchSettings();
             }
-        } else if (activeView === "audit") {
-            await fetchAuditLogs();
-        } else if (activeView === "settings") {
-            await fetchSettings();
+        } finally {
+            if (btnRefresh) {
+                btnRefresh.disabled = false;
+                if (refreshIcon) refreshIcon.classList.remove("icon-spin");
+            }
         }
     }
 
@@ -2884,26 +2896,22 @@ document.addEventListener("DOMContentLoaded", () => {
         link.addEventListener("click", (e) => {
             e.preventDefault();
             const sec = link.getAttribute("data-section");
-            if (sec === "policies" || sec === "integrations") {
+            if (sec === "integrations") {
                 if (unsavedChanges[activeSettingsSection]) {
                     if (!confirm(`You have unsaved changes in the ${getSettingsSectionLabel(activeSettingsSection)} section. Do you want to discard them?`)) {
                         return;
                     }
                     markUnsaved(activeSettingsSection, false);
                 }
-                if (sec === "policies") {
-                    window.location.hash = "#/policies";
-                } else {
-                    activeSettingsSection = sec;
-                    document.querySelectorAll(".settings-main .settings-card").forEach(c => {
-                        if (c.getAttribute("id") === "settings-integrations") {
-                            c.classList.remove("hidden");
-                        } else {
-                            c.classList.add("hidden");
-                        }
-                    });
-                    updateSettingsNavActive(sec);
-                }
+                activeSettingsSection = sec;
+                document.querySelectorAll(".settings-main .settings-card").forEach(c => {
+                    if (c.getAttribute("id") === "settings-integrations") {
+                        c.classList.remove("hidden");
+                    } else {
+                        c.classList.add("hidden");
+                    }
+                });
+                updateSettingsNavActive(sec);
             } else {
                 switchSettingsSection(sec);
             }

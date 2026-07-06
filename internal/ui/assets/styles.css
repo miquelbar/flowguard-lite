@@ -215,6 +215,15 @@ body {
     100% { transform: scale(3); opacity: 0; }
 }
 
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.icon-spin {
+    animation: spin 0.8s linear infinite;
+}
+
 .status-label {
     font-size: 0.75rem;
     color: var(--text-muted);

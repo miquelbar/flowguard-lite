@@ -482,7 +482,7 @@
                             <!-- Firewall Templates -->
                             <div class="detail-section">
                                 <h4>Firewall Control Template</h4>
-                                <button class="btn-primary btn-block-rules" id="btn-device-fw-rules" style="width: 100%; display: flex; justify-content: center; align-items: center;">Generate Firewall Rule</button>
+                                <button class="btn-secondary btn-block-rules" id="btn-device-fw-rules" style="width: 100%; display: flex; justify-content: center; align-items: center;">Generate Firewall Rule</button>
                             </div>
                         </div>
                     </div>
@@ -730,10 +730,10 @@
                                     </div>
                                 </div>
 
-                                <div class="form-actions" style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                                    <button type="submit" class="btn-primary" style="flex: 2;" id="btn-save-policy">Save Policy</button>
-                                    <button type="button" class="btn-secondary" style="flex: 1;" id="btn-cancel-policy">Cancel</button>
-                                    <button type="button" class="btn-secondary btn-danger" style="flex: 1; background-color: rgba(244,63,94,0.1); border-color: rgba(244,63,94,0.2); color: #f43f5e;" id="btn-delete-policy">Delete</button>
+                                <div class="form-actions" style="display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap;">
+                                    <button type="submit" class="btn-primary" style="flex: 1; min-width: 100px; justify-content: center;" id="btn-save-policy">Save Policy</button>
+                                    <button type="button" class="btn-secondary" style="flex: 1; min-width: 80px; justify-content: center;" id="btn-cancel-policy">Cancel</button>
+                                    <button type="button" class="btn-secondary btn-danger" style="flex: 1; min-width: 80px; justify-content: center; background-color: rgba(244,63,94,0.1); border-color: rgba(244,63,94,0.2); color: #f43f5e;" id="btn-delete-policy">Delete</button>
                                 </div>
                             </form>
                         </div>
@@ -980,7 +980,6 @@
                     <a href="#settings-collectors" class="settings-nav-link" data-section="collectors">Collectors Setup</a>
                     <a href="#settings-storage" class="settings-nav-link" data-section="storage">Storage & Retention</a>
                     <a href="#settings-thresholds" class="settings-nav-link" data-section="thresholds">Detection Thresholds</a>
-                    <a href="#settings-policies" class="settings-nav-link" data-section="policies">Silence Policies</a>
                     <a href="#settings-notifications" class="settings-nav-link" data-section="notifications">Notifications & Routing</a>
                     <a href="#settings-integrations" class="settings-nav-link" data-section="integrations">Integrations</a>
                     <a href="#settings-system" class="settings-nav-link" data-section="system">System Settings</a>
@@ -1125,18 +1124,6 @@
                                 <button type="submit" class="btn-primary">Save Thresholds</button>
                             </div>
                         </form>
-                    </section>
-
-                    <!-- 6. Silence Policies -->
-                    <section id="settings-policies" class="settings-card hidden">
-                        <div class="settings-card-header">
-                            <h3>Silence Policies</h3>
-                            <p>Silence, ignore, and override detection rules by subnet, IP, or type</p>
-                        </div>
-                        <div style="padding: 1rem 1.1rem;">
-                            <p class="text-muted" style="font-size: 0.813rem; margin-bottom: 1.25rem; line-height: 1.45;">Manage your active alert silence overrides, scope hierarchies (IP > Subnet > Type > Global), and rule expirations in the dedicated Policies manager.</p>
-                            <a href="#/policies" class="btn-primary" style="display: inline-block; text-decoration: none; width: auto; line-height: 1.4; text-align: center;">Open Policies Manager</a>
-                        </div>
                     </section>
 
                     <!-- 7. Notifications & Routing -->
