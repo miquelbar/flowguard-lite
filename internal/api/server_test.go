@@ -320,6 +320,44 @@ func (m *MockFlowRepository) GetPoliciesForIP(ctx context.Context, ip string) ([
 	return []storage.Policy{}, m.Err
 }
 
+func (m *MockFlowRepository) SaveNotificationRule(ctx context.Context, r *storage.NotificationRule) error {
+	return m.Err
+}
+
+func (m *MockFlowRepository) DeleteNotificationRule(ctx context.Context, id int64) error {
+	return m.Err
+}
+
+func (m *MockFlowRepository) GetNotificationRule(ctx context.Context, id int64) (*storage.NotificationRule, error) {
+	if id == 555 {
+		return &storage.NotificationRule{
+			ID:             555,
+			Name:           "Mock Slack Test Rule",
+			Enabled:        true,
+			SeverityMin:    "high",
+			Scope:          "global",
+			ChannelTargets: []string{"slack"},
+		}, nil
+	}
+	return nil, m.Err
+}
+
+func (m *MockFlowRepository) ListNotificationRules(ctx context.Context) ([]storage.NotificationRule, error) {
+	return []storage.NotificationRule{}, m.Err
+}
+
+func (m *MockFlowRepository) SaveNotificationLog(ctx context.Context, l *storage.NotificationLog) error {
+	return m.Err
+}
+
+func (m *MockFlowRepository) ListNotificationLogs(ctx context.Context, limit int) ([]storage.NotificationLog, error) {
+	return []storage.NotificationLog{}, m.Err
+}
+
+func (m *MockFlowRepository) HasRecentNotification(ctx context.Context, ruleID int64, ip string, anomalyType string, since time.Time) (bool, error) {
+	return false, m.Err
+}
+
 func TestParseQueryParams_Valid(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/top/sources?limit=25&start=2026-07-03T12:00:00Z&end=2026-07-03T13:00:00Z", nil)
 	start, end, limit, err := parseQueryParams(req)
@@ -912,7 +950,7 @@ func TestHandleTestAlert(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	engine := webhook.NewWebhookEngine(mockServer.URL, "generic", nil, false, "", "", logger)
+	engine := webhook.NewWebhookEngine(nil, mockServer.URL, "generic", nil, false, "", "", logger)
 	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil, nil, nil, engine, "")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/settings/test-alert", nil)
@@ -1071,5 +1109,51 @@ func TestHandleGetDeviceProfileAndFlows(t *testing.T) {
 	server.server.Handler.ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected StatusNotFound (404), got %d", w.Code)
+	}
+}
+
+func TestHandleTestNotificationRule(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockRepo := &MockFlowRepository{}
+
+	receivedChan := make(chan []byte, 1)
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ := io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+		receivedChan <- bodyBytes
+	}))
+	defer mockServer.Close()
+
+	engine := webhook.NewWebhookEngine(nil, mockServer.URL, "generic", nil, false, "", "", logger)
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil, nil, nil, engine, "")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/notification-rules/555/test", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", w.Code)
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed decoding test rule response: %v", err)
+	}
+	if resp["status"] != "test alert dispatched successfully" {
+		t.Errorf("unexpected status message: %s", resp["status"])
+	}
+
+	select {
+	case body := <-receivedChan:
+		var payload map[string]interface{}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("failed to unmarshal test anomaly: %v", err)
+		}
+		if payload["text"] == nil {
+			t.Error("expected text property to be present in Slack format payload")
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout waiting for test rule webhook dispatch")
 	}
 }

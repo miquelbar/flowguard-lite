@@ -85,7 +85,7 @@ func TestWebhookEngine_Dispatch(t *testing.T) {
 			defer server.Close()
 
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-			engine := NewWebhookEngine(server.URL, tt.format, nil, false, "", "", logger)
+			engine := NewWebhookEngine(nil, server.URL, tt.format, nil, false, "", "", logger)
 
 			anomaly := &storage.Anomaly{
 				IP:          "192.168.1.10",
@@ -122,7 +122,7 @@ func TestWebhookEngine_TelegramDirect(t *testing.T) {
 	defer server.Close()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	engine := NewWebhookEngine("", "generic", nil, true, "token123", "chat456", logger)
+	engine := NewWebhookEngine(nil, "", "generic", nil, true, "token123", "chat456", logger)
 	engine.client.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 		expectedURL := "https://api.telegram.org/bottoken123/sendMessage"
 		if req.URL.String() != expectedURL {
@@ -163,7 +163,7 @@ func TestWebhookEngine_TelegramDirect(t *testing.T) {
 
 func TestWebhookEngine_UpdateConfig(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	engine := NewWebhookEngine("http://old-url", "generic", map[string]string{"X-Auth": "old"}, false, "old-token", "old-chat", logger)
+	engine := NewWebhookEngine(nil, "http://old-url", "generic", map[string]string{"X-Auth": "old"}, false, "old-token", "old-chat", logger)
 
 	engine.UpdateConfig("http://new-url", "slack", map[string]string{"X-Auth": "new"}, true, "new-token", "new-chat")
 
@@ -190,7 +190,7 @@ func TestWebhookEngine_Headers(t *testing.T) {
 		"Authorization":   "Bearer token123",
 		"X-Custom-Header": "custom-val",
 	}
-	engine := NewWebhookEngine(server.URL, "generic", customHeaders, false, "", "", logger)
+	engine := NewWebhookEngine(nil, server.URL, "generic", customHeaders, false, "", "", logger)
 
 	anomaly := &storage.Anomaly{
 		IP:        "192.168.1.1",

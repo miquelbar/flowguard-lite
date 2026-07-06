@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 // WebhookEngine handles asynchronous dispatching of security anomaly alerts to external channels.
 type WebhookEngine struct {
 	mu             sync.RWMutex
+	repo           storage.StorageRepository
 	url            string
 	format         string // "generic", "slack", "telegram"
 	webhookHeaders map[string]string
@@ -27,11 +30,12 @@ type WebhookEngine struct {
 }
 
 // NewWebhookEngine creates and configures a WebhookEngine instance.
-func NewWebhookEngine(url string, format string, headers map[string]string, tgEnabled bool, tgToken string, tgChatID string, logger *slog.Logger) *WebhookEngine {
+func NewWebhookEngine(repo storage.StorageRepository, url string, format string, headers map[string]string, tgEnabled bool, tgToken string, tgChatID string, logger *slog.Logger) *WebhookEngine {
 	if format == "" {
 		format = "generic"
 	}
 	return &WebhookEngine{
+		repo:           repo,
 		url:            url,
 		format:         format,
 		webhookHeaders: cloneHeaders(headers),
@@ -72,6 +76,15 @@ func (w *WebhookEngine) UpdateConfig(url string, format string, headers map[stri
 func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.Anomaly) {
 	if anomaly.Status == "silenced" {
 		w.logger.Debug("Anomaly is silenced by policy, skipping webhook alert dispatch", slog.Int64("id", anomaly.ID))
+		if w.repo != nil {
+			_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
+				AnomalyID:    anomaly.ID,
+				Channel:      "all",
+				Status:       "suppressed",
+				ErrorMessage: "Silenced by policy override",
+				DispatchedAt: time.Now(),
+			})
+		}
 		return
 	}
 
@@ -94,56 +107,226 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 		anomaly.Description,
 		anomaly.CreatedAt.Format(time.RFC3339))
 
-	// 1. Dispatch Webhook Alert if configured
-	if url != "" {
-		var payload interface{}
-		switch format {
-		case "slack":
-			payload = map[string]interface{}{
-				"text": messageText,
-			}
-		case "telegram":
-			payload = map[string]interface{}{
-				"text":       messageText,
-				"parse_mode": "Markdown",
-			}
-		default: // "generic"
-			payload = anomaly
-		}
-
-		bodyBytes, err := json.Marshal(payload)
-		if err != nil {
-			w.logger.Error("Failed to marshal webhook payload", slog.String("error", err.Error()))
-		} else {
-			go w.dispatchHTTP(url, bodyBytes, "webhook", headers)
+	severityScore := func(sev string) int {
+		switch strings.ToLower(sev) {
+		case "high":
+			return 3
+		case "medium":
+			return 2
+		case "low":
+			return 1
+		default:
+			return 0
 		}
 	}
 
-	// 2. Dispatch Direct Telegram Alert if enabled
-	if tgEnabled && tgToken != "" && tgChatID != "" {
-		tgURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", tgToken)
-		payload := map[string]interface{}{
-			"chat_id":    tgChatID,
-			"text":       messageText,
-			"parse_mode": "Markdown",
+	// Fetch rules if repo is available
+	var rules []storage.NotificationRule
+	var err error
+	if w.repo != nil {
+		rules, err = w.repo.ListNotificationRules(ctx)
+		if err != nil {
+			w.logger.Error("Failed to list notification rules, falling back to default channels", slog.String("error", err.Error()))
+		}
+	}
+
+	var activeRules []storage.NotificationRule
+	for _, r := range rules {
+		if r.Enabled {
+			activeRules = append(activeRules, r)
+		}
+	}
+
+	// 1. Fallback mode: if no custom notification rules exist, use the default global webhook/Telegram settings
+	if len(activeRules) == 0 {
+		if url != "" {
+			var payload interface{}
+			switch format {
+			case "slack":
+				payload = map[string]interface{}{"text": messageText}
+			case "telegram":
+				payload = map[string]interface{}{
+					"text":       messageText,
+					"parse_mode": "Markdown",
+				}
+			default:
+				payload = anomaly
+			}
+			bodyBytes, err := json.Marshal(payload)
+			if err != nil {
+				w.logger.Error("Failed to marshal webhook payload", slog.String("error", err.Error()))
+			} else {
+				go w.dispatchHTTP(context.Background(), anomaly.ID, nil, "webhook", url, bodyBytes, headers)
+			}
 		}
 
-		bodyBytes, err := json.Marshal(payload)
-		if err != nil {
-			w.logger.Error("Failed to marshal Telegram payload", slog.String("error", err.Error()))
-		} else {
-			go w.dispatchHTTP(tgURL, bodyBytes, "telegram", nil)
+		if tgEnabled && tgToken != "" && tgChatID != "" {
+			tgURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", tgToken)
+			payload := map[string]interface{}{
+				"chat_id":    tgChatID,
+				"text":       messageText,
+				"parse_mode": "Markdown",
+			}
+			bodyBytes, err := json.Marshal(payload)
+			if err != nil {
+				w.logger.Error("Failed to marshal Telegram payload", slog.String("error", err.Error()))
+			} else {
+				go w.dispatchHTTP(context.Background(), anomaly.ID, nil, "telegram", tgURL, bodyBytes, nil)
+			}
+		}
+		return
+	}
+
+	// 2. Rules evaluation mode: check each active notification rule
+	for _, rule := range activeRules {
+		// A. Check Severity Min Filter
+		if severityScore(anomaly.Severity) < severityScore(rule.SeverityMin) {
+			continue
+		}
+
+		// B. Check Alert Type Filter
+		if len(rule.AlertTypes) > 0 {
+			matchedType := false
+			for _, t := range rule.AlertTypes {
+				if strings.EqualFold(t, anomaly.Type) {
+					matchedType = true
+					break
+				}
+			}
+			if !matchedType {
+				continue
+			}
+		}
+
+		// C. Check Scope / Target Filter
+		if rule.Scope != "global" && rule.Target != "" {
+			if rule.Scope == "ip" {
+				if anomaly.IP != rule.Target {
+					continue
+				}
+			} else if rule.Scope == "subnet" {
+				_, ipNet, err := net.ParseCIDR(rule.Target)
+				if err != nil {
+					w.logger.Error("Invalid subnet target in notification rule", slog.Int64("rule_id", rule.ID), slog.String("target", rule.Target))
+					continue
+				}
+				ipObj := net.ParseIP(anomaly.IP)
+				if ipObj == nil || !ipNet.Contains(ipObj) {
+					continue
+				}
+			}
+		}
+
+		// D. Cooldown Deduplication Check
+		if rule.CooldownSeconds > 0 && w.repo != nil {
+			since := time.Now().Add(-time.Duration(rule.CooldownSeconds) * time.Second)
+			hasRecent, err := w.repo.HasRecentNotification(ctx, rule.ID, anomaly.IP, anomaly.Type, since)
+			if err == nil && hasRecent {
+				w.logger.Info("Notification alert deduplicated, skipping dispatch", slog.Int64("rule_id", rule.ID), slog.String("ip", anomaly.IP), slog.String("type", anomaly.Type))
+				_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
+					AnomalyID:    anomaly.ID,
+					RuleID:       &rule.ID,
+					Channel:      "all",
+					Status:       "deduplicated",
+					ErrorMessage: "Suppressed by cooldown deduplication rule",
+					DispatchedAt: time.Now(),
+				})
+				continue
+			}
+		}
+
+		// E. Dispatch to specified channel targets
+		ruleIDCopy := rule.ID
+		for _, ch := range rule.ChannelTargets {
+			switch ch {
+			case "webhook", "slack":
+				if url == "" {
+					w.logger.Error("Webhook/Slack routing matched but webhook URL is not configured")
+					if w.repo != nil {
+						_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
+							AnomalyID:    anomaly.ID,
+							RuleID:       &ruleIDCopy,
+							Channel:      ch,
+							Status:       "failed",
+							ErrorMessage: "Webhook destination URL is not configured",
+							DispatchedAt: time.Now(),
+						})
+					}
+					continue
+				}
+				var payload interface{}
+				if ch == "slack" {
+					payload = map[string]interface{}{"text": messageText}
+				} else {
+					// Use global format for generic webhook routing
+					switch format {
+					case "slack":
+						payload = map[string]interface{}{"text": messageText}
+					case "telegram":
+						payload = map[string]interface{}{
+							"text":       messageText,
+							"parse_mode": "Markdown",
+						}
+					default:
+						payload = anomaly
+					}
+				}
+				bodyBytes, err := json.Marshal(payload)
+				if err != nil {
+					w.logger.Error("Failed to marshal webhook payload", slog.String("error", err.Error()))
+				} else {
+					go w.dispatchHTTP(context.Background(), anomaly.ID, &ruleIDCopy, ch, url, bodyBytes, headers)
+				}
+
+			case "telegram":
+				if !tgEnabled || tgToken == "" || tgChatID == "" {
+					w.logger.Error("Telegram routing matched but Telegram is not enabled or credentials are missing")
+					if w.repo != nil {
+						_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
+							AnomalyID:    anomaly.ID,
+							RuleID:       &ruleIDCopy,
+							Channel:      ch,
+							Status:       "failed",
+							ErrorMessage: "Telegram credentials are not configured",
+							DispatchedAt: time.Now(),
+						})
+					}
+					continue
+				}
+				tgURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", tgToken)
+				payload := map[string]interface{}{
+					"chat_id":    tgChatID,
+					"text":       messageText,
+					"parse_mode": "Markdown",
+				}
+				bodyBytes, err := json.Marshal(payload)
+				if err != nil {
+					w.logger.Error("Failed to marshal Telegram payload", slog.String("error", err.Error()))
+				} else {
+					go w.dispatchHTTP(context.Background(), anomaly.ID, &ruleIDCopy, ch, tgURL, bodyBytes, nil)
+				}
+			}
 		}
 	}
 }
 
-func (w *WebhookEngine) dispatchHTTP(url string, body []byte, label string, headers map[string]string) {
+func (w *WebhookEngine) dispatchHTTP(ctx context.Context, anomalyID int64, ruleID *int64, channel string, url string, body []byte, headers map[string]string) {
 	reqCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		w.logger.Error("Failed to build HTTP request for "+label, slog.String("error", err.Error()))
+		w.logger.Error("Failed to build HTTP request for "+channel, slog.String("error", err.Error()))
+		if w.repo != nil {
+			_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
+				AnomalyID:    anomalyID,
+				RuleID:       ruleID,
+				Channel:      channel,
+				Status:       "failed",
+				ErrorMessage: "Failed to build HTTP request: " + err.Error(),
+				DispatchedAt: time.Now(),
+			})
+		}
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -153,20 +336,145 @@ func (w *WebhookEngine) dispatchHTTP(url string, body []byte, label string, head
 		req.Header.Set(k, v)
 	}
 
-	w.logger.Debug("Dispatching alert...", slog.String("target", label))
+	w.logger.Debug("Dispatching alert...", slog.String("target", channel))
 	resp, err := w.client.Do(req)
 	if err != nil {
-		w.logger.Error(label+" HTTP dispatch failed", slog.String("error", err.Error()))
+		w.logger.Error(channel+" HTTP dispatch failed", slog.String("error", err.Error()))
+		if w.repo != nil {
+			_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
+				AnomalyID:    anomalyID,
+				RuleID:       ruleID,
+				Channel:      channel,
+				Status:       "failed",
+				ErrorMessage: err.Error(),
+				DispatchedAt: time.Now(),
+			})
+		}
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		w.logger.Error(label+" endpoint returned failure status code", slog.Int("status_code", resp.StatusCode))
+		errMsg := fmt.Sprintf("endpoint returned failure status code: %d", resp.StatusCode)
+		w.logger.Error(channel+" "+errMsg)
+		if w.repo != nil {
+			_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
+				AnomalyID:    anomalyID,
+				RuleID:       ruleID,
+				Channel:      channel,
+				Status:       "failed",
+				ErrorMessage: errMsg,
+				DispatchedAt: time.Now(),
+			})
+		}
 		return
 	}
 
-	w.logger.Info(label + " alert dispatched successfully")
+	w.logger.Info(channel + " alert dispatched successfully")
+	if w.repo != nil {
+		_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
+			AnomalyID:    anomalyID,
+			RuleID:       ruleID,
+			Channel:      channel,
+			Status:       "sent",
+			DispatchedAt: time.Now(),
+		})
+	}
+}
+
+// SendTestAlert formats and dispatches a test alert directly to the specified rule's channel targets, bypassing cooldowns.
+func (w *WebhookEngine) SendTestAlert(ctx context.Context, rule *storage.NotificationRule, anomaly *storage.Anomaly) {
+	messageText := fmt.Sprintf("🚨 *FlowGuard Lite Test Alert*\n\n*Rule Name:* %s\n*IP Address:* %s\n*Type:* %s\n*Severity:* %s\n*Description:* %s\n*Time:* %s",
+		rule.Name,
+		anomaly.IP,
+		anomaly.Type,
+		anomaly.Severity,
+		anomaly.Description,
+		anomaly.CreatedAt.Format(time.RFC3339))
+
+	w.mu.RLock()
+	url := w.url
+	format := w.format
+	headers := make(map[string]string)
+	for k, v := range w.webhookHeaders {
+		headers[k] = v
+	}
+	tgEnabled := w.tgEnabled
+	tgToken := w.tgToken
+	tgChatID := w.tgChatID
+	w.mu.RUnlock()
+
+	ruleIDCopy := rule.ID
+
+	for _, ch := range rule.ChannelTargets {
+		switch ch {
+		case "webhook", "slack":
+			if url == "" {
+				w.logger.Error("Test alert routing matched but webhook URL is not configured")
+				if w.repo != nil {
+					_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
+						AnomalyID:    anomaly.ID,
+						RuleID:       &ruleIDCopy,
+						Channel:      ch,
+						Status:       "failed",
+						ErrorMessage: "Webhook destination URL is not configured",
+						DispatchedAt: time.Now(),
+					})
+				}
+				continue
+			}
+			var payload interface{}
+			if ch == "slack" {
+				payload = map[string]interface{}{"text": messageText}
+			} else {
+				switch format {
+				case "slack":
+					payload = map[string]interface{}{"text": messageText}
+				case "telegram":
+					payload = map[string]interface{}{
+						"text":       messageText,
+						"parse_mode": "Markdown",
+					}
+				default:
+					payload = anomaly
+				}
+			}
+			bodyBytes, err := json.Marshal(payload)
+			if err != nil {
+				w.logger.Error("Failed to marshal webhook payload", slog.String("error", err.Error()))
+			} else {
+				go w.dispatchHTTP(context.Background(), anomaly.ID, &ruleIDCopy, ch, url, bodyBytes, headers)
+			}
+
+		case "telegram":
+			if !tgEnabled || tgToken == "" || tgChatID == "" {
+				w.logger.Error("Test alert routing matched but Telegram credentials are not configured")
+				if w.repo != nil {
+					_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
+						AnomalyID:    anomaly.ID,
+						RuleID:       &ruleIDCopy,
+						Channel:      ch,
+						Status:       "failed",
+						ErrorMessage: "Telegram credentials are not configured",
+						DispatchedAt: time.Now(),
+					})
+				}
+				continue
+			}
+			tgURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", tgToken)
+			payload := map[string]interface{}{
+				"chat_id":    tgChatID,
+				"text":       messageText,
+				"parse_mode": "Markdown",
+			}
+			bodyBytes, err := json.Marshal(payload)
+			if err != nil {
+				w.logger.Error("Failed to marshal Telegram payload", slog.String("error", err.Error()))
+			} else {
+				go w.dispatchHTTP(context.Background(), anomaly.ID, &ruleIDCopy, ch, tgURL, bodyBytes, nil)
+			}
+		}
+	}
 }
 
 func cloneHeaders(headers map[string]string) map[string]string {

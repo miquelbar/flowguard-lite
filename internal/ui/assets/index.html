@@ -87,6 +87,13 @@
                     </svg>
                     <span class="nav-text">Audit</span>
                 </button>
+                <button id="nav-notifications" class="nav-link">
+                    <svg class="icon nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                    </svg>
+                    <span class="nav-text">Notifications</span>
+                </button>
                 <button id="nav-settings" class="nav-link">
                     <svg class="icon nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="3"/>
@@ -776,6 +783,184 @@
                     </div>
                 </div>
             </section>
+        </div>
+
+        <!-- VIEW 4.5: Notification Routing Rules -->
+        <div id="view-notifications" class="view-content">
+            <main class="dashboard-main device-split-layout">
+                <!-- Left Side: Routing Rules list & Audit Logs -->
+                <section class="panel panel-left-devices" style="display: flex; flex-direction: column; gap: 1.5rem; height: 100%; overflow: hidden;">
+                    <!-- Rules Table Card -->
+                    <div style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+                        <div class="panel-header flex-header" style="margin-bottom: 0.75rem;">
+                            <div>
+                                <h2>Notification Routing Rules</h2>
+                                <p class="panel-subtitle text-muted">Determine where alerts are routed based on severity, type, and IP/subnet.</p>
+                            </div>
+                            <div>
+                                <button id="btn-add-notification-rule" class="btn-primary">
+                                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="12" y1="5" x2="12" y2="19"/>
+                                        <line x1="5" y1="12" x2="19" y2="12"/>
+                                    </svg>
+                                    Add Rule
+                                </button>
+                            </div>
+                        </div>
+                        <div class="table-container" style="flex: 1; min-height: 0; overflow-y: auto;">
+                            <table id="tbl-notification-rules">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Enabled</th>
+                                        <th>Severity</th>
+                                        <th>Scope</th>
+                                        <th>Target</th>
+                                        <th>Channels</th>
+                                        <th class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted">Loading rules...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Audit Logs Card -->
+                    <div style="flex: 1; display: flex; flex-direction: column; border-top: 1px solid var(--border-color); padding-top: 1rem; min-height: 0;">
+                        <div class="panel-header flex-header" style="margin-bottom: 0.75rem;">
+                            <div>
+                                <h3>Alert Routing Audit Log</h3>
+                                <p class="panel-subtitle text-muted">Recent history of alert dispatch outcomes and suppressions.</p>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <label style="font-size: 0.8rem; color: var(--text-secondary);">Show:</label>
+                                <select id="notification-logs-limit" class="form-control" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; width: auto; height: auto;">
+                                    <option value="10">10</option>
+                                    <option value="25" selected>25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="table-container" style="flex: 1; min-height: 0; overflow-y: auto;">
+                            <table id="tbl-notification-logs">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Anomaly</th>
+                                        <th>Rule</th>
+                                        <th>Channel</th>
+                                        <th>Status</th>
+                                        <th>Info</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted">Loading audit logs...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Right Side: Rule Details / Editor -->
+                <section class="panel panel-right-devices" id="panel-notification-details" style="height: 100%; overflow: hidden; display: flex; flex-direction: column;">
+                    <div class="panel-header flex-header" style="margin-bottom: 0.75rem;">
+                        <h2 id="notification-details-title">Rule Editor</h2>
+                        <button id="btn-close-notification-details" class="btn-secondary mobile-only" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Close</button>
+                    </div>
+                    <div class="panel-body flex-column-body" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem;">
+                        <div id="notification-details-empty" class="text-center text-muted pad-large">
+                            Select a notification rule from the list or click "Add Rule" to configure target alert channels.
+                        </div>
+                        <div id="notification-details-content" class="hidden" style="display: flex; flex-direction: column; gap: 1rem; width: 100%;">
+                            <form id="form-notification-editor" style="display: flex; flex-direction: column; gap: 0.75rem; width: 100%;">
+                                <input type="hidden" id="notification-rule-id">
+
+                                <div class="form-group">
+                                    <label for="notification-rule-name">Rule Name</label>
+                                    <input type="text" id="notification-rule-name" placeholder="e.g. Critical alerts to Slack" class="form-control" required maxlength="100">
+                                </div>
+
+                                <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+                                    <input type="checkbox" id="notification-rule-enabled" style="width: auto; cursor: pointer;" checked>
+                                    <label for="notification-rule-enabled" style="margin-bottom: 0; cursor: pointer; user-select: none;">Enabled</label>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="notification-rule-severity">Minimum Severity</label>
+                                    <select id="notification-rule-severity" class="form-control">
+                                        <option value="low">Low (Alerts of all severities)</option>
+                                        <option value="medium">Medium (Medium & High alerts)</option>
+                                        <option value="high">High (High severity alerts only)</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="notification-rule-alert-types">Alert Types</label>
+                                    <input type="text" id="notification-rule-alert-types" placeholder="e.g. ddos, port_scan (comma separated, or blank for all)" class="form-control">
+                                    <p class="text-muted" style="font-size: 0.7rem; margin-top: 0.25rem;">Available types: <code>ddos</code>, <code>port_scan</code>, <code>traffic_spike</code>.</p>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="notification-rule-scope">Scope</label>
+                                    <select id="notification-rule-scope" class="form-control">
+                                        <option value="global">Global (All devices)</option>
+                                        <option value="ip">Single IP Address</option>
+                                        <option value="subnet">Subnet Range (CIDR)</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group hidden" id="group-notification-target">
+                                    <label for="notification-rule-target" id="label-notification-target">Target</label>
+                                    <input type="text" id="notification-rule-target" placeholder="e.g. 192.168.1.15 or 192.168.1.0/24" class="form-control">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="notification-rule-cooldown">Cooldown / Deduplication (Seconds)</label>
+                                    <input type="number" id="notification-rule-cooldown" class="form-control" value="300" min="0" required>
+                                    <p class="text-muted" style="font-size: 0.7rem; margin-top: 0.25rem;">Seconds to wait before sending another alert of the same type for this device.</p>
+                                </div>
+
+                                <div class="form-group">
+                                    <label style="display: block; margin-bottom: 0.5rem;">Channel Targets</label>
+                                    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: normal; cursor: pointer; user-select: none;">
+                                            <input type="checkbox" class="rule-channel-checkbox" value="webhook" style="width: auto;">
+                                            <span>Generic Webhook</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: normal; cursor: pointer; user-select: none;">
+                                            <input type="checkbox" class="rule-channel-checkbox" value="slack" style="width: auto;">
+                                            <span>Slack / Discord Webhook</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: normal; cursor: pointer; user-select: none;">
+                                            <input type="checkbox" class="rule-channel-checkbox" value="telegram" style="width: auto;">
+                                            <span>Telegram Bot</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="settings-actions" style="margin-top: 0.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                    <button type="submit" class="btn-primary" style="flex: 1; min-width: 120px;">Save Rule</button>
+                                    <button type="button" id="btn-delete-notification-rule" class="btn-secondary" style="background-color: var(--danger-color, #ef4444); color: white; border: none; flex: 1; min-width: 100px;">Delete</button>
+                                    <button type="button" id="btn-test-notification-rule" class="btn-secondary" style="flex: 1; min-width: 120px;">Test Rule</button>
+                                </div>
+                            </form>
+
+                            <!-- Live Rule Preview Container -->
+                            <div class="rule-preview-container" style="border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; margin-top: 0.5rem;">
+                                <h4 style="margin-bottom: 0.25rem; font-size: 0.85rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Rule Explanation</h4>
+                                <p id="notification-rule-preview" style="font-size: 0.875rem; line-height: 1.4; color: var(--text-primary); margin: 0;"></p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
         </div>
 
         <!-- VIEW 5: Settings and Configurations -->

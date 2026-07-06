@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
         "#/alerts": "anomalies",
         "#/anomalies": "anomalies",
         "#/policies": "policies",
+        "#/notifications": "notifications",
         "#/audit": "audit",
         "#/settings": "settings"
     };
@@ -17,6 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
         "devices": "#/devices",
         "anomalies": "#/alerts",
         "policies": "#/policies",
+        "notifications": "#/notifications",
         "audit": "#/audit",
         "settings": "#/settings"
     };
@@ -37,6 +39,9 @@ document.addEventListener("DOMContentLoaded", () => {
     let selectedAnomalyId = null;
     let policiesData = [];
     let selectedPolicyId = null;
+    let notificationRulesData = [];
+    let selectedNotificationRuleId = null;
+    let notificationLogsData = [];
     let auditLogPage = 0;
     let auditLogPageSize = 10;
 
@@ -45,6 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const navDevices = document.getElementById("nav-devices");
     const navAnomalies = document.getElementById("nav-anomalies");
     const navPolicies = document.getElementById("nav-policies");
+    const navNotifications = document.getElementById("nav-notifications");
     const navAudit = document.getElementById("nav-audit");
     const navSettings = document.getElementById("nav-settings");
     
@@ -52,6 +58,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const viewDevices = document.getElementById("view-devices");
     const viewAnomalies = document.getElementById("view-anomalies");
     const viewPolicies = document.getElementById("view-policies");
+    const viewNotifications = document.getElementById("view-notifications");
     const viewAudit = document.getElementById("view-audit");
     const viewSettings = document.getElementById("view-settings");
     const viewWizard = document.getElementById("view-wizard");
@@ -155,6 +162,32 @@ document.addEventListener("DOMContentLoaded", () => {
     const policyPrecedencePreview = document.getElementById("policy-precedence-preview");
     const btnCancelPolicy = document.getElementById("btn-cancel-policy");
     const devicePoliciesList = document.getElementById("device-policies-list");
+
+    const tblNotificationRules = document.getElementById("tbl-notification-rules");
+    const tblNotificationLogs = document.getElementById("tbl-notification-logs");
+    const selectNotificationLogsLimit = document.getElementById("notification-logs-limit");
+    const btnAddNotificationRule = document.getElementById("btn-add-notification-rule");
+    const panelNotificationDetails = document.getElementById("panel-notification-details");
+    const notificationDetailsTitle = document.getElementById("notification-details-title");
+    const btnCloseNotificationDetails = document.getElementById("btn-close-notification-details");
+    const notificationDetailsEmpty = document.getElementById("notification-details-empty");
+    const notificationDetailsContent = document.getElementById("notification-details-content");
+
+    // Form elements
+    const formNotificationEditor = document.getElementById("form-notification-editor");
+    const inputNotificationRuleId = document.getElementById("notification-rule-id");
+    const inputNotificationRuleName = document.getElementById("notification-rule-name");
+    const inputNotificationRuleEnabled = document.getElementById("notification-rule-enabled");
+    const selectNotificationRuleSeverity = document.getElementById("notification-rule-severity");
+    const inputNotificationRuleAlertTypes = document.getElementById("notification-rule-alert-types");
+    const selectNotificationRuleScope = document.getElementById("notification-rule-scope");
+    const groupNotificationTarget = document.getElementById("group-notification-target");
+    const labelNotificationTarget = document.getElementById("label-notification-target");
+    const inputNotificationRuleTarget = document.getElementById("notification-rule-target");
+    const inputNotificationRuleCooldown = document.getElementById("notification-rule-cooldown");
+    const btnDeleteNotificationRule = document.getElementById("btn-delete-notification-rule");
+    const btnTestNotificationRule = document.getElementById("btn-test-notification-rule");
+    const textNotificationRulePreview = document.getElementById("notification-rule-preview");
 
     // Helper: format bytes into human-readable representation
     function formatBytes(bytes) {
@@ -1099,6 +1132,387 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Fetch Notification Rules
+    async function fetchNotificationRules() {
+        try {
+            const resp = await fetch("/api/notification-rules");
+            if (!resp.ok) throw new Error("Notification rules query failed");
+            notificationRulesData = await resp.json();
+            renderNotificationRules();
+        } catch (err) {
+            console.error("Error fetching notification rules: ", err);
+        }
+    }
+
+    // Fetch Notification Logs
+    async function fetchNotificationLogs() {
+        try {
+            const limit = selectNotificationLogsLimit ? selectNotificationLogsLimit.value : "25";
+            const resp = await fetch(`/api/notification-logs?limit=${limit}`);
+            if (!resp.ok) throw new Error("Notification logs query failed");
+            notificationLogsData = await resp.json();
+            renderNotificationLogs();
+        } catch (err) {
+            console.error("Error fetching notification logs: ", err);
+        }
+    }
+
+    // Render Notification Rules Table
+    function renderNotificationRules() {
+        if (!tblNotificationRules) return;
+        if (notificationRulesData.length === 0) {
+            tblNotificationRules.innerHTML = `<tr><td colspan="7" class="text-center text-muted pad-large">No notification rules configured yet.</td></tr>`;
+            return;
+        }
+
+        tblNotificationRules.innerHTML = notificationRulesData.map(r => {
+            const isSelected = selectedNotificationRuleId === r.id;
+            const enabledText = r.enabled 
+                ? '<span class="badge badge-label text-success" style="background-color: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.2);">Enabled</span>' 
+                : '<span class="badge badge-label text-muted" style="background-color: rgba(148,163,184,0.1); border-color: rgba(148,163,184,0.2);">Disabled</span>';
+            const scopeBadge = `<span class="badge badge-label" style="background-color: rgba(56,189,248,0.1); border-color: rgba(56,189,248,0.2); color: #38bdf8; text-transform: uppercase;">${r.scope}</span>`;
+            const channelsStr = (r.channel_targets || []).map(ch => {
+                let color = "#94a3b8";
+                if (ch === "slack") color = "#fb923c";
+                if (ch === "telegram") color = "#38bdf8";
+                if (ch === "webhook") color = "#a855f7";
+                return `<span class="badge badge-label" style="background-color: rgba(255,255,255,0.05); color: ${color}; text-transform: uppercase; font-size: 0.7rem;">${ch}</span>`;
+            }).join(" ");
+
+            return `
+                <tr data-id="${r.id}" class="${isSelected ? 'selected' : ''}" style="cursor: pointer;">
+                    <td class="font-semibold">${escapeHtml(r.name)}</td>
+                    <td>${enabledText}</td>
+                    <td class="text-capitalize font-semibold">${escapeHtml(r.severity_min || "low")}</td>
+                    <td>${scopeBadge}</td>
+                    <td class="text-muted font-mono" style="font-size: 0.813rem;">${escapeHtml(r.target || "(all)")}</td>
+                    <td>${channelsStr || '<span class="text-muted">—</span>'}</td>
+                    <td class="text-center">
+                        <button class="btn-secondary btn-select-rule" data-id="${r.id}">Select</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        // Listeners for selection
+        tblNotificationRules.querySelectorAll("tr").forEach(row => {
+            row.addEventListener("click", (e) => {
+                if (e.target.tagName === "BUTTON") return;
+                const id = parseInt(row.getAttribute("data-id"));
+                selectNotificationRuleId(id);
+            });
+        });
+
+        tblNotificationRules.querySelectorAll(".btn-select-rule").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                const id = parseInt(e.target.getAttribute("data-id"));
+                selectNotificationRuleId(id);
+            });
+        });
+    }
+
+    // Render Notification Logs
+    function renderNotificationLogs() {
+        if (!tblNotificationLogs) return;
+        if (notificationLogsData.length === 0) {
+            tblNotificationLogs.innerHTML = `<tr><td colspan="6" class="text-center text-muted pad-large">No notification audit logs found.</td></tr>`;
+            return;
+        }
+
+        tblNotificationLogs.innerHTML = notificationLogsData.map(log => {
+            const timestamp = formatTime(log.dispatched_at);
+            const anomalyText = `IP: ${escapeHtml(log.anomaly_ip)} <span class="text-muted" style="font-size: 0.75rem;">(${escapeHtml(log.anomaly_type)})</span>`;
+            const ruleName = log.rule_name ? escapeHtml(log.rule_name) : '<span class="text-muted font-italic">Default Fallback</span>';
+            const channelBadge = `<span class="badge badge-label" style="text-transform: uppercase; font-size: 0.7rem;">${escapeHtml(log.channel)}</span>`;
+            
+            let statusBadge = "";
+            if (log.status === "sent") {
+                statusBadge = '<span class="badge-success">Sent</span>';
+            } else if (log.status === "suppressed") {
+                statusBadge = '<span class="badge-warning">Suppressed</span>';
+            } else if (log.status === "deduplicated") {
+                statusBadge = '<span class="badge-warning">Deduplicated</span>';
+            } else if (log.status === "failed") {
+                statusBadge = '<span class="badge-danger">Failed</span>';
+            } else {
+                statusBadge = `<span class="badge badge-label text-muted">${escapeHtml(log.status)}</span>`;
+            }
+
+            const infoText = log.error_message ? `<span class="text-danger" style="font-size: 0.75rem;">${escapeHtml(log.error_message)}</span>` : '<span class="text-muted font-italic">—</span>';
+
+            return `
+                <tr>
+                    <td class="font-mono text-muted" style="font-size: 0.75rem;">${timestamp}</td>
+                    <td>${anomalyText}</td>
+                    <td class="font-semibold">${ruleName}</td>
+                    <td>${channelBadge}</td>
+                    <td>${statusBadge}</td>
+                    <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(log.error_message || "")}">${infoText}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function selectNotificationRuleId(id) {
+        selectedNotificationRuleId = id;
+        const r = notificationRulesData.find(x => x.id === id);
+        if (r) {
+            selectNotificationRule(r);
+        } else {
+            resetNotificationRuleDetails();
+        }
+        renderNotificationRules();
+    }
+
+    function selectNotificationRule(r) {
+        selectedNotificationRuleId = r.id;
+        inputNotificationRuleId.value = r.id;
+        inputNotificationRuleName.value = r.name;
+        inputNotificationRuleEnabled.checked = r.enabled;
+        selectNotificationRuleSeverity.value = r.severity_min || "low";
+        inputNotificationRuleAlertTypes.value = (r.alert_types || []).join(", ");
+        selectNotificationRuleScope.value = r.scope;
+        inputNotificationRuleTarget.value = r.target || "";
+        inputNotificationRuleCooldown.value = r.cooldown_seconds || "300";
+
+        // Set channel checkboxes
+        const channels = r.channel_targets || [];
+        document.querySelectorAll(".rule-channel-checkbox").forEach(cb => {
+            cb.checked = channels.includes(cb.value);
+        });
+
+        // Update labels and visibility
+        updateNotificationTargetFieldVisibility();
+
+        if (btnDeleteNotificationRule) btnDeleteNotificationRule.classList.remove("hidden");
+        if (btnTestNotificationRule) btnTestNotificationRule.classList.remove("hidden");
+
+        notificationDetailsTitle.textContent = `Edit Rule: ${r.name}`;
+        notificationDetailsEmpty.classList.add("hidden");
+        notificationDetailsContent.classList.remove("hidden");
+
+        updateNotificationRulePreview();
+    }
+
+    function startAddNotificationRule() {
+        selectedNotificationRuleId = "new";
+        inputNotificationRuleId.value = "";
+        inputNotificationRuleName.value = "";
+        inputNotificationRuleEnabled.checked = true;
+        selectNotificationRuleSeverity.value = "low";
+        inputNotificationRuleAlertTypes.value = "";
+        selectNotificationRuleScope.value = "global";
+        inputNotificationRuleTarget.value = "";
+        inputNotificationRuleCooldown.value = "300";
+
+        document.querySelectorAll(".rule-channel-checkbox").forEach(cb => {
+            cb.checked = false;
+        });
+
+        updateNotificationTargetFieldVisibility();
+
+        if (btnDeleteNotificationRule) btnDeleteNotificationRule.classList.add("hidden");
+        if (btnTestNotificationRule) btnTestNotificationRule.classList.add("hidden");
+
+        notificationDetailsTitle.textContent = "New Notification Rule";
+        notificationDetailsEmpty.classList.add("hidden");
+        notificationDetailsContent.classList.remove("hidden");
+
+        updateNotificationRulePreview();
+        renderNotificationRules();
+    }
+
+    function resetNotificationRuleDetails() {
+        selectedNotificationRuleId = null;
+        if (notificationDetailsEmpty) notificationDetailsEmpty.classList.remove("hidden");
+        if (notificationDetailsContent) notificationDetailsContent.classList.add("hidden");
+    }
+
+    function updateNotificationTargetFieldVisibility() {
+        if (!selectNotificationRuleScope) return;
+        const scope = selectNotificationRuleScope.value;
+        if (scope === "global") {
+            if (groupNotificationTarget) groupNotificationTarget.classList.add("hidden");
+            if (inputNotificationRuleTarget) {
+                inputNotificationRuleTarget.required = false;
+                inputNotificationRuleTarget.value = "";
+            }
+        } else {
+            if (groupNotificationTarget) groupNotificationTarget.classList.remove("hidden");
+            if (inputNotificationRuleTarget) inputNotificationRuleTarget.required = true;
+            if (scope === "ip" && labelNotificationTarget && inputNotificationRuleTarget) {
+                labelNotificationTarget.innerHTML = 'Device IP Address <span class="text-danger">*</span>';
+                inputNotificationRuleTarget.placeholder = "e.g. 192.168.1.50";
+            } else if (scope === "subnet" && labelNotificationTarget && inputNotificationRuleTarget) {
+                labelNotificationTarget.innerHTML = 'Subnet Range (CIDR) <span class="text-danger">*</span>';
+                inputNotificationRuleTarget.placeholder = "e.g. 192.168.1.0/24";
+            }
+        }
+    }
+
+    function updateNotificationRulePreview() {
+        if (!textNotificationRulePreview) return;
+        const name = inputNotificationRuleName.value.trim() || "Unnamed Rule";
+        const enabled = inputNotificationRuleEnabled.checked;
+        const severity = selectNotificationRuleSeverity.value;
+        const alertTypesStr = inputNotificationRuleAlertTypes.value.trim();
+        const scope = selectNotificationRuleScope.value;
+        const target = inputNotificationRuleTarget.value.trim();
+        const cooldown = inputNotificationRuleCooldown.value;
+
+        const channels = [];
+        document.querySelectorAll(".rule-channel-checkbox").forEach(cb => {
+            if (cb.checked) {
+                let name = cb.value;
+                if (name === "webhook") name = "Generic Webhook";
+                if (name === "slack") name = "Slack/Discord Webhook";
+                if (name === "telegram") name = "Telegram Bot";
+                channels.push(`<strong>${name}</strong>`);
+            }
+        });
+
+        if (!enabled) {
+            textNotificationRulePreview.innerHTML = `<span style="color: var(--text-secondary);">This rule is currently <strong>disabled</strong> and will not process alerts.</span>`;
+            return;
+        }
+
+        let scopeText = "all devices";
+        if (scope === "ip" && target) {
+            scopeText = `device <code>${escapeHtml(target)}</code>`;
+        } else if (scope === "subnet" && target) {
+            scopeText = `devices in subnet <code>${escapeHtml(target)}</code>`;
+        }
+
+        let typesText = "any anomaly type";
+        if (alertTypesStr) {
+            const types = alertTypesStr.split(",").map(t => `<code>${escapeHtml(t.trim())}</code>`).join(", ");
+            typesText = `anomalies of type ${types}`;
+        }
+
+        let channelsText = "no active channels (it will be silenced)";
+        if (channels.length > 0) {
+            channelsText = channels.join(" and ");
+        }
+
+        let cooldownText = cooldown > 0 ? ` with a <strong>${cooldown}s</strong> cooldown` : " without cooldown";
+
+        textNotificationRulePreview.innerHTML = `Alerts matching ${typesText} with severity <strong>&ge; ${escapeHtml(severity)}</strong> on ${scopeText} will be routed to ${channelsText}${cooldownText}.`;
+    }
+
+    async function saveNotificationRuleSubmit(e) {
+        e.preventDefault();
+        const id = inputNotificationRuleId.value;
+        const name = inputNotificationRuleName.value.trim();
+        const enabled = inputNotificationRuleEnabled.checked;
+        const severityMin = selectNotificationRuleSeverity.value;
+        const alertTypesVal = inputNotificationRuleAlertTypes.value.trim();
+        const scope = selectNotificationRuleScope.value;
+        const target = inputNotificationRuleTarget.value.trim();
+        const cooldownSeconds = parseInt(inputNotificationRuleCooldown.value);
+
+        // Gather channels
+        const channelTargets = [];
+        document.querySelectorAll(".rule-channel-checkbox").forEach(cb => {
+            if (cb.checked) channelTargets.push(cb.value);
+        });
+
+        // Validations
+        if (!name) {
+            showToast("Rule name is required", "error");
+            return;
+        }
+
+        if (scope === "ip" && !/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(target)) {
+            showToast("Target must be a valid IPv4 address", "error");
+            return;
+        }
+
+        if (scope === "subnet" && !/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}\/[0-9]{1,2}$/.test(target)) {
+            showToast("Target must be a valid CIDR network block (e.g. 192.168.1.0/24)", "error");
+            return;
+        }
+
+        const alertTypes = alertTypesVal ? alertTypesVal.split(",").map(x => x.trim()).filter(Boolean) : [];
+
+        const payload = {
+            name,
+            enabled,
+            severity_min: severityMin,
+            alert_types: alertTypes,
+            scope,
+            target,
+            cooldown_seconds: cooldownSeconds,
+            channel_targets: channelTargets
+        };
+
+        if (id) {
+            payload.id = parseInt(id);
+        }
+
+        try {
+            const method = id ? "PUT" : "POST";
+            const url = id ? `/api/notification-rules/${id}` : "/api/notification-rules";
+            const resp = await fetch(url, {
+                method,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+
+            if (!resp.ok) {
+                const errData = await resp.json();
+                throw new Error(errData.error || "Save notification rule request failed");
+            }
+
+            const saved = await resp.json();
+            showToast(`Notification rule "${saved.name}" saved successfully`);
+            selectedNotificationRuleId = saved.id;
+            await fetchNotificationRules();
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function deleteNotificationRuleClick() {
+        const id = inputNotificationRuleId.value;
+        if (!id) return;
+
+        if (!confirm("Are you sure you want to delete this notification rule?")) {
+            return;
+        }
+
+        try {
+            const resp = await fetch(`/api/notification-rules/${id}`, { method: "DELETE" });
+            if (!resp.ok) {
+                const errData = await resp.json();
+                throw new Error(errData.error || "Delete notification rule request failed");
+            }
+
+            showToast("Notification rule deleted successfully");
+            resetNotificationRuleDetails();
+            await fetchNotificationRules();
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function testNotificationRuleClick() {
+        const id = inputNotificationRuleId.value;
+        if (!id) return;
+
+        showToast("Sending test alert for rule...", "info");
+        try {
+            const resp = await fetch(`/api/notification-rules/${id}/test`, { method: "POST" });
+            if (!resp.ok) {
+                const errData = await resp.json();
+                throw new Error(errData.error || "Test notification rule request failed");
+            }
+            showToast("Test alert dispatched. Check your channels and audit log!");
+            setTimeout(fetchNotificationLogs, 1500); // refresh audit logs shortly after send
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
     // Render Device list to table
     function renderDevices() {
         const query = inputDeviceSearch.value.trim().toLowerCase();
@@ -1763,6 +2177,19 @@ document.addEventListener("DOMContentLoaded", () => {
                     resetPolicyDetails();
                 }
             }
+        } else if (activeView === "notifications") {
+            await Promise.all([
+                fetchNotificationRules(),
+                fetchNotificationLogs()
+            ]);
+            if (selectedNotificationRuleId !== null) {
+                const r = notificationRulesData.find(x => x.id === selectedNotificationRuleId);
+                if (r) {
+                    selectNotificationRule(r);
+                } else {
+                    resetNotificationRuleDetails();
+                }
+            }
         } else if (activeView === "audit") {
             await fetchAuditLogs();
         } else if (activeView === "settings") {
@@ -1796,6 +2223,7 @@ document.addEventListener("DOMContentLoaded", () => {
             devices: ["Devices", "Local inventory, labels, and learned baselines"],
             anomalies: ["Alerts", "Behavior changes that need review"],
             policies: ["Policies", "Define custom treatment rules for devices and alerts"],
+            notifications: ["Notifications", "Route alerts by severity, type, and IP/subnet target"],
             audit: ["Audit", "Configuration changes and alert review history"],
             settings: ["Settings", "Runtime configuration for this FlowGuard node"]
         };
@@ -1804,51 +2232,57 @@ document.addEventListener("DOMContentLoaded", () => {
         if (workspaceSubtitle) workspaceSubtitle.textContent = title[1];
         
         // Remove active class from all nav links
-        navDashboard.classList.remove("active");
-        navDevices.classList.remove("active");
-        navAnomalies.classList.remove("active");
-        navPolicies.classList.remove("active");
-        navAudit.classList.remove("active");
-        navSettings.classList.remove("active");
+        if (navDashboard) navDashboard.classList.remove("active");
+        if (navDevices) navDevices.classList.remove("active");
+        if (navAnomalies) navAnomalies.classList.remove("active");
+        if (navPolicies) navPolicies.classList.remove("active");
+        if (navNotifications) navNotifications.classList.remove("active");
+        if (navAudit) navAudit.classList.remove("active");
+        if (navSettings) navSettings.classList.remove("active");
 
         // Hide all views
-        viewDashboard.classList.remove("active");
-        viewDevices.classList.remove("active");
-        viewAnomalies.classList.remove("active");
-        viewPolicies.classList.remove("active");
-        viewAudit.classList.remove("active");
-        viewSettings.classList.remove("active");
+        if (viewDashboard) viewDashboard.classList.remove("active");
+        if (viewDevices) viewDevices.classList.remove("active");
+        if (viewAnomalies) viewAnomalies.classList.remove("active");
+        if (viewPolicies) viewPolicies.classList.remove("active");
+        if (viewNotifications) viewNotifications.classList.remove("active");
+        if (viewAudit) viewAudit.classList.remove("active");
+        if (viewSettings) viewSettings.classList.remove("active");
 
         if (viewName === "dashboard") {
-            navDashboard.classList.add("active");
-            viewDashboard.classList.add("active");
+            if (navDashboard) navDashboard.classList.add("active");
+            if (viewDashboard) viewDashboard.classList.add("active");
         } else if (viewName === "devices") {
-            navDevices.classList.add("active");
-            viewDevices.classList.add("active");
+            if (navDevices) navDevices.classList.add("active");
+            if (viewDevices) viewDevices.classList.add("active");
         } else if (viewName === "anomalies") {
-            navAnomalies.classList.add("active");
-            viewAnomalies.classList.add("active");
+            if (navAnomalies) navAnomalies.classList.add("active");
+            if (viewAnomalies) viewAnomalies.classList.add("active");
         } else if (viewName === "policies") {
-            navPolicies.classList.add("active");
-            viewPolicies.classList.add("active");
+            if (navPolicies) navPolicies.classList.add("active");
+            if (viewPolicies) viewPolicies.classList.add("active");
+        } else if (viewName === "notifications") {
+            if (navNotifications) navNotifications.classList.add("active");
+            if (viewNotifications) viewNotifications.classList.add("active");
         } else if (viewName === "audit") {
-            navAudit.classList.add("active");
-            viewAudit.classList.add("active");
+            if (navAudit) navAudit.classList.add("active");
+            if (viewAudit) viewAudit.classList.add("active");
         } else if (viewName === "settings") {
-            navSettings.classList.add("active");
-            viewSettings.classList.add("active");
+            if (navSettings) navSettings.classList.add("active");
+            if (viewSettings) viewSettings.classList.add("active");
         }
         
         loadData();
     }
 
     // Navigation Button Listeners
-    navDashboard.addEventListener("click", () => { window.location.hash = "#/traffic"; });
-    navDevices.addEventListener("click", () => { window.location.hash = "#/devices"; });
-    navAnomalies.addEventListener("click", () => { window.location.hash = "#/alerts"; });
-    navPolicies.addEventListener("click", () => { window.location.hash = "#/policies"; });
-    navAudit.addEventListener("click", () => { window.location.hash = "#/audit"; });
-    navSettings.addEventListener("click", () => { window.location.hash = "#/settings"; });
+    if (navDashboard) navDashboard.addEventListener("click", () => { window.location.hash = "#/traffic"; });
+    if (navDevices) navDevices.addEventListener("click", () => { window.location.hash = "#/devices"; });
+    if (navAnomalies) navAnomalies.addEventListener("click", () => { window.location.hash = "#/alerts"; });
+    if (navPolicies) navPolicies.addEventListener("click", () => { window.location.hash = "#/policies"; });
+    if (navNotifications) navNotifications.addEventListener("click", () => { window.location.hash = "#/notifications"; });
+    if (navAudit) navAudit.addEventListener("click", () => { window.location.hash = "#/audit"; });
+    if (navSettings) navSettings.addEventListener("click", () => { window.location.hash = "#/settings"; });
 
     // Handle URL Hash changes
     window.addEventListener("hashchange", () => {
@@ -2191,6 +2625,53 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     document.querySelectorAll(".policy-channel-checkbox").forEach(cb => {
         cb.addEventListener("change", updatePrecedencePreview);
+    });
+
+    // Notifications Section Event Listeners
+    if (btnAddNotificationRule) {
+        btnAddNotificationRule.addEventListener("click", startAddNotificationRule);
+    }
+    if (btnDeleteNotificationRule) {
+        btnDeleteNotificationRule.addEventListener("click", deleteNotificationRuleClick);
+    }
+    if (btnTestNotificationRule) {
+        btnTestNotificationRule.addEventListener("click", testNotificationRuleClick);
+    }
+    if (btnCloseNotificationDetails) {
+        btnCloseNotificationDetails.addEventListener("click", () => {
+            resetNotificationRuleDetails();
+            renderNotificationRules();
+        });
+    }
+    if (selectNotificationRuleScope) {
+        selectNotificationRuleScope.addEventListener("change", () => {
+            updateNotificationTargetFieldVisibility();
+            updateNotificationRulePreview();
+        });
+    }
+    if (formNotificationEditor) {
+        formNotificationEditor.addEventListener("submit", saveNotificationRuleSubmit);
+    }
+    if (selectNotificationLogsLimit) {
+        selectNotificationLogsLimit.addEventListener("change", fetchNotificationLogs);
+    }
+
+    const formNotificationInputs = [
+        inputNotificationRuleName,
+        inputNotificationRuleEnabled,
+        selectNotificationRuleSeverity,
+        inputNotificationRuleAlertTypes,
+        inputNotificationRuleTarget,
+        inputNotificationRuleCooldown
+    ];
+    formNotificationInputs.forEach(input => {
+        if (input) {
+            input.addEventListener("input", updateNotificationRulePreview);
+            input.addEventListener("change", updateNotificationRulePreview);
+        }
+    });
+    document.querySelectorAll(".rule-channel-checkbox").forEach(cb => {
+        cb.addEventListener("change", updateNotificationRulePreview);
     });
 
     // Wizard Setup Form Submit

@@ -126,6 +126,32 @@ type AuditLog struct {
 	Details   string    `json:"details"`
 }
 
+// NotificationRule represents a user-defined routing rule for alert dispatches.
+type NotificationRule struct {
+	ID              int64     `json:"id"`
+	Name            string    `json:"name"`
+	Enabled         bool      `json:"enabled"`
+	SeverityMin     string    `json:"severity_min"`     // "low", "medium", "high"
+	AlertTypes      []string  `json:"alert_types"`      // JSON array of strings (empty means all)
+	Scope           string    `json:"scope"`            // "global", "ip", "subnet"
+	Target          string    `json:"target"`           // IP address, CIDR range, or empty
+	CooldownSeconds int       `json:"cooldown_seconds"` // Deduplication period
+	ChannelTargets  []string  `json:"channel_targets"`  // "webhook", "slack", "telegram"
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// NotificationLog tracks the dispatch outcome of alert routing rules.
+type NotificationLog struct {
+	ID           int64     `json:"id"`
+	AnomalyID    int64     `json:"anomaly_id"`
+	RuleID       *int64    `json:"rule_id,omitempty"` // NULL if fallback/manual alert
+	Channel      string    `json:"channel"`           // "webhook", "slack", "telegram"
+	Status       string    `json:"status"`            // "sent", "suppressed", "deduplicated", "failed"
+	ErrorMessage string    `json:"error_message,omitempty"`
+	DispatchedAt time.Time `json:"dispatched_at"`
+}
+
 // FlowRepository defines the interface for reading and writing flow aggregates.
 type FlowRepository interface {
 	// SaveAggregates writes a slice of aggregated flow records to the shard matching the bucket timestamp.
@@ -214,6 +240,27 @@ type DeviceRepository interface {
 
 	// GetPoliciesForIP returns all matching policies (global, subnet, IP) for a specific IP.
 	GetPoliciesForIP(ctx context.Context, ip string) ([]Policy, error)
+
+	// SaveNotificationRule persists or updates a notification rule.
+	SaveNotificationRule(ctx context.Context, r *NotificationRule) error
+
+	// DeleteNotificationRule removes a notification rule by ID.
+	DeleteNotificationRule(ctx context.Context, id int64) error
+
+	// GetNotificationRule retrieves a notification rule by ID.
+	GetNotificationRule(ctx context.Context, id int64) (*NotificationRule, error)
+
+	// ListNotificationRules lists all active notification rules.
+	ListNotificationRules(ctx context.Context) ([]NotificationRule, error)
+
+	// SaveNotificationLog records a notification dispatch outcome.
+	SaveNotificationLog(ctx context.Context, l *NotificationLog) error
+
+	// ListNotificationLogs returns recent notification logs.
+	ListNotificationLogs(ctx context.Context, limit int) ([]NotificationLog, error)
+
+	// HasRecentNotification checks if a notification for the same rule/IP/type was sent recently.
+	HasRecentNotification(ctx context.Context, ruleID int64, ip string, anomalyType string, since time.Time) (bool, error)
 }
 
 // Manager defines the interface for managing database shards and schema maintenance.

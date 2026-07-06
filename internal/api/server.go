@@ -134,6 +134,14 @@ func NewAPIServer(
 	mux.HandleFunc("POST /api/policies", s.handleSavePolicy)
 	mux.HandleFunc("PUT /api/policies/{id}", s.handleSavePolicy)
 	mux.HandleFunc("DELETE /api/policies/{id}", s.handleDeletePolicy)
+
+	// Notification routing rules and logs endpoints
+	mux.HandleFunc("GET /api/notification-rules", s.handleListNotificationRules)
+	mux.HandleFunc("POST /api/notification-rules", s.handleSaveNotificationRule)
+	mux.HandleFunc("PUT /api/notification-rules/{id}", s.handleSaveNotificationRule)
+	mux.HandleFunc("DELETE /api/notification-rules/{id}", s.handleDeleteNotificationRule)
+	mux.HandleFunc("GET /api/notification-logs", s.handleListNotificationLogs)
+	mux.HandleFunc("POST /api/notification-rules/{id}/test", s.handleTestNotificationRule)
 	mux.HandleFunc("POST /api/auth/setup", s.handleAuthSetup)
 	mux.HandleFunc("POST /api/auth/login", s.handleAuthLogin)
 	mux.HandleFunc("POST /api/auth/logout", s.handleAuthLogout)

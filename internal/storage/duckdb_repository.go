@@ -107,6 +107,32 @@ func NewDuckDBRepository(dataDir string, logger *slog.Logger) (*DuckDBRepository
 			flows BIGINT NOT NULL,
 			PRIMARY KEY (bucket_ts, src_ip, dst_ip, dst_port, protocol)
 		);
+
+		CREATE SEQUENCE IF NOT EXISTS seq_notification_rules_id;
+		CREATE TABLE IF NOT EXISTS notification_rules (
+			id INTEGER DEFAULT nextval('seq_notification_rules_id') PRIMARY KEY,
+			name VARCHAR NOT NULL,
+			enabled INTEGER NOT NULL DEFAULT 1,
+			severity_min VARCHAR NOT NULL DEFAULT 'low',
+			alert_types VARCHAR NOT NULL DEFAULT '[]',
+			scope VARCHAR NOT NULL DEFAULT 'global',
+			target VARCHAR NOT NULL DEFAULT '',
+			cooldown_seconds INTEGER NOT NULL DEFAULT 300,
+			channel_targets VARCHAR NOT NULL DEFAULT '[]',
+			created_at TIMESTAMP NOT NULL,
+			updated_at TIMESTAMP NOT NULL
+		);
+
+		CREATE SEQUENCE IF NOT EXISTS seq_notification_logs_id;
+		CREATE TABLE IF NOT EXISTS notification_logs (
+			id INTEGER DEFAULT nextval('seq_notification_logs_id') PRIMARY KEY,
+			anomaly_id INTEGER NOT NULL,
+			rule_id INTEGER,
+			channel VARCHAR NOT NULL,
+			status VARCHAR NOT NULL,
+			error_message VARCHAR,
+			dispatched_at TIMESTAMP NOT NULL
+		);
 	`)
 	if err != nil {
 		db.Close()
@@ -1089,9 +1115,277 @@ func (r *DuckDBRepository) GetPoliciesForIP(ctx context.Context, ip string) ([]P
 				}
 			}
 		}
-		if matches {
+	if matches {
 			matched = append(matched, p)
 		}
 	}
 	return matched, nil
+}
+
+// SaveNotificationRule persists or updates a notification rule in DuckDB.
+func (r *DuckDBRepository) SaveNotificationRule(ctx context.Context, rule *NotificationRule) error {
+	if rule.Name == "" {
+		return fmt.Errorf("notification rule name cannot be empty")
+	}
+
+	alertTypesJSON, err := json.Marshal(rule.AlertTypes)
+	if err != nil {
+		return fmt.Errorf("failed to marshal alert types: %w", err)
+	}
+
+	channelTargetsJSON, err := json.Marshal(rule.ChannelTargets)
+	if err != nil {
+		return fmt.Errorf("failed to marshal channel targets: %w", err)
+	}
+
+	now := time.Now()
+	rule.UpdatedAt = now
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if rule.ID == 0 {
+		rule.CreatedAt = now
+		query := `INSERT INTO notification_rules (name, enabled, severity_min, alert_types, scope, target, cooldown_seconds, channel_targets, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+		err := r.db.QueryRowContext(ctx, query,
+			rule.Name,
+			boolToInt(rule.Enabled),
+			rule.SeverityMin,
+			string(alertTypesJSON),
+			rule.Scope,
+			rule.Target,
+			rule.CooldownSeconds,
+			string(channelTargetsJSON),
+			rule.CreatedAt,
+			rule.UpdatedAt,
+		).Scan(&rule.ID)
+		if err != nil {
+			return fmt.Errorf("failed to insert notification rule: %w", err)
+		}
+	} else {
+		query := `UPDATE notification_rules SET name = ?, enabled = ?, severity_min = ?, alert_types = ?, scope = ?, target = ?, cooldown_seconds = ?, channel_targets = ?, updated_at = ?
+		WHERE id = ?`
+		res, err := r.db.ExecContext(ctx, query,
+			rule.Name,
+			boolToInt(rule.Enabled),
+			rule.SeverityMin,
+			string(alertTypesJSON),
+			rule.Scope,
+			rule.Target,
+			rule.CooldownSeconds,
+			string(channelTargetsJSON),
+			rule.UpdatedAt,
+			rule.ID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to update notification rule: %w", err)
+		}
+		rows, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return fmt.Errorf("notification rule with ID %d not found", rule.ID)
+		}
+	}
+	return nil
+}
+
+// DeleteNotificationRule removes a notification rule by ID from DuckDB.
+func (r *DuckDBRepository) DeleteNotificationRule(ctx context.Context, id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	res, err := r.db.ExecContext(ctx, "DELETE FROM notification_rules WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("failed to delete notification rule: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("notification rule with ID %d not found", id)
+	}
+	return nil
+}
+
+// GetNotificationRule retrieves a notification rule by ID from DuckDB.
+func (r *DuckDBRepository) GetNotificationRule(ctx context.Context, id int64) (*NotificationRule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	query := `SELECT id, name, enabled, severity_min, alert_types, scope, target, cooldown_seconds, channel_targets, created_at, updated_at
+	FROM notification_rules WHERE id = ?`
+	row := r.db.QueryRowContext(ctx, query, id)
+
+	var rule NotificationRule
+	var enabledInt int
+	var alertTypesStr, channelTargetsStr string
+
+	err := row.Scan(
+		&rule.ID,
+		&rule.Name,
+		&enabledInt,
+		&rule.SeverityMin,
+		&alertTypesStr,
+		&rule.Scope,
+		&rule.Target,
+		&rule.CooldownSeconds,
+		&channelTargetsStr,
+		&rule.CreatedAt,
+		&rule.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("notification rule with ID %d not found", id)
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to scan notification rule: %w", err)
+	}
+
+	rule.Enabled = enabledInt != 0
+	_ = json.Unmarshal([]byte(alertTypesStr), &rule.AlertTypes)
+	if rule.AlertTypes == nil {
+		rule.AlertTypes = []string{}
+	}
+	_ = json.Unmarshal([]byte(channelTargetsStr), &rule.ChannelTargets)
+	if rule.ChannelTargets == nil {
+		rule.ChannelTargets = []string{}
+	}
+
+	return &rule, nil
+}
+
+// ListNotificationRules lists all active notification rules from DuckDB.
+func (r *DuckDBRepository) ListNotificationRules(ctx context.Context) ([]NotificationRule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	query := `SELECT id, name, enabled, severity_min, alert_types, scope, target, cooldown_seconds, channel_targets, created_at, updated_at
+	FROM notification_rules ORDER BY name`
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed querying notification rules: %w", err)
+	}
+	defer rows.Close()
+
+	var rules []NotificationRule
+	for rows.Next() {
+		var rule NotificationRule
+		var enabledInt int
+		var alertTypesStr, channelTargetsStr string
+
+		err := rows.Scan(
+			&rule.ID,
+			&rule.Name,
+			&enabledInt,
+			&rule.SeverityMin,
+			&alertTypesStr,
+			&rule.Scope,
+			&rule.Target,
+			&rule.CooldownSeconds,
+			&channelTargetsStr,
+			&rule.CreatedAt,
+			&rule.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan notification rule: %w", err)
+		}
+
+		rule.Enabled = enabledInt != 0
+		_ = json.Unmarshal([]byte(alertTypesStr), &rule.AlertTypes)
+		if rule.AlertTypes == nil {
+			rule.AlertTypes = []string{}
+		}
+		_ = json.Unmarshal([]byte(channelTargetsStr), &rule.ChannelTargets)
+		if rule.ChannelTargets == nil {
+			rule.ChannelTargets = []string{}
+		}
+
+		rules = append(rules, rule)
+	}
+
+	return rules, nil
+}
+
+// SaveNotificationLog records a notification dispatch outcome in DuckDB.
+func (r *DuckDBRepository) SaveNotificationLog(ctx context.Context, l *NotificationLog) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if l.DispatchedAt.IsZero() {
+		l.DispatchedAt = time.Now()
+	}
+
+	query := `INSERT INTO notification_logs (anomaly_id, rule_id, channel, status, error_message, dispatched_at)
+	VALUES (?, ?, ?, ?, ?, ?) RETURNING id`
+	err := r.db.QueryRowContext(ctx, query,
+		l.AnomalyID,
+		l.RuleID,
+		l.Channel,
+		l.Status,
+		l.ErrorMessage,
+		l.DispatchedAt,
+	).Scan(&l.ID)
+	if err != nil {
+		return fmt.Errorf("failed to insert notification log: %w", err)
+	}
+
+	return nil
+}
+
+// ListNotificationLogs returns recent notification logs from DuckDB.
+func (r *DuckDBRepository) ListNotificationLogs(ctx context.Context, limit int) ([]NotificationLog, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 50
+	}
+
+	query := `SELECT id, anomaly_id, rule_id, channel, status, error_message, dispatched_at
+	FROM notification_logs ORDER BY dispatched_at DESC LIMIT ?`
+	rows, err := r.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed querying notification logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []NotificationLog
+	for rows.Next() {
+		var l NotificationLog
+		err := rows.Scan(
+			&l.ID,
+			&l.AnomalyID,
+			&l.RuleID,
+			&l.Channel,
+			&l.Status,
+			&l.ErrorMessage,
+			&l.DispatchedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan notification log: %w", err)
+		}
+		logs = append(logs, l)
+	}
+
+	return logs, nil
+}
+
+// HasRecentNotification checks if a notification for the same rule/IP/type was sent recently in DuckDB.
+func (r *DuckDBRepository) HasRecentNotification(ctx context.Context, ruleID int64, ip string, anomalyType string, since time.Time) (bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	query := `SELECT COUNT(*) FROM notification_logs nl
+	JOIN anomalies a ON nl.anomaly_id = a.id
+	WHERE nl.rule_id = ? AND a.ip = ? AND a.type = ? AND nl.status = 'sent' AND nl.dispatched_at >= ?`
+
+	var count int
+	err := r.db.QueryRowContext(ctx, query, ruleID, ip, anomalyType, since).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to query recent notifications: %w", err)
+	}
+
+	return count > 0, nil
 }
