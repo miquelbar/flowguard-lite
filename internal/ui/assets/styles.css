@@ -377,6 +377,9 @@ body {
     .dashboard-main {
         grid-template-columns: 360px 1fr;
     }
+    .view-content {
+        grid-column: 1 / -1;
+    }
     .device-split-layout,
     .split-layout {
         grid-template-columns: 1fr 400px !important;
@@ -2697,4 +2700,9 @@ body.dark-mode .compact-table th {
 }
 .device-alert-item.sev-low {
     border-left-color: var(--success-color) !important;
+}
+
+/* Audit Log Table Expansion override */
+#view-audit .table-container {
+    max-height: 80vh !important;
 }
