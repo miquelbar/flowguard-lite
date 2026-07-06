@@ -367,16 +367,25 @@ document.addEventListener("DOMContentLoaded", async () => {
             const backend = document.getElementById("wizard-backend").value;
             const subnets = subnetsVal.split(",").map(s => s.trim()).filter(s => s !== "");
             
+            const netflowVal = parseInt(document.getElementById("wizard-netflow").value, 10) || 2055;
+            const sflowVal = parseInt(document.getElementById("wizard-sflow").value, 10) || 6343;
+            
             const payload = {
                 port: "8080",
-                netflow_port: 2055,
-                sflow_port: 6343,
+                netflow_port: netflowVal,
+                sflow_port: sflowVal,
                 storage_dir: "/data",
                 log_level: "info",
                 environment: "production",
                 local_subnets: subnets,
                 storage_backend: backend,
-                first_run_completed: true
+                first_run_completed: true,
+                retention_days: 7,
+                ddos_threshold_pps: 5000,
+                ddos_threshold_bps: 10485760,
+                syn_flood_threshold_pps: 1000,
+                udp_flood_threshold_pps: 3000,
+                icmp_flood_threshold_pps: 500
             };
             
             try {
