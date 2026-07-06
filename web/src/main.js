@@ -57,7 +57,7 @@ function hideAuthOverlay() {
     if (authOverlay) authOverlay.classList.add("hidden");
 }
 
-async function loadData() {
+async function loadData(isManualRefresh = false) {
     const btnRefresh = document.getElementById("btn-refresh");
     const refreshIcon = btnRefresh ? btnRefresh.querySelector("svg") : null;
     if (btnRefresh) {
@@ -134,8 +134,14 @@ async function loadData() {
             state.auditLogsData = await api.fetchAuditLogs().catch(() => []);
             renderAuditView();
         } else if (state.activeView === "settings") {
-            state.settingsData = await api.fetchSettings().catch(() => null);
-            renderSettingsView();
+            // Settings are configuration data, not live telemetry.
+            // Only load once when first entering the view (triggered by the router),
+            // or explicitly via the manual refresh button. Never auto-refresh,
+            // because it would clobber in-progress form edits.
+            if (!state.settingsData || isManualRefresh) {
+                state.settingsData = await api.fetchSettings().catch(() => null);
+                renderSettingsView();
+            }
         }
     } finally {
         if (btnRefresh) {
@@ -177,7 +183,14 @@ window.addEventListener("viewchange", (e) => {
     if (workspaceTitle) workspaceTitle.textContent = title[0];
     if (workspaceSubtitle) workspaceSubtitle.textContent = title[1];
 
-    loadData();
+    // When leaving settings, clear cached data so next visit always fetches fresh config.
+    // When entering settings via navigation, treat it as a manual (forced) load.
+    const isEnteringSettings = viewName === "settings";
+    if (!isEnteringSettings && state.settingsData) {
+        state.settingsData = null;
+    }
+
+    loadData(isEnteringSettings);
 });
 
 function applyStoredShellPreferences() {
@@ -302,7 +315,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const btnRefresh = document.getElementById("btn-refresh");
     if (btnRefresh) {
         btnRefresh.addEventListener("click", () => {
-            loadData();
+            loadData(true);
         });
     }
 
