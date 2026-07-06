@@ -91,6 +91,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnAuthSubmit = document.getElementById("btn-auth-submit");
     let authMode = "login";
     
+    // Unsaved settings tracking
+    const unsavedChanges = {
+        access: false,
+        network: false,
+        collectors: false,
+        storage: false,
+        thresholds: false,
+        notifications: false,
+        system: false
+    };
+    
     // Stats elements
     const valPackets = document.getElementById("val-packets");
     const valDrops = document.getElementById("val-drops");
@@ -2311,6 +2322,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function switchView(viewName, ip = null) {
+        // Check unsaved changes before switching view
+        const hasUnsaved = Object.keys(unsavedChanges).some(k => unsavedChanges[k]);
+        if (hasUnsaved && viewName !== "settings") {
+            if (!confirm("You have unsaved changes in Settings. Do you want to discard them?")) {
+                // Revert hash back to settings route
+                window.location.hash = "#/settings";
+                return;
+            }
+            // User confirmed discard: clear unsaved states
+            Object.keys(unsavedChanges).forEach(k => markUnsaved(k, false));
+        }
+
         activeView = viewName;
         if (ip) {
             selectedDeviceIP = ip;
@@ -2546,6 +2569,95 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     let settingsData = null;
+    let activeSettingsSection = "access";
+
+    function getSettingsSectionLabel(sec) {
+        const labels = {
+            access: "Access Control",
+            network: "Network Settings",
+            collectors: "Collectors Setup",
+            storage: "Storage & Retention",
+            thresholds: "Detection Thresholds",
+            notifications: "Notifications & Routing",
+            system: "System Settings"
+        };
+        return labels[sec] || sec;
+    }
+
+    function updateSettingsNavActive(sec) {
+        document.querySelectorAll(".settings-nav .settings-nav-link").forEach(link => {
+            if (link.getAttribute("data-section") === sec) {
+                link.classList.add("active");
+            } else {
+                link.classList.remove("active");
+            }
+        });
+    }
+
+    function switchSettingsSection(section) {
+        if (unsavedChanges[activeSettingsSection]) {
+            if (!confirm(`You have unsaved changes in the ${getSettingsSectionLabel(activeSettingsSection)} section. Do you want to discard them?`)) {
+                updateSettingsNavActive(activeSettingsSection);
+                return;
+            }
+            markUnsaved(activeSettingsSection, false);
+        }
+
+        activeSettingsSection = section;
+
+        document.querySelectorAll(".settings-main .settings-card").forEach(card => {
+            const id = card.getAttribute("id");
+            if (id === `settings-${section}`) {
+                card.classList.remove("hidden");
+            } else {
+                card.classList.add("hidden");
+            }
+        });
+
+        updateSettingsNavActive(section);
+    }
+
+    function markUnsaved(section, isUnsaved) {
+        unsavedChanges[section] = isUnsaved;
+        const card = document.getElementById(`settings-${section}`);
+        if (!card) return;
+        
+        let badge = card.querySelector(".unsaved-badge");
+        if (isUnsaved) {
+            if (!badge) {
+                badge = document.createElement("span");
+                badge.className = "badge badge-warning unsaved-badge";
+                badge.style.marginLeft = "0.5rem";
+                badge.style.fontSize = "0.7rem";
+                badge.style.background = "#fb923c";
+                badge.style.color = "#fff";
+                badge.style.borderRadius = "4px";
+                badge.style.padding = "0.1rem 0.3rem";
+                badge.textContent = "Unsaved Changes";
+                const h3 = card.querySelector(".settings-card-header h3");
+                if (h3) h3.appendChild(badge);
+            }
+            const navLink = document.querySelector(`.settings-nav a[data-section="${section}"]`);
+            if (navLink && !navLink.querySelector(".unsaved-dot")) {
+                const dot = document.createElement("span");
+                dot.className = "unsaved-dot";
+                dot.style.display = "inline-block";
+                dot.style.width = "6px";
+                dot.style.height = "6px";
+                dot.style.background = "#fb923c";
+                dot.style.borderRadius = "50%";
+                dot.style.marginLeft = "0.5rem";
+                navLink.appendChild(dot);
+            }
+        } else {
+            if (badge) badge.remove();
+            const navLink = document.querySelector(`.settings-nav a[data-section="${section}"]`);
+            if (navLink) {
+                const dot = navLink.querySelector(".unsaved-dot");
+                if (dot) dot.remove();
+            }
+        }
+    }
 
     async function fetchSettings() {
         try {
@@ -2569,16 +2681,32 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             // Populate settings inputs
+            document.getElementById("setting-access-password").value = "";
+            document.getElementById("setting-access-confirm").value = "";
+            document.getElementById("setting-port").value = settingsData.port || "8080";
             document.getElementById("setting-subnets").value = settingsData.local_subnets.join(", ");
             document.getElementById("setting-netflow").value = settingsData.netflow_port;
             document.getElementById("setting-sflow").value = settingsData.sflow_port;
+            document.getElementById("setting-suricata-path").value = settingsData.suricata_eve_path || "";
+            document.getElementById("setting-storage-dir").value = settingsData.storage_dir || "/data";
             document.getElementById("setting-backend").value = settingsData.storage_backend;
+            document.getElementById("setting-retention").value = settingsData.retention_days || 7;
+            document.getElementById("setting-threshold-pps").value = settingsData.ddos_threshold_pps || 5000;
+            document.getElementById("setting-threshold-bps").value = settingsData.ddos_threshold_bps || 10000000;
+            document.getElementById("setting-threshold-syn").value = settingsData.syn_flood_threshold_pps || 1000;
+            document.getElementById("setting-threshold-udp").value = settingsData.udp_flood_threshold_pps || 3000;
+            document.getElementById("setting-threshold-icmp").value = settingsData.icmp_flood_threshold_pps || 500;
             document.getElementById("setting-webhook-url").value = settingsData.webhook_url;
             document.getElementById("setting-webhook-format").value = settingsData.webhook_format;
             document.getElementById("setting-telegram-enabled").checked = settingsData.telegram_enabled;
             document.getElementById("setting-telegram-token").value = settingsData.telegram_token || "";
             document.getElementById("setting-telegram-chat-id").value = settingsData.telegram_chat_id || "";
+            document.getElementById("setting-loglevel").value = settingsData.log_level || "info";
+            document.getElementById("setting-env").value = settingsData.environment || "production";
             renderWebhookHeaders(settingsData.webhook_headers || {});
+
+            // Clear any unsaved changes badges
+            Object.keys(unsavedChanges).forEach(k => markUnsaved(k, false));
         } catch (err) {
             console.error("Error fetching settings: ", err);
         }
@@ -2597,43 +2725,112 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             
             let note = "";
-            if (settingsData && (payload.netflow_port !== settingsData.netflow_port || payload.sflow_port !== settingsData.sflow_port)) {
-                note = " (Note: Port changes require a daemon restart to take effect)";
+            if (settingsData && (
+                payload.port !== settingsData.port ||
+                payload.netflow_port !== settingsData.netflow_port ||
+                payload.sflow_port !== settingsData.sflow_port ||
+                payload.storage_dir !== settingsData.storage_dir ||
+                payload.storage_backend !== settingsData.storage_backend
+            )) {
+                note = " (Note: Port, directory, and backend changes require a daemon restart)";
             }
-            showToast("Settings saved." + note);
+            showToast("Settings saved successfully." + note);
             await fetchSettings();
         } catch (err) {
             showToast("Settings save failed: " + err.message, "error");
+            throw err;
         }
     }
+
+    // Settings Access Form Submit
+    document.getElementById("form-settings-access").addEventListener("submit", (e) => {
+        e.preventDefault();
+        if (!settingsData) return;
+        const password = document.getElementById("setting-access-password").value;
+        const confirm = document.getElementById("setting-access-confirm").value;
+        if (password !== confirm) {
+            showToast("Passwords do not match", "error");
+            return;
+        }
+        if (password.length > 0 && password.length < 10) {
+            showToast("Password must be at least 10 characters long", "error");
+            return;
+        }
+        const payload = {
+            ...settingsData,
+            admin_password: password
+        };
+        saveSettings(payload).then(() => {
+            markUnsaved("access", false);
+            document.getElementById("setting-access-password").value = "";
+            document.getElementById("setting-access-confirm").value = "";
+        }).catch(() => {});
+    });
 
     // Settings Network Form Submit
     document.getElementById("form-settings-network").addEventListener("submit", (e) => {
         e.preventDefault();
         if (!settingsData) return;
+        const port = document.getElementById("setting-port").value.trim();
         const subnets = document.getElementById("setting-subnets").value.split(",").map(s => s.trim()).filter(s => s !== "");
-        const netflow = parseInt(document.getElementById("setting-netflow").value, 10);
-        const sflow = parseInt(document.getElementById("setting-sflow").value, 10);
-        
         const payload = {
             ...settingsData,
-            local_subnets: subnets,
-            netflow_port: netflow,
-            sflow_port: sflow
+            port: port,
+            local_subnets: subnets
         };
-        saveSettings(payload);
+        saveSettings(payload).then(() => markUnsaved("network", false)).catch(() => {});
+    });
+
+    // Settings Collectors Form Submit
+    document.getElementById("form-settings-collectors").addEventListener("submit", (e) => {
+        e.preventDefault();
+        if (!settingsData) return;
+        const netflow = parseInt(document.getElementById("setting-netflow").value, 10);
+        const sflow = parseInt(document.getElementById("setting-sflow").value, 10);
+        const suricata = document.getElementById("setting-suricata-path").value.trim();
+        const payload = {
+            ...settingsData,
+            netflow_port: netflow,
+            sflow_port: sflow,
+            suricata_eve_path: suricata
+        };
+        saveSettings(payload).then(() => markUnsaved("collectors", false)).catch(() => {});
     });
 
     // Settings Storage Form Submit
     document.getElementById("form-settings-storage").addEventListener("submit", (e) => {
         e.preventDefault();
         if (!settingsData) return;
+        const dir = document.getElementById("setting-storage-dir").value.trim();
         const backend = document.getElementById("setting-backend").value;
+        const retention = parseInt(document.getElementById("setting-retention").value, 10);
         const payload = {
             ...settingsData,
-            storage_backend: backend
+            storage_dir: dir,
+            storage_backend: backend,
+            retention_days: retention
         };
-        saveSettings(payload);
+        saveSettings(payload).then(() => markUnsaved("storage", false)).catch(() => {});
+    });
+
+    // Settings Thresholds Form Submit
+    document.getElementById("form-settings-thresholds").addEventListener("submit", (e) => {
+        e.preventDefault();
+        if (!settingsData) return;
+        const pps = parseInt(document.getElementById("setting-threshold-pps").value, 10);
+        const bps = parseInt(document.getElementById("setting-threshold-bps").value, 10);
+        const syn = parseInt(document.getElementById("setting-threshold-syn").value, 10);
+        const udp = parseInt(document.getElementById("setting-threshold-udp").value, 10);
+        const icmp = parseInt(document.getElementById("setting-threshold-icmp").value, 10);
+        const payload = {
+            ...settingsData,
+            ddos_threshold_pps: pps,
+            ddos_threshold_bps: bps,
+            syn_flood_threshold_pps: syn,
+            udp_flood_threshold_pps: udp,
+            icmp_flood_threshold_pps: icmp
+        };
+        saveSettings(payload).then(() => markUnsaved("thresholds", false)).catch(() => {});
     });
 
     // Settings Webhook Form Submit
@@ -2665,8 +2862,78 @@ document.addEventListener("DOMContentLoaded", () => {
             telegram_token: tgToken,
             telegram_chat_id: tgChatId
         };
-        saveSettings(payload);
+        saveSettings(payload).then(() => markUnsaved("notifications", false)).catch(() => {});
     });
+
+    // Settings System Form Submit
+    document.getElementById("form-settings-system").addEventListener("submit", (e) => {
+        e.preventDefault();
+        if (!settingsData) return;
+        const loglevel = document.getElementById("setting-loglevel").value;
+        const env = document.getElementById("setting-env").value;
+        const payload = {
+            ...settingsData,
+            log_level: loglevel,
+            environment: env
+        };
+        saveSettings(payload).then(() => markUnsaved("system", false)).catch(() => {});
+    });
+
+    // Bind settings navigation links
+    document.querySelectorAll(".settings-nav .settings-nav-link").forEach(link => {
+        link.addEventListener("click", (e) => {
+            e.preventDefault();
+            const sec = link.getAttribute("data-section");
+            if (sec === "policies" || sec === "integrations") {
+                if (unsavedChanges[activeSettingsSection]) {
+                    if (!confirm(`You have unsaved changes in the ${getSettingsSectionLabel(activeSettingsSection)} section. Do you want to discard them?`)) {
+                        return;
+                    }
+                    markUnsaved(activeSettingsSection, false);
+                }
+                if (sec === "policies") {
+                    window.location.hash = "#/policies";
+                } else {
+                    activeSettingsSection = sec;
+                    document.querySelectorAll(".settings-main .settings-card").forEach(c => {
+                        if (c.getAttribute("id") === "settings-integrations") {
+                            c.classList.remove("hidden");
+                        } else {
+                            c.classList.add("hidden");
+                        }
+                    });
+                    updateSettingsNavActive(sec);
+                }
+            } else {
+                switchSettingsSection(sec);
+            }
+        });
+    });
+
+    // Setup input change event listeners
+    const formsToTrack = [
+        { id: "form-settings-access", name: "access" },
+        { id: "form-settings-network", name: "network" },
+        { id: "form-settings-collectors", name: "collectors" },
+        { id: "form-settings-storage", name: "storage" },
+        { id: "form-settings-thresholds", name: "thresholds" },
+        { id: "form-settings-webhook", name: "notifications" },
+        { id: "form-settings-system", name: "system" }
+    ];
+    formsToTrack.forEach(sec => {
+        const form = document.getElementById(sec.id);
+        if (form) {
+            form.querySelectorAll("input, select, textarea").forEach(input => {
+                input.addEventListener("input", () => markUnsaved(sec.name, true));
+                input.addEventListener("change", () => markUnsaved(sec.name, true));
+            });
+        }
+    });
+
+    const btnAddWebhookHeader = document.getElementById("btn-add-webhook-header");
+    if (btnAddWebhookHeader) {
+        btnAddWebhookHeader.addEventListener("click", () => markUnsaved("notifications", true));
+    }
 
     // Settings Test Alert Click
     document.getElementById("btn-test-alert").addEventListener("click", async () => {

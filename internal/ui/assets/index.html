@@ -975,110 +975,266 @@
         <div id="view-settings" class="view-content">
             <div class="settings-container">
                 <aside class="settings-nav">
-                    <a href="#settings-network">Network</a>
-                    <a href="#settings-storage">Storage</a>
-                    <a href="#settings-notifications">Notifications</a>
+                    <a href="#settings-access" class="settings-nav-link active" data-section="access">Access Control</a>
+                    <a href="#settings-network" class="settings-nav-link" data-section="network">Network Settings</a>
+                    <a href="#settings-collectors" class="settings-nav-link" data-section="collectors">Collectors Setup</a>
+                    <a href="#settings-storage" class="settings-nav-link" data-section="storage">Storage & Retention</a>
+                    <a href="#settings-thresholds" class="settings-nav-link" data-section="thresholds">Detection Thresholds</a>
+                    <a href="#settings-policies" class="settings-nav-link" data-section="policies">Silence Policies</a>
+                    <a href="#settings-notifications" class="settings-nav-link" data-section="notifications">Notifications & Routing</a>
+                    <a href="#settings-integrations" class="settings-nav-link" data-section="integrations">Integrations</a>
+                    <a href="#settings-system" class="settings-nav-link" data-section="system">System Settings</a>
                 </aside>
 
                 <div class="settings-main">
-                <section id="settings-network" class="settings-card">
-                    <div class="settings-card-header">
-                        <h3>Network</h3>
-                        <p>Local CIDR ranges and UDP collector ports</p>
-                    </div>
-                    <form id="form-settings-network">
-                        <div class="form-group" style="margin-bottom: 1rem;">
-                            <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Local Subnets (comma-separated)</label>
-                            <input type="text" id="setting-subnets" class="form-control" style="width: 100%;" required>
+                    <!-- 1. Access Control -->
+                    <section id="settings-access" class="settings-card">
+                        <div class="settings-card-header">
+                            <h3>Access Control</h3>
+                            <p>Update administrator security credentials</p>
                         </div>
-                        <div class="form-row" style="margin-bottom: 1rem;">
-                            <div class="form-group">
-                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">NetFlow Port</label>
-                                <input type="number" id="setting-netflow" class="form-control" style="width: 100%;" required>
-                            </div>
-                            <div class="form-group">
-                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">sFlow Port</label>
-                                <input type="number" id="setting-sflow" class="form-control" style="width: 100%;" required>
-                            </div>
-                        </div>
-                        <div class="settings-actions">
-                            <button type="submit" class="btn-primary">Save Network</button>
-                        </div>
-                    </form>
-                </section>
-
-                <section id="settings-storage" class="settings-card">
-                    <div class="settings-card-header">
-                        <h3>Storage</h3>
-                        <p>Database backend and retention settings</p>
-                    </div>
-                    <form id="form-settings-storage">
-                        <div class="form-group" style="margin-bottom: 1rem;">
-                            <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Storage Backend</label>
-                            <select id="setting-backend" class="form-control" style="width: 100%;">
-                                <option value="sqlite">SQLite (Daily shards)</option>
-                                <option value="duckdb">DuckDB (Single analytical file)</option>
-                            </select>
-                        </div>
-                        <div class="form-group" style="margin-bottom: 1rem;">
-                            <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Data Retention (Days)</label>
-                            <input type="number" id="setting-retention" class="form-control" style="width: 100%;" value="7" required>
-                        </div>
-                        <div class="settings-actions">
-                            <button type="submit" class="btn-primary">Save Storage</button>
-                        </div>
-                    </form>
-                </section>
-
-                <section id="settings-notifications" class="settings-card">
-                    <div class="settings-card-header">
-                        <h3>Notifications</h3>
-                        <p>Outbound webhooks and Telegram delivery</p>
-                    </div>
-                    <form id="form-settings-webhook">
-                        <div class="form-group" style="margin-bottom: 1rem;">
-                            <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Webhook URL</label>
-                            <input type="url" id="setting-webhook-url" class="form-control" style="width: 100%;" placeholder="https://hooks.slack.com/...">
-                        </div>
-                        <div class="form-group" style="margin-bottom: 1rem;">
-                            <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Webhook Format</label>
-                            <select id="setting-webhook-format" class="form-control" style="width: 100%;">
-                                <option value="generic">Generic JSON Payload</option>
-                                <option value="slack">Slack / Discord Compatible</option>
-                                <option value="telegram">Telegram Bot Compatible</option>
-                            </select>
-                        </div>
-
-                        <div style="border-top: 1px solid var(--border-color); margin: 1.5rem 0; padding-top: 1rem;">
-                            <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);">Custom Webhook Headers (Authentication)</h4>
-                            <p class="text-muted" style="font-size: 0.75rem; margin-bottom: 0.75rem; line-height: 1.25;">Add custom headers for webhook auth (e.g., Key: <code>Authorization</code>, Value: <code>Bearer token123</code>)</p>
-                            <div id="webhook-headers-list" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem;">
-                                <!-- Dynamically inserted header rows -->
-                            </div>
-                            <button type="button" id="btn-add-webhook-header" class="btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; width: auto; align-self: flex-start; height: auto;">Add Header</button>
-                        </div>
-
-                        <div style="border-top: 1px solid var(--border-color); margin: 1.5rem 0; padding-top: 1rem;">
-                            <div class="form-group" style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                                <input type="checkbox" id="setting-telegram-enabled" style="width: auto; cursor: pointer;">
-                                <label for="setting-telegram-enabled" style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0; cursor: pointer; user-select: none;">Enable Direct Telegram Bot Alerts</label>
+                        <form id="form-settings-access">
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">New Admin Password</label>
+                                <input type="password" id="setting-access-password" class="form-control" style="width: 100%;" placeholder="Leave blank to keep current password">
+                                <p class="text-muted" style="font-size: 0.72rem; margin-top: 0.25rem;">Must be at least 10 characters long.</p>
                             </div>
                             <div class="form-group" style="margin-bottom: 1rem;">
-                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Telegram Bot Token</label>
-                                <input type="text" id="setting-telegram-token" class="form-control" style="width: 100%;" placeholder="e.g. 123456789:ABCdef...">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Confirm New Password</label>
+                                <input type="password" id="setting-access-confirm" class="form-control" style="width: 100%;" placeholder="Re-type new password">
                             </div>
-                            <div class="form-group" style="margin-bottom: 1.5rem;">
-                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Telegram Chat ID</label>
-                                <input type="text" id="setting-telegram-chat-id" class="form-control" style="width: 100%;" placeholder="e.g. -100123456789">
+                            <div class="settings-actions">
+                                <button type="submit" class="btn-primary">Update Password</button>
                             </div>
-                        </div>
+                        </form>
+                    </section>
 
-                        <div class="settings-actions">
-                            <button type="submit" class="btn-primary">Save Notifications</button>
-                            <button type="button" id="btn-test-alert" class="btn-secondary">Send Test Alert</button>
+                    <!-- 2. Network Settings -->
+                    <section id="settings-network" class="settings-card hidden">
+                        <div class="settings-card-header">
+                            <h3>Network Settings</h3>
+                            <p>Web server configurations and local IP subnets scope</p>
                         </div>
-                    </form>
-                </section>
+                        <form id="form-settings-network">
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">HTTP Web Port</label>
+                                <input type="number" id="setting-port" class="form-control" style="width: 100%;" required>
+                                <p class="text-muted" style="font-size: 0.72rem; margin-top: 0.25rem; color: var(--color-warning) !important;">Note: Modifying this port requires a daemon restart.</p>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Local Subnets (comma-separated CIDRs)</label>
+                                <input type="text" id="setting-subnets" class="form-control" style="width: 100%;" required>
+                            </div>
+                            <div class="settings-actions">
+                                <button type="submit" class="btn-primary">Save Network</button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <!-- 3. Collectors Setup -->
+                    <section id="settings-collectors" class="settings-card hidden">
+                        <div class="settings-card-header">
+                            <h3>Collectors Setup</h3>
+                            <p>Telemetry collector ports and Suricata ingestion settings</p>
+                        </div>
+                        <form id="form-settings-collectors">
+                            <div class="form-row" style="margin-bottom: 1rem;">
+                                <div class="form-group">
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">NetFlow Port</label>
+                                    <input type="number" id="setting-netflow" class="form-control" style="width: 100%;" required>
+                                    <p class="text-muted" style="font-size: 0.72rem; margin-top: 0.25rem; color: var(--color-warning) !important;">Requires daemon restart.</p>
+                                </div>
+                                <div class="form-group">
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">sFlow Port</label>
+                                    <input type="number" id="setting-sflow" class="form-control" style="width: 100%;" required>
+                                    <p class="text-muted" style="font-size: 0.72rem; margin-top: 0.25rem; color: var(--color-warning) !important;">Requires daemon restart.</p>
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Suricata eve.json Log Path</label>
+                                <input type="text" id="setting-suricata-path" class="form-control" style="width: 100%;" placeholder="e.g. /var/log/suricata/eve.json">
+                                <p class="text-muted" style="font-size: 0.72rem; margin-top: 0.25rem;">Leave empty if Suricata telemetry is disabled.</p>
+                            </div>
+                            <div class="settings-actions">
+                                <button type="submit" class="btn-primary">Save Collectors</button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <!-- 4. Storage & Retention -->
+                    <section id="settings-storage" class="settings-card hidden">
+                        <div class="settings-card-header">
+                            <h3>Storage & Retention</h3>
+                            <p>Database storage backend and logs retention configuration</p>
+                        </div>
+                        <form id="form-settings-storage">
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Database Storage Directory</label>
+                                <input type="text" id="setting-storage-dir" class="form-control" style="width: 100%;" required>
+                                <p class="text-muted" style="font-size: 0.72rem; margin-top: 0.25rem; color: var(--color-warning) !important;">Requires daemon restart.</p>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Storage Backend</label>
+                                <select id="setting-backend" class="form-control" style="width: 100%;">
+                                    <option value="sqlite">SQLite (Daily shards)</option>
+                                    <option value="duckdb">DuckDB (Single analytical file)</option>
+                                </select>
+                                <p class="text-muted" style="font-size: 0.72rem; margin-top: 0.25rem; color: var(--color-warning) !important;">Requires daemon restart.</p>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Data Retention (Days)</label>
+                                <input type="number" id="setting-retention" class="form-control" style="width: 100%;" min="1" required>
+                                <p class="text-muted" style="font-size: 0.72rem; margin-top: 0.25rem;">Pruning tasks execute dynamically every 24 hours.</p>
+                            </div>
+                            <div class="settings-actions">
+                                <button type="submit" class="btn-primary">Save Storage</button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <!-- 5. Detection Thresholds -->
+                    <section id="settings-thresholds" class="settings-card hidden">
+                        <div class="settings-card-header">
+                            <h3>Detection Thresholds</h3>
+                            <p>Global volumetric DDoS and flood trigger thresholds</p>
+                        </div>
+                        <form id="form-settings-thresholds">
+                            <div class="form-row" style="margin-bottom: 1rem;">
+                                <div class="form-group">
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">DDoS PPS Threshold</label>
+                                    <input type="number" id="setting-threshold-pps" class="form-control" style="width: 100%;" min="1" required>
+                                </div>
+                                <div class="form-group">
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">DDoS BPS Threshold (bytes/sec)</label>
+                                    <input type="number" id="setting-threshold-bps" class="form-control" style="width: 100%;" min="1" required>
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">SYN Flood PPS Threshold</label>
+                                <input type="number" id="setting-threshold-syn" class="form-control" style="width: 100%;" min="1" required>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">UDP Flood PPS Threshold</label>
+                                <input type="number" id="setting-threshold-udp" class="form-control" style="width: 100%;" min="1" required>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">ICMP Flood PPS Threshold</label>
+                                <input type="number" id="setting-threshold-icmp" class="form-control" style="width: 100%;" min="1" required>
+                            </div>
+                            <div class="settings-actions">
+                                <button type="submit" class="btn-primary">Save Thresholds</button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <!-- 6. Silence Policies -->
+                    <section id="settings-policies" class="settings-card hidden">
+                        <div class="settings-card-header">
+                            <h3>Silence Policies</h3>
+                            <p>Silence, ignore, and override detection rules by subnet, IP, or type</p>
+                        </div>
+                        <div style="padding: 1rem 1.1rem;">
+                            <p class="text-muted" style="font-size: 0.813rem; margin-bottom: 1.25rem; line-height: 1.45;">Manage your active alert silence overrides, scope hierarchies (IP > Subnet > Type > Global), and rule expirations in the dedicated Policies manager.</p>
+                            <a href="#/policies" class="btn-primary" style="display: inline-block; text-decoration: none; width: auto; line-height: 1.4; text-align: center;">Open Policies Manager</a>
+                        </div>
+                    </section>
+
+                    <!-- 7. Notifications & Routing -->
+                    <section id="settings-notifications" class="settings-card hidden">
+                        <div class="settings-card-header">
+                            <h3>Notifications & Routing</h3>
+                            <p>Outbound webhook credentials and Telegram configuration</p>
+                        </div>
+                        <form id="form-settings-webhook">
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Webhook URL</label>
+                                <input type="url" id="setting-webhook-url" class="form-control" style="width: 100%;" placeholder="https://hooks.slack.com/...">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Webhook Format</label>
+                                <select id="setting-webhook-format" class="form-control" style="width: 100%;">
+                                    <option value="generic">Generic JSON Payload</option>
+                                    <option value="slack">Slack / Discord Compatible</option>
+                                    <option value="telegram">Telegram Bot Compatible</option>
+                                </select>
+                            </div>
+
+                            <div style="border-top: 1px solid var(--border-color); margin: 1.5rem 0; padding-top: 1rem;">
+                                <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);">Custom Webhook Headers (Authentication)</h4>
+                                <p class="text-muted" style="font-size: 0.75rem; margin-bottom: 0.75rem; line-height: 1.25;">Add custom headers for webhook auth (e.g., Key: <code>Authorization</code>, Value: <code>Bearer token123</code>)</p>
+                                <div id="webhook-headers-list" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                    <!-- Dynamically inserted header rows -->
+                                </div>
+                                <button type="button" id="btn-add-webhook-header" class="btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; width: auto; align-self: flex-start; height: auto;">Add Header</button>
+                            </div>
+
+                            <div style="border-top: 1px solid var(--border-color); margin: 1.5rem 0; padding-top: 1rem;">
+                                <div class="form-group" style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                    <input type="checkbox" id="setting-telegram-enabled" style="width: auto; cursor: pointer;">
+                                    <label for="setting-telegram-enabled" style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0; cursor: pointer; user-select: none;">Enable Direct Telegram Bot Alerts</label>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 1rem;">
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Telegram Bot Token</label>
+                                    <input type="password" id="setting-telegram-token" class="form-control" style="width: 100%;" placeholder="e.g. 123456789:ABCdef...">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 1.5rem;">
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Telegram Chat ID</label>
+                                    <input type="text" id="setting-telegram-chat-id" class="form-control" style="width: 100%;" placeholder="e.g. -100123456789">
+                                </div>
+                            </div>
+
+                            <div class="settings-actions">
+                                <button type="submit" class="btn-primary">Save Notifications</button>
+                                <button type="button" id="btn-test-alert" class="btn-secondary">Send Test Alert</button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <!-- 8. Integrations -->
+                    <section id="settings-integrations" class="settings-card hidden">
+                        <div class="settings-card-header">
+                            <h3>Integrations</h3>
+                            <p>Router exporter setup references and documentation</p>
+                        </div>
+                        <div style="padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.813rem;">
+                            <p class="text-muted" style="line-height: 1.45;">Integrate FlowGuard Lite with your edge networking equipment using the linked guides:</p>
+                            <ul style="margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.4rem; color: var(--text-primary);">
+                                <li><a href="https://github.com/flowguard/flowguard/blob/main/docs/collectors/unifi.md" target="_blank" style="color: var(--color-primary); text-decoration: underline;">UniFi IPFIX/NetFlow Setup Guide</a></li>
+                                <li><a href="https://github.com/flowguard/flowguard/blob/main/docs/collectors/mikrotik.md" target="_blank" style="color: var(--color-primary); text-decoration: underline;">MikroTik Traffic-Flow Setup Guide</a></li>
+                                <li><a href="https://github.com/flowguard/flowguard/blob/main/docs/collectors/pfsense.md" target="_blank" style="color: var(--color-primary); text-decoration: underline;">OPNsense / pfSense NetFlow Exporter Guide</a></li>
+                                <li><a href="https://github.com/flowguard/flowguard/blob/main/docs/collectors/suricata.md" target="_blank" style="color: var(--color-primary); text-decoration: underline;">Suricata EVE JSON Alert Guide</a></li>
+                            </ul>
+                        </div>
+                    </section>
+
+                    <!-- 9. System Settings -->
+                    <section id="settings-system" class="settings-card hidden">
+                        <div class="settings-card-header">
+                            <h3>System Settings</h3>
+                            <p>Global debugging configs and logging levels</p>
+                        </div>
+                        <form id="form-settings-system">
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Daemon Log Level</label>
+                                <select id="setting-loglevel" class="form-control" style="width: 100%;">
+                                    <option value="debug">Debug (Verbose trace logs)</option>
+                                    <option value="info">Info (Standard events)</option>
+                                    <option value="warn">Warn (Only warnings/errors)</option>
+                                    <option value="error">Error (Only errors)</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Environment Mode</label>
+                                <select id="setting-env" class="form-control" style="width: 100%;">
+                                    <option value="production">Production</option>
+                                    <option value="development">Development (Mocked outputs)</option>
+                                </select>
+                            </div>
+                            <div class="settings-actions">
+                                <button type="submit" class="btn-primary">Save System</button>
+                            </div>
+                        </form>
+                    </section>
                 </div>
             </div>
         </div>

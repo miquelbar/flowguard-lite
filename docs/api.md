@@ -236,9 +236,17 @@ Returns the active configuration schema.
   "webhook_url": "https://hooks.slack.com/...",
   "webhook_format": "slack",
   "webhook_headers": {
-    "Authorization": "Bearer test"
+    "Authorization": "******"
   },
-  "first_run_completed": true
+  "first_run_completed": true,
+  "retention_days": 7,
+  "ddos_threshold_pps": 5000,
+  "ddos_threshold_bps": 10485760,
+  "syn_flood_threshold_pps": 1000,
+  "udp_flood_threshold_pps": 3000,
+  "icmp_flood_threshold_pps": 500,
+  "suricata_eve_path": "/var/log/suricata/eve.json",
+  "admin_password": ""
 }
 ```
 

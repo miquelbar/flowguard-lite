@@ -61,10 +61,28 @@ func main() {
 	// Traps conditional developer database seeding flag
 	handleSeed(repo, log, cfg, *configPath)
 
-	// Run storage retention cleanup once on startup (7-day default limit)
-	if err := repo.CleanupRetention(7); err != nil {
+	// Run storage retention cleanup once on startup
+	if err := repo.CleanupRetention(cfg.RetentionDays); err != nil {
 		log.Warn("Failed to execute initial retention cleanup", slog.String("error", err.Error()))
 	}
+
+	// Start periodic background retention pruner (every 24 hours)
+	prunerCtx, prunerCancel := context.WithCancel(context.Background())
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				log.Info("Running daily storage retention cleanup...", slog.Int("retention_days", cfg.RetentionDays))
+				if err := repo.CleanupRetention(cfg.RetentionDays); err != nil {
+					log.Warn("Failed to execute periodic retention cleanup", slog.String("error", err.Error()))
+				}
+			case <-prunerCtx.Done():
+				return
+			}
+		}
+	}()
 
 	// 5. Initialize Flow Aggregator with transactional SQLite repository
 	agg := storage.NewFlowAggregator(repo, log, 15*time.Second)
@@ -170,6 +188,7 @@ func main() {
 	case err := <-serverErrChan:
 		log.Error("HTTP server stopped unexpectedly", slog.String("error", err.Error()))
 		baselineCancel()
+		prunerCancel()
 		if suricataTailer != nil {
 			suricataTailer.Shutdown()
 		}
@@ -185,6 +204,7 @@ func main() {
 
 		// Stop baseline calculations
 		baselineCancel()
+		prunerCancel()
 
 		// Create a timeout context for shutdown operations (e.g., 5 seconds)
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

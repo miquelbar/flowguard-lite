@@ -35,6 +35,7 @@ type Config struct {
 	FirstRunCompleted     bool              `yaml:"first_run_completed"`
 	AdminPasswordHash     string            `yaml:"admin_password_hash"`
 	SessionSecret         string            `yaml:"session_secret"`
+	RetentionDays         int               `yaml:"retention_days"`
 }
 
 // DefaultConfig returns the default configuration settings.
@@ -63,6 +64,7 @@ func DefaultConfig() *Config {
 		FirstRunCompleted:     false,
 		AdminPasswordHash:     "",
 		SessionSecret:         "",
+		RetentionDays:         7,
 	}
 }
 
@@ -140,6 +142,11 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if val := os.Getenv("FLOWGUARD_SESSION_SECRET"); val != "" {
 		cfg.SessionSecret = val
+	}
+	if val := os.Getenv("FLOWGUARD_RETENTION_DAYS"); val != "" {
+		if r, err := strconv.Atoi(val); err == nil {
+			cfg.RetentionDays = r
+		}
 	}
 
 	return cfg, nil
