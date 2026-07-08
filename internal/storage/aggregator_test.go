@@ -46,7 +46,15 @@ func (m *MockFlowRepository) GetTopProtocols(ctx context.Context, start, end tim
 	return nil, nil
 }
 
+func (m *MockFlowRepository) GetTopDevicesByVolume(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error) {
+	return nil, nil
+}
+
 func (m *MockFlowRepository) GetTrafficTimeSeries(ctx context.Context, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error) {
+	return nil, nil
+}
+
+func (m *MockFlowRepository) GetDeviceActivityHeatmap(ctx context.Context, start, end time.Time, limit int) ([]flow.DeviceHeatmapCell, error) {
 	return nil, nil
 }
 

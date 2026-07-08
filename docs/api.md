@@ -118,6 +118,54 @@ Lists internal devices ranked by their calculated threat risk scores (`0 - 100`)
 ]
 ```
 
+### Overview dashboard data composition
+The default Overview dashboard uses bounded summary and stats endpoints.
+
+*   **Security posture:** `GET /api/security/summary` and `GET /api/security/timeline`.
+*   **Network stats:** `GET /api/stats/protocols`, `GET /api/stats/top-devices`, `GET /api/stats/heatmap`, plus `GET /api/traffic/timeseries`.
+*   **Security:** Secret settings are not displayed in the dashboard; only configuration presence is shown.
+
+### GET `/api/security/summary`
+Returns active alert counts by severity, max risk score, elevated device count, risk distribution, detector coverage, DDoS thresholds, collector counters, top risk devices, and recent high-severity alerts.
+
+### GET `/api/security/timeline`
+Returns alert count buckets for the selected time range.
+
+Uses `start`, `end`, and `bucket_seconds` query parameters with the same 7-day maximum range as `/api/traffic/timeseries`.
+
+### GET `/api/stats/protocols`
+Returns protocol byte distribution for a bounded range.
+
+Uses the same `start`, `end`, and `limit` query parameters as `/api/top/sources`.
+
+### GET `/api/stats/top-devices`
+Returns known devices ranked by combined source and destination byte volume for a bounded range.
+
+Uses the same `start`, `end`, and `limit` query parameters as `/api/top/sources`.
+
+### GET `/api/stats/heatmap`
+Returns hour-of-day traffic cells for top devices in a bounded range.
+
+Uses the same `start`, `end`, and `limit` query parameters as `/api/top/sources`; `limit` is capped at 20 devices.
+
+### GET `/api/stats/collector-health`
+Returns bounded in-memory collector health samples for Overview sparklines.
+
+*   **Query Parameters:**
+    *   `limit` (Optional, integer): Defaults to `120`; capped at `240`.
+*   **Example Response:**
+```json
+[
+  {
+    "timestamp": "2026-07-08T15:40:00Z",
+    "packets_received": 145028,
+    "packets_dropped": 0,
+    "decode_errors": 0,
+    "queue_depth": 14
+  }
+]
+```
+
 ### GET `/api/traffic/timeseries`
 Returns bounded aggregate traffic counters for network charts.
 

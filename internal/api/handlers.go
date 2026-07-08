@@ -7,11 +7,13 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/flowguard/flowguard/internal/config"
+	"github.com/flowguard/flowguard/internal/flow"
 	"github.com/flowguard/flowguard/internal/risk"
 	"github.com/flowguard/flowguard/internal/storage"
 )
@@ -659,6 +661,316 @@ func (s *APIServer) handleListRiskDevices(w http.ResponseWriter, r *http.Request
 	}
 }
 
+type SecuritySummaryResponse struct {
+	ActiveAlertsBySeverity map[string]int       `json:"active_alerts_by_severity"`
+	ActiveAlertsTotal      int                  `json:"active_alerts_total"`
+	MaxRiskScore           int                  `json:"max_risk_score"`
+	ElevatedRiskDevices    int                  `json:"elevated_risk_devices"`
+	TotalDevices           int                  `json:"total_devices"`
+	RiskDistribution       map[string]int       `json:"risk_distribution"`
+	DetectorStatus         map[string]string    `json:"detector_status"`
+	DDoSThresholds         map[string]int       `json:"ddos_thresholds"`
+	SuricataConfigured     bool                 `json:"suricata_configured"`
+	NotificationConfigured bool                 `json:"notification_configured"`
+	TopRiskDevices         []risk.DeviceRisk    `json:"top_risk_devices"`
+	RecentHighAlerts       []storage.Anomaly    `json:"recent_high_alerts"`
+	Collector              *collectorHealthView `json:"collector,omitempty"`
+}
+
+type collectorHealthView struct {
+	PacketsReceived uint64 `json:"packets_received"`
+	PacketsDropped  uint64 `json:"packets_dropped"`
+	DecodeErrors    uint64 `json:"decode_errors"`
+	QueueDepth      int    `json:"queue_depth"`
+}
+
+type SecurityTimelineBucket struct {
+	Timestamp time.Time      `json:"timestamp"`
+	Counts    map[string]int `json:"counts"`
+	Total     int            `json:"total"`
+}
+
+func (s *APIServer) handleSecuritySummary(w http.ResponseWriter, r *http.Request) {
+	if s.deviceRepo == nil || s.riskEngine == nil {
+		writeError(w, s.logger, http.StatusInternalServerError, "security summary dependencies are not configured")
+		return
+	}
+
+	since := time.Now().Add(-24 * time.Hour)
+	active, err := s.deviceRepo.GetActiveAnomalies(r.Context(), since)
+	if err != nil {
+		s.logger.Error("Failed querying active anomalies for security summary", slog.String("error", err.Error()))
+		writeError(w, s.logger, http.StatusInternalServerError, "internal database error")
+		return
+	}
+
+	risks, err := s.riskEngine.CalculateDeviceRisks(r.Context())
+	if err != nil {
+		s.logger.Error("Failed calculating risk summary", slog.String("error", err.Error()))
+		writeError(w, s.logger, http.StatusInternalServerError, "internal calculation error")
+		return
+	}
+	devices, err := s.deviceRepo.ListDevices(r.Context())
+	if err != nil {
+		s.logger.Error("Failed listing devices for security summary", slog.String("error", err.Error()))
+		writeError(w, s.logger, http.StatusInternalServerError, "internal database error")
+		return
+	}
+
+	counts := map[string]int{"critical": 0, "high": 0, "medium": 0, "low": 0}
+	var recentHigh []storage.Anomaly
+	for _, a := range active {
+		severity := normalizeSeverity(a.Severity)
+		counts[severity]++
+		if severity == "critical" || severity == "high" {
+			recentHigh = append(recentHigh, a)
+		}
+	}
+	sortAnomaliesNewestFirst(recentHigh)
+	if len(recentHigh) > 10 {
+		recentHigh = recentHigh[:10]
+	}
+
+	maxRisk := 0
+	elevated := 0
+	riskDistribution := map[string]int{"low": len(devices), "medium": 0, "high": 0}
+	for _, d := range risks {
+		if d.RiskScore > maxRisk {
+			maxRisk = d.RiskScore
+		}
+		if d.RiskScore >= 30 || d.RiskLevel == "medium" || d.RiskLevel == "high" {
+			elevated++
+		}
+		if d.RiskScore >= 70 || d.RiskLevel == "high" {
+			riskDistribution["high"]++
+			riskDistribution["low"]--
+		} else if d.RiskScore >= 30 || d.RiskLevel == "medium" {
+			riskDistribution["medium"]++
+			riskDistribution["low"]--
+		}
+	}
+	topRisks := risks
+	if len(topRisks) > 5 {
+		topRisks = topRisks[:5]
+	}
+
+	res := SecuritySummaryResponse{
+		ActiveAlertsBySeverity: counts,
+		ActiveAlertsTotal:      len(active),
+		MaxRiskScore:           maxRisk,
+		ElevatedRiskDevices:    elevated,
+		TotalDevices:           len(devices),
+		RiskDistribution:       riskDistribution,
+		DetectorStatus: map[string]string{
+			"behavior_anomalies": "enabled",
+			"ddos":               "enabled",
+			"suricata":           configuredStatus(s.cfg.SuricataEvePath != ""),
+			"notifications":      configuredStatus(s.cfg.TelegramEnabled || s.cfg.WebhookURL != ""),
+		},
+		DDoSThresholds: map[string]int{
+			"pps":  s.cfg.DDoSThresholdPPS,
+			"bps":  s.cfg.DDoSThresholdBPS,
+			"syn":  s.cfg.SYNFloodThresholdPPS,
+			"udp":  s.cfg.UDPFloodThresholdPPS,
+			"icmp": s.cfg.ICMPFloodThresholdPPS,
+		},
+		SuricataConfigured:     s.cfg.SuricataEvePath != "",
+		NotificationConfigured: s.cfg.TelegramEnabled || s.cfg.WebhookURL != "",
+		TopRiskDevices:         topRisks,
+		RecentHighAlerts:       recentHigh,
+	}
+	if s.collector != nil {
+		stats := s.collector.GetStats()
+		res.Collector = &collectorHealthView{
+			PacketsReceived: stats.PacketsReceived,
+			PacketsDropped:  stats.PacketsDropped,
+			DecodeErrors:    stats.DecodeErrors,
+			QueueDepth:      stats.QueueDepth,
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(res); err != nil {
+		s.logger.Error("Failed to encode security summary response", slog.String("error", err.Error()))
+	}
+}
+
+func (s *APIServer) handleSecurityTimeline(w http.ResponseWriter, r *http.Request) {
+	if s.deviceRepo == nil {
+		writeError(w, s.logger, http.StatusInternalServerError, "device metadata repository is not configured")
+		return
+	}
+
+	start, end, _, err := parseQueryParams(r)
+	if err != nil {
+		writeError(w, s.logger, http.StatusBadRequest, err.Error())
+		return
+	}
+	bucketSeconds, err := parseBucketSeconds(r)
+	if err != nil {
+		writeError(w, s.logger, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	active, err := s.deviceRepo.GetActiveAnomalies(r.Context(), start)
+	if err != nil {
+		s.logger.Error("Failed querying active anomalies for security timeline", slog.String("error", err.Error()))
+		writeError(w, s.logger, http.StatusInternalServerError, "internal database error")
+		return
+	}
+
+	merged := make(map[int64]*SecurityTimelineBucket)
+	for _, a := range active {
+		if a.CreatedAt.Before(start) || a.CreatedAt.After(end) {
+			continue
+		}
+		bucketStart := (a.CreatedAt.Unix() / int64(bucketSeconds)) * int64(bucketSeconds)
+		item, ok := merged[bucketStart]
+		if !ok {
+			item = &SecurityTimelineBucket{
+				Timestamp: time.Unix(bucketStart, 0).UTC(),
+				Counts:    map[string]int{"critical": 0, "high": 0, "medium": 0, "low": 0},
+			}
+			merged[bucketStart] = item
+		}
+		severity := normalizeSeverity(a.Severity)
+		item.Counts[severity]++
+		item.Total++
+	}
+
+	keys := make([]int64, 0, len(merged))
+	for key := range merged {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	res := make([]SecurityTimelineBucket, 0, len(keys))
+	for _, key := range keys {
+		res = append(res, *merged[key])
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(res); err != nil {
+		s.logger.Error("Failed to encode security timeline response", slog.String("error", err.Error()))
+	}
+}
+
+func (s *APIServer) handleStatsProtocols(w http.ResponseWriter, r *http.Request) {
+	s.handleFlowTopResponse(w, r, "stats protocols", func(start, end time.Time, limit int) ([]flow.TopResult, error) {
+		return s.repo.GetTopProtocols(r.Context(), start, end, limit)
+	})
+}
+
+func (s *APIServer) handleStatsTopDevices(w http.ResponseWriter, r *http.Request) {
+	s.handleFlowTopResponse(w, r, "stats top devices", func(start, end time.Time, limit int) ([]flow.TopResult, error) {
+		return s.repo.GetTopDevicesByVolume(r.Context(), start, end, limit)
+	})
+}
+
+func (s *APIServer) handleStatsHeatmap(w http.ResponseWriter, r *http.Request) {
+	if s.repo == nil {
+		writeError(w, s.logger, http.StatusInternalServerError, "database repository is not configured")
+		return
+	}
+	start, end, limit, err := parseQueryParams(r)
+	if err != nil {
+		writeError(w, s.logger, http.StatusBadRequest, err.Error())
+		return
+	}
+	if limit > 20 {
+		limit = 20
+	}
+	res, err := s.repo.GetDeviceActivityHeatmap(r.Context(), start, end, limit)
+	if err != nil {
+		s.logger.Error("Failed to query stats heatmap", slog.String("error", err.Error()))
+		writeError(w, s.logger, http.StatusInternalServerError, "internal database query error")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(res); err != nil {
+		s.logger.Error("Failed to encode stats heatmap response", slog.String("error", err.Error()))
+	}
+}
+
+func (s *APIServer) handleStatsCollectorHealth(w http.ResponseWriter, r *http.Request) {
+	if s.collector == nil {
+		writeError(w, s.logger, http.StatusInternalServerError, "collector is not configured")
+		return
+	}
+
+	limit := 120
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		val, err := strconv.Atoi(raw)
+		if err != nil || val <= 0 {
+			writeError(w, s.logger, http.StatusBadRequest, "invalid limit parameter; must be a positive integer")
+			return
+		}
+		limit = val
+	}
+	if limit > maxCollectorHealthSamples {
+		limit = maxCollectorHealthSamples
+	}
+
+	samples := s.collectorHealthSamples(limit)
+	if len(samples) == 0 {
+		s.recordCollectorStats(time.Now().UTC())
+		samples = s.collectorHealthSamples(limit)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(samples); err != nil {
+		s.logger.Error("Failed to encode collector health stats response", slog.String("error", err.Error()))
+	}
+}
+
+func (s *APIServer) handleFlowTopResponse(w http.ResponseWriter, r *http.Request, label string, query func(start, end time.Time, limit int) ([]flow.TopResult, error)) {
+	if s.repo == nil {
+		writeError(w, s.logger, http.StatusInternalServerError, "database repository is not configured")
+		return
+	}
+	start, end, limit, err := parseQueryParams(r)
+	if err != nil {
+		writeError(w, s.logger, http.StatusBadRequest, err.Error())
+		return
+	}
+	res, err := query(start, end, limit)
+	if err != nil {
+		s.logger.Error("Failed to query "+label, slog.String("error", err.Error()))
+		writeError(w, s.logger, http.StatusInternalServerError, "internal database query error")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(res); err != nil {
+		s.logger.Error("Failed to encode "+label+" response", slog.String("error", err.Error()))
+	}
+}
+
+func normalizeSeverity(severity string) string {
+	switch severity {
+	case "critical", "high", "medium", "low":
+		return severity
+	default:
+		return "low"
+	}
+}
+
+func configuredStatus(ok bool) string {
+	if ok {
+		return "configured"
+	}
+	return "not_configured"
+}
+
+func sortAnomaliesNewestFirst(items []storage.Anomaly) {
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].CreatedAt.After(items[j].CreatedAt)
+	})
+}
+
 // handleListAuditLogs returns a list of recent security audit log events.
 func (s *APIServer) handleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	if s.deviceRepo == nil {
@@ -884,7 +1196,7 @@ func (s *APIServer) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.DDoSThresholdPPS != payload.DDoSThresholdPPS || s.cfg.DDoSThresholdBPS != payload.DDoSThresholdBPS || s.cfg.SYNFloodThresholdPPS != payload.SYNFloodThresholdPPS || s.cfg.UDPFloodThresholdPPS != payload.UDPFloodThresholdPPS || s.cfg.ICMPFloodThresholdPPS != payload.ICMPFloodThresholdPPS {
 		categories = append(categories, "thresholds")
 	}
-	
+
 	// Handle token and headers merging
 	telegramTokenChanged := false
 	if payload.TelegramToken != "" && payload.TelegramToken != "******" {
@@ -893,7 +1205,7 @@ func (s *APIServer) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 			telegramTokenChanged = true
 		}
 	}
-	
+
 	newHeaders := make(map[string]string)
 	headersChanged := false
 	for k, v := range payload.WebhookHeaders {

@@ -146,6 +146,8 @@ type MockFlowRepository struct {
 	Destinations []flow.TopResult
 	Ports        []flow.TopResult
 	Protocols    []flow.TopResult
+	TopDevices   []flow.TopResult
+	Heatmap      []flow.DeviceHeatmapCell
 	Baseline     *storage.DeviceBaseline
 	Devices      []storage.Device
 	Anomalies    []storage.Anomaly
@@ -172,10 +174,21 @@ func (m *MockFlowRepository) GetTopProtocols(ctx context.Context, start, end tim
 	return m.Protocols, m.Err
 }
 
+func (m *MockFlowRepository) GetTopDevicesByVolume(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error) {
+	return m.TopDevices, m.Err
+}
+
 func (m *MockFlowRepository) GetTrafficTimeSeries(ctx context.Context, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error) {
 	return []flow.TrafficTimeBucket{
 		{Timestamp: start.UTC(), Bytes: 1000, Packets: 10, Flows: 2},
 	}, m.Err
+}
+
+func (m *MockFlowRepository) GetDeviceActivityHeatmap(ctx context.Context, start, end time.Time, limit int) ([]flow.DeviceHeatmapCell, error) {
+	if m.Heatmap == nil {
+		return []flow.DeviceHeatmapCell{}, m.Err
+	}
+	return m.Heatmap, m.Err
 }
 
 func (m *MockFlowRepository) UpsertDevice(ctx context.Context, ip string, hostname string, lastSeen time.Time) error {
@@ -508,6 +521,164 @@ func TestHandleTrafficTimeSeries(t *testing.T) {
 	server.server.Handler.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected invalid bucket to return 400, got %d", w.Code)
+	}
+}
+
+func TestHandleSecurityOverviewEndpoints(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SuricataEvePath = "/var/log/suricata/eve.json"
+	cfg.WebhookURL = "https://hooks.example.test/flowguard"
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	now := time.Now().UTC()
+	mockRepo := &MockFlowRepository{
+		Devices: []storage.Device{
+			{IP: "192.168.1.10", Label: "NAS"},
+			{IP: "192.168.1.20", Label: "Camera"},
+		},
+		Anomalies: []storage.Anomaly{
+			{ID: 1, IP: "192.168.1.10", Type: "ddos", Severity: "high", Status: "active", CreatedAt: now.Add(-30 * time.Minute), Description: "UDP flood"},
+			{ID: 2, IP: "192.168.1.20", Type: "scan", Severity: "medium", Status: "active", CreatedAt: now.Add(-15 * time.Minute), Description: "Fan-out scan"},
+		},
+	}
+	riskEngine := risk.NewRiskEngine(mockRepo)
+	server := NewAPIServer(cfg, logger, &MockCollector{Stats: collector.Stats{PacketsReceived: 10, QueueDepth: 2}}, mockRepo, mockRepo, nil, riskEngine, nil, nil, nil, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/security/summary", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected summary 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+	var summary SecuritySummaryResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
+		t.Fatalf("failed decoding security summary: %v", err)
+	}
+	if summary.ActiveAlertsTotal != 2 || summary.ActiveAlertsBySeverity["high"] != 1 || summary.ActiveAlertsBySeverity["medium"] != 1 {
+		t.Fatalf("unexpected summary severity counts: %+v", summary)
+	}
+	if summary.MaxRiskScore == 0 || summary.ElevatedRiskDevices == 0 {
+		t.Fatalf("expected elevated risk summary, got %+v", summary)
+	}
+	if !summary.SuricataConfigured || !summary.NotificationConfigured {
+		t.Fatalf("expected configured detector flags, got %+v", summary)
+	}
+	if summary.Collector == nil || summary.Collector.QueueDepth != 2 {
+		t.Fatalf("expected collector view in summary, got %+v", summary.Collector)
+	}
+
+	start := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	end := now.Format(time.RFC3339)
+	req = httptest.NewRequest(http.MethodGet, "/api/security/timeline?start="+start+"&end="+end+"&bucket_seconds=300", nil)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected timeline 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+	var timeline []SecurityTimelineBucket
+	if err := json.Unmarshal(w.Body.Bytes(), &timeline); err != nil {
+		t.Fatalf("failed decoding security timeline: %v", err)
+	}
+	if len(timeline) == 0 {
+		t.Fatalf("expected non-empty timeline")
+	}
+}
+
+func TestHandleStatsOverviewEndpoints(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockRepo := &MockFlowRepository{
+		Protocols: []flow.TopResult{
+			{Key: "6", Bytes: 2000, Packets: 20, Flows: 2},
+		},
+		TopDevices: []flow.TopResult{
+			{Key: "192.168.1.10", Bytes: 5000, Packets: 50, Flows: 5},
+		},
+		Heatmap: []flow.DeviceHeatmapCell{
+			{IP: "192.168.1.10", Hour: 13, Bytes: 5000, Packets: 50, Flows: 5},
+		},
+	}
+	server := NewAPIServer(cfg, logger, nil, mockRepo, nil, nil, nil, nil, nil, nil, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/stats/protocols?limit=5", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected protocols 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+	var protocols []flow.TopResult
+	if err := json.Unmarshal(w.Body.Bytes(), &protocols); err != nil {
+		t.Fatalf("failed decoding protocols: %v", err)
+	}
+	if len(protocols) != 1 || protocols[0].Key != "6" {
+		t.Fatalf("unexpected protocols response: %+v", protocols)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/stats/top-devices?limit=5", nil)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected top-devices 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+	var topDevices []flow.TopResult
+	if err := json.Unmarshal(w.Body.Bytes(), &topDevices); err != nil {
+		t.Fatalf("failed decoding top devices: %v", err)
+	}
+	if len(topDevices) != 1 || topDevices[0].Key != "192.168.1.10" {
+		t.Fatalf("unexpected top devices response: %+v", topDevices)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/stats/heatmap?limit=5", nil)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected heatmap 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+	var heatmap []flow.DeviceHeatmapCell
+	if err := json.Unmarshal(w.Body.Bytes(), &heatmap); err != nil {
+		t.Fatalf("failed decoding heatmap: %v", err)
+	}
+	if len(heatmap) != 1 || heatmap[0].Hour != 13 {
+		t.Fatalf("unexpected heatmap response: %+v", heatmap)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/stats/top-devices?start=2026-07-01T00:00:00Z&end=2026-07-10T00:00:00Z", nil)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unbounded range, got %d", w.Code)
+	}
+}
+
+func TestHandleStatsCollectorHealth(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockCollector := &MockCollector{Stats: collector.Stats{PacketsReceived: 100, PacketsDropped: 1, DecodeErrors: 2, QueueDepth: 3}}
+	server := NewAPIServer(cfg, logger, mockCollector, nil, nil, nil, nil, nil, nil, nil, "")
+
+	now := time.Now().UTC()
+	server.recordCollectorStats(now.Add(-15 * time.Second))
+	mockCollector.Stats = collector.Stats{PacketsReceived: 150, PacketsDropped: 2, DecodeErrors: 3, QueueDepth: 4}
+	server.recordCollectorStats(now)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/stats/collector-health?limit=1", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected collector health 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+	var samples []CollectorHealthSample
+	if err := json.Unmarshal(w.Body.Bytes(), &samples); err != nil {
+		t.Fatalf("failed decoding collector health response: %v", err)
+	}
+	if len(samples) != 1 || samples[0].PacketsReceived != 150 || samples[0].QueueDepth != 4 {
+		t.Fatalf("unexpected collector health samples: %+v", samples)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/stats/collector-health?limit=bad", nil)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected invalid limit to return 400, got %d", w.Code)
 	}
 }
 
@@ -1244,4 +1415,3 @@ func TestSettingsAPI_ValidationAndMasking(t *testing.T) {
 		t.Errorf("Telegram token was overwritten by mask: %s", cfg.TelegramToken)
 	}
 }
-

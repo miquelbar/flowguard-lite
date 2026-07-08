@@ -58,15 +58,24 @@ export function renderSettingsView() {
     }
 
     if (noUnsaved("notifications")) {
-        setVal("setting-webhook-url", state.settingsData.webhook_url || "");
-        setVal("setting-webhook-format", state.settingsData.webhook_format || "generic");
-        setVal("setting-telegram-token", state.settingsData.telegram_token || "");
-        setVal("setting-telegram-chat-id", state.settingsData.telegram_chat_id || "");
-        const tgEnabled = document.getElementById("setting-telegram-enabled");
-        if (tgEnabled) tgEnabled.checked = !!state.settingsData.telegram_enabled;
-        if (noUnsaved("notifications")) {
-            renderWebhookHeaders(state.settingsData.webhook_headers || {});
+        const d = state.settingsData;
+        // Derive channel type from stored config:
+        // telegram_enabled -> telegram; webhook_format==slack -> slack; else -> webhook
+        let channelType = "webhook";
+        if (d.telegram_enabled) {
+            channelType = "telegram";
+        } else if (d.webhook_format === "slack") {
+            channelType = "slack";
         }
+        setVal("setting-channel-type", channelType);
+        setNotifChannelFields(channelType);
+
+        setVal("setting-webhook-url", d.webhook_url || "");
+        setVal("setting-webhook-url-generic", d.webhook_url || "");
+        setVal("setting-telegram-token", d.telegram_token || "");
+        setVal("setting-telegram-chat-id", d.telegram_chat_id || "");
+        updateTelegramUrlPreview(d.telegram_token || "");
+        renderWebhookHeaders(d.webhook_headers || {});
     }
 
     if (noUnsaved("system")) {
@@ -219,7 +228,37 @@ function appendWebhookHeaderRow(key = "", val = "") {
     listContainer.appendChild(row);
 }
 
+function setNotifChannelFields(channelType) {
+    const slackFields = document.getElementById("notif-fields-slack");
+    const telegramFields = document.getElementById("notif-fields-telegram");
+    const webhookFields = document.getElementById("notif-fields-webhook");
+    if (slackFields) slackFields.classList.toggle("hidden", channelType !== "slack");
+    if (telegramFields) telegramFields.classList.toggle("hidden", channelType !== "telegram");
+    if (webhookFields) webhookFields.classList.toggle("hidden", channelType !== "webhook");
+}
+
+function updateTelegramUrlPreview(token) {
+    const preview = document.getElementById("setting-telegram-url-preview");
+    if (!preview) return;
+    preview.value = token ? `https://api.telegram.org/bot${token}/sendMessage` : "";
+}
+
 export function bindSettingsEvents(onReload) {
+    const channelTypeSelect = document.getElementById("setting-channel-type");
+    if (channelTypeSelect) {
+        channelTypeSelect.addEventListener("change", () => {
+            setNotifChannelFields(channelTypeSelect.value);
+            markUnsaved("notifications", true);
+        });
+    }
+
+    const telegramToken = document.getElementById("setting-telegram-token");
+    if (telegramToken) {
+        telegramToken.addEventListener("input", () => {
+            updateTelegramUrlPreview(telegramToken.value.trim());
+        });
+    }
+
     const btnAddWebhookHeader = document.getElementById("btn-add-webhook-header");
     if (btnAddWebhookHeader) {
         btnAddWebhookHeader.addEventListener("click", () => {
@@ -380,40 +419,63 @@ export function bindSettingsEvents(onReload) {
         });
     }
 
-    // Webhook submit
+    // Webhook / Notifications submit
     const formSettingsWebhook = document.getElementById("form-settings-webhook");
     if (formSettingsWebhook) {
         formSettingsWebhook.addEventListener("submit", async (e) => {
             e.preventDefault();
             if (!state.settingsData) return;
-            const url = document.getElementById("setting-webhook-url").value;
-            const format = document.getElementById("setting-webhook-format").value;
-            const tgEnabled = document.getElementById("setting-telegram-enabled").checked;
-            const tgToken = document.getElementById("setting-telegram-token").value;
-            const tgChatId = document.getElementById("setting-telegram-chat-id").value;
 
-            const headerRows = document.querySelectorAll("#webhook-headers-list .webhook-header-row");
-            const headers = {};
-            headerRows.forEach(row => {
-                const key = row.querySelector(".header-key").value.trim();
-                const val = row.querySelector(".header-value").value.trim();
-                if (key !== "") {
-                    headers[key] = val;
-                }
-            });
-            
-            const payload = {
-                ...state.settingsData,
-                webhook_url: url,
-                webhook_format: format,
-                webhook_headers: headers,
-                telegram_enabled: tgEnabled,
-                telegram_token: tgToken,
-                telegram_chat_id: tgChatId
-            };
+            const channelType = document.getElementById("setting-channel-type")?.value || "webhook";
+
+            let payload;
+            if (channelType === "telegram") {
+                const tgToken  = document.getElementById("setting-telegram-token").value.trim();
+                const tgChatId = document.getElementById("setting-telegram-chat-id").value.trim();
+                payload = {
+                    ...state.settingsData,
+                    telegram_enabled:  true,
+                    telegram_token:    tgToken,
+                    telegram_chat_id:  tgChatId,
+                    webhook_url:       "",
+                    webhook_format:    "generic",
+                    webhook_headers:   {}
+                };
+            } else if (channelType === "slack") {
+                const url = document.getElementById("setting-webhook-url").value.trim();
+                payload = {
+                    ...state.settingsData,
+                    webhook_url:      url,
+                    webhook_format:   "slack",
+                    webhook_headers:  {},
+                    telegram_enabled: false,
+                    telegram_token:   "",
+                    telegram_chat_id: ""
+                };
+            } else {
+                // Generic webhook
+                const url = document.getElementById("setting-webhook-url-generic")?.value.trim() || "";
+                const headerRows = document.querySelectorAll("#webhook-headers-list .webhook-header-row");
+                const headers = {};
+                headerRows.forEach(row => {
+                    const key = row.querySelector(".header-key").value.trim();
+                    const val = row.querySelector(".header-value").value.trim();
+                    if (key) headers[key] = val;
+                });
+                payload = {
+                    ...state.settingsData,
+                    webhook_url:      url,
+                    webhook_format:   "generic",
+                    webhook_headers:  headers,
+                    telegram_enabled: false,
+                    telegram_token:   "",
+                    telegram_chat_id: ""
+                };
+            }
+
             try {
                 await api.saveSettings("notifications", payload);
-                window.showToast("Routing & notification settings saved successfully.");
+                window.showToast("Notification settings saved successfully.");
                 state.settingsData = await api.fetchSettings();
                 markUnsaved("notifications", false);
             } catch (err) {

@@ -36,3 +36,12 @@ type TrafficTimeBucket struct {
 	Packets   uint64    `json:"packets"`
 	Flows     uint64    `json:"flows"`
 }
+
+// DeviceHeatmapCell represents aggregate traffic volume for one device in one hour of day.
+type DeviceHeatmapCell struct {
+	IP      string `json:"ip"`
+	Hour    int    `json:"hour"`
+	Bytes   uint64 `json:"bytes"`
+	Packets uint64 `json:"packets"`
+	Flows   uint64 `json:"flows"`
+}

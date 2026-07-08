@@ -80,6 +80,62 @@ export async function fetchTrafficTimeSeries(range) {
     return await resp.json();
 }
 
+export async function fetchSecuritySummary() {
+    const resp = await apiFetch("/api/security/summary");
+    if (!resp.ok) throw new Error("Security summary query failed");
+    return await resp.json();
+}
+
+export async function fetchSecurityTimeline(range) {
+    const params = new URLSearchParams({
+        start: range.start.toISOString(),
+        end: range.end.toISOString(),
+        bucket_seconds: String(range.bucket)
+    });
+    const resp = await apiFetch(`/api/security/timeline?${params.toString()}`);
+    if (!resp.ok) throw new Error("Security timeline query failed");
+    return await resp.json();
+}
+
+export async function fetchStatsProtocols(range) {
+    const params = new URLSearchParams({
+        limit: "5",
+        start: range.start.toISOString(),
+        end: range.end.toISOString()
+    });
+    const resp = await apiFetch(`/api/stats/protocols?${params.toString()}`);
+    if (!resp.ok) throw new Error("Protocol stats query failed");
+    return await resp.json();
+}
+
+export async function fetchStatsTopDevices(range) {
+    const params = new URLSearchParams({
+        limit: "5",
+        start: range.start.toISOString(),
+        end: range.end.toISOString()
+    });
+    const resp = await apiFetch(`/api/stats/top-devices?${params.toString()}`);
+    if (!resp.ok) throw new Error("Top devices stats query failed");
+    return await resp.json();
+}
+
+export async function fetchStatsHeatmap(range) {
+    const params = new URLSearchParams({
+        limit: "10",
+        start: range.start.toISOString(),
+        end: range.end.toISOString()
+    });
+    const resp = await apiFetch(`/api/stats/heatmap?${params.toString()}`);
+    if (!resp.ok) throw new Error("Device heatmap query failed");
+    return await resp.json();
+}
+
+export async function fetchStatsCollectorHealth() {
+    const resp = await apiFetch("/api/stats/collector-health?limit=120");
+    if (!resp.ok) throw new Error("Collector health stats query failed");
+    return await resp.json();
+}
+
 export async function fetchSettings() {
     const resp = await apiFetch("/api/settings");
     if (!resp.ok) throw new Error("Settings fetch failed");

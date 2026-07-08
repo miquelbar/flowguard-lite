@@ -349,6 +349,57 @@ func (r *DuckDBRepository) GetTopProtocols(ctx context.Context, start, end time.
 	return results, nil
 }
 
+// GetTopDevicesByVolume returns IPs with the highest source+destination byte volume.
+func (r *DuckDBRepository) GetTopDevicesByVolume(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT ip, SUM(bytes), SUM(packets), SUM(flows)
+		FROM (
+			SELECT src_ip AS ip, bytes, packets, flows
+			FROM flow_aggregates
+			WHERE bucket_ts >= ? AND bucket_ts <= ?
+			UNION ALL
+			SELECT dst_ip AS ip, bytes, packets, flows
+			FROM flow_aggregates
+			WHERE bucket_ts >= ? AND bucket_ts <= ?
+		)
+		GROUP BY ip
+	`, start.Unix(), end.Unix(), start.Unix(), end.Unix())
+	if err != nil {
+		return nil, fmt.Errorf("failed querying DuckDB top devices: %w", err)
+	}
+	defer rows.Close()
+
+	merged := make(map[string]*flow.TopResult)
+	for rows.Next() {
+		var tr flow.TopResult
+		if err := rows.Scan(&tr.Key, &tr.Bytes, &tr.Packets, &tr.Flows); err != nil {
+			return nil, fmt.Errorf("failed scanning DuckDB top devices: %w", err)
+		}
+		merged[tr.Key] = &tr
+	}
+	r.filterTopResultsToKnownDevices(ctx, merged)
+	return sortAndLimit(merged, limit), nil
+}
+
+func (r *DuckDBRepository) filterTopResultsToKnownDevices(ctx context.Context, merged map[string]*flow.TopResult) {
+	devices, err := r.ListDevices(ctx)
+	if err != nil || len(devices) == 0 {
+		return
+	}
+	allowed := make(map[string]struct{}, len(devices))
+	for _, d := range devices {
+		allowed[d.IP] = struct{}{}
+	}
+	for key := range merged {
+		if _, ok := allowed[key]; !ok {
+			delete(merged, key)
+		}
+	}
+}
+
 // GetTrafficTimeSeries returns total traffic counters grouped into fixed-size bounded time buckets.
 func (r *DuckDBRepository) GetTrafficTimeSeries(ctx context.Context, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error) {
 	r.mu.RLock()
@@ -382,6 +433,64 @@ func (r *DuckDBRepository) GetTrafficTimeSeries(ctx context.Context, start, end 
 	}
 	if results == nil {
 		results = []flow.TrafficTimeBucket{}
+	}
+	return results, nil
+}
+
+// GetDeviceActivityHeatmap returns hour-of-day traffic activity for the top device-like IPs.
+func (r *DuckDBRepository) GetDeviceActivityHeatmap(ctx context.Context, start, end time.Time, limit int) ([]flow.DeviceHeatmapCell, error) {
+	topDevices, err := r.GetTopDevicesByVolume(ctx, start, end, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(topDevices) == 0 {
+		return []flow.DeviceHeatmapCell{}, nil
+	}
+
+	allowed := make(map[string]struct{}, len(topDevices))
+	for _, item := range topDevices {
+		allowed[item.Key] = struct{}{}
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT ip,
+		       CAST(FLOOR((bucket_ts % 86400) / 3600) AS INTEGER) AS hour_of_day,
+		       SUM(bytes), SUM(packets), SUM(flows)
+		FROM (
+			SELECT src_ip AS ip, bucket_ts, bytes, packets, flows
+			FROM flow_aggregates
+			WHERE bucket_ts >= ? AND bucket_ts <= ?
+			UNION ALL
+			SELECT dst_ip AS ip, bucket_ts, bytes, packets, flows
+			FROM flow_aggregates
+			WHERE bucket_ts >= ? AND bucket_ts <= ?
+		)
+		GROUP BY ip, hour_of_day
+		ORDER BY ip ASC, hour_of_day ASC
+	`, start.Unix(), end.Unix(), start.Unix(), end.Unix())
+	if err != nil {
+		return nil, fmt.Errorf("failed querying DuckDB device heatmap: %w", err)
+	}
+	defer rows.Close()
+
+	var results []flow.DeviceHeatmapCell
+	for rows.Next() {
+		var cell flow.DeviceHeatmapCell
+		if err := rows.Scan(&cell.IP, &cell.Hour, &cell.Bytes, &cell.Packets, &cell.Flows); err != nil {
+			return nil, fmt.Errorf("failed scanning DuckDB device heatmap: %w", err)
+		}
+		if _, ok := allowed[cell.IP]; ok {
+			results = append(results, cell)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed iterating DuckDB device heatmap rows: %w", err)
+	}
+	if results == nil {
+		results = []flow.DeviceHeatmapCell{}
 	}
 	return results, nil
 }
@@ -1115,7 +1224,7 @@ func (r *DuckDBRepository) GetPoliciesForIP(ctx context.Context, ip string) ([]P
 				}
 			}
 		}
-	if matches {
+		if matches {
 			matched = append(matched, p)
 		}
 	}

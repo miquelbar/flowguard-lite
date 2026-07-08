@@ -66,6 +66,12 @@ func TestSQLiteRepository_SaveAndQuery(t *testing.T) {
 	if err := repo.SaveAggregates(ctx, now, aggregates); err != nil {
 		t.Fatalf("failed to save aggregates: %v", err)
 	}
+	if err := repo.UpsertDevice(ctx, "192.168.1.10", "workstation.local", now); err != nil {
+		t.Fatalf("failed to upsert test device: %v", err)
+	}
+	if err := repo.UpsertDevice(ctx, "192.168.1.20", "camera.local", now); err != nil {
+		t.Fatalf("failed to upsert test device: %v", err)
+	}
 
 	// Verify database shard file was created on disk
 	dateStr := now.Format("2006-01-02")
@@ -116,6 +122,28 @@ func TestSQLiteRepository_SaveAndQuery(t *testing.T) {
 	}
 	if ports[0].Key != "443" || ports[0].Bytes != 10000 {
 		t.Errorf("expected top port 443 with 10000 bytes, got %s with %d", ports[0].Key, ports[0].Bytes)
+	}
+
+	topDevices, err := repo.GetTopDevicesByVolume(ctx, start, end, 5)
+	if err != nil {
+		t.Fatalf("failed to query top devices: %v", err)
+	}
+	if len(topDevices) != 2 {
+		t.Fatalf("expected 2 top devices, got %d", len(topDevices))
+	}
+	if topDevices[0].Key != "192.168.1.20" || topDevices[0].Bytes != 10000 {
+		t.Errorf("expected top device 192.168.1.20 with 10000 bytes, got %+v", topDevices[0])
+	}
+
+	heatmap, err := repo.GetDeviceActivityHeatmap(ctx, start, end, 5)
+	if err != nil {
+		t.Fatalf("failed to query device heatmap: %v", err)
+	}
+	if len(heatmap) != 2 {
+		t.Fatalf("expected 2 heatmap cells, got %d: %+v", len(heatmap), heatmap)
+	}
+	if heatmap[0].Hour < 0 || heatmap[0].Hour > 23 {
+		t.Fatalf("expected heatmap hour in range, got %+v", heatmap[0])
 	}
 
 	// 4. Query Top Protocols

@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import * as api from './api.js';
 import { Router } from './router.js';
+import { renderOverviewView, bindOverviewEvents } from './views/overview.js';
 import { renderTrafficView, bindTrafficEvents } from './views/traffic.js';
 import { renderDevicesView, bindDevicesEvents } from './views/devices.js';
 import { renderAlertsView, bindAlertsEvents } from './views/alerts.js';
@@ -93,7 +94,31 @@ async function loadData(isManualRefresh = false) {
         state.riskDevicesData = threatRisk || [];
 
         // View-specific data fetching
-        if (state.activeView === "dashboard") {
+        if (state.activeView === "overview") {
+            const range = trafficRangeConfig();
+            const [summary, timeline, protocols, topDevices, heatmap, collectorHealth, trafficSeries] = await Promise.all([
+                api.fetchSecuritySummary(),
+                api.fetchSecurityTimeline(range),
+                api.fetchStatsProtocols(range),
+                api.fetchStatsTopDevices(range),
+                api.fetchStatsHeatmap(range),
+                api.fetchStatsCollectorHealth(),
+                api.fetchTrafficTimeSeries(range)
+            ]).catch(err => {
+                console.error("Overview data load failed: ", err);
+                return [null, [], [], [], [], [], []];
+            });
+            state.securitySummaryData = summary || null;
+            state.securityTimelineData = timeline || [];
+            state.overviewProtocolsData = protocols || [];
+            state.overviewTopDevicesData = topDevices || [];
+            state.overviewHeatmapData = heatmap || [];
+            state.overviewCollectorHealthData = collectorHealth || [];
+            state.trafficSeriesData = trafficSeries || [];
+            state.riskDevicesData = summary?.top_risk_devices || state.riskDevicesData || [];
+            state.anomaliesData = summary?.recent_high_alerts || [];
+            renderOverviewView();
+        } else if (state.activeView === "dashboard") {
             const range = trafficRangeConfig();
             const [exporters, topTalkers, devices, anomalies, trafficSeries] = await Promise.all([
                 api.fetchExporters(),
@@ -170,6 +195,7 @@ window.addEventListener("viewchange", (e) => {
     const workspaceSubtitle = document.querySelector(".workspace-subtitle");
 
     const titles = {
+        overview: ["Overview", "Security posture, active attack signals, and coverage"],
         dashboard: ["Traffic", "Flow telemetry, risk signals, and local device activity"],
         devices: ["Devices", "Local inventory, labels, and learned baselines"],
         anomalies: ["Alerts", "Behavior changes that need review"],
@@ -248,6 +274,7 @@ async function initAuthenticatedApp() {
         const routes = {
             "#/traffic": "dashboard",
             "#/dashboard": "dashboard",
+            "#/overview": "overview",
             "#/devices": "devices",
             "#/alerts": "anomalies",
             "#/anomalies": "anomalies",
@@ -256,7 +283,7 @@ async function initAuthenticatedApp() {
             "#/audit": "audit",
             "#/settings": "settings"
         };
-        const router = new Router(routes, "dashboard");
+        const router = new Router(routes, "overview");
         router.init();
 
         window.autoRefreshTimer = setInterval(loadData, 5000);
@@ -295,6 +322,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     // Bind navigation buttons hash triggers
+    const navOverview = document.getElementById("nav-overview");
     const navDashboard = document.getElementById("nav-dashboard");
     const navDevices = document.getElementById("nav-devices");
     const navAnomalies = document.getElementById("nav-anomalies");
@@ -303,6 +331,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const navAudit = document.getElementById("nav-audit");
     const navSettings = document.getElementById("nav-settings");
 
+    if (navOverview) navOverview.addEventListener("click", () => { window.location.hash = "#/overview"; });
     if (navDashboard) navDashboard.addEventListener("click", () => { window.location.hash = "#/traffic"; });
     if (navDevices) navDevices.addEventListener("click", () => { window.location.hash = "#/devices"; });
     if (navAnomalies) navAnomalies.addEventListener("click", () => { window.location.hash = "#/alerts"; });
@@ -408,7 +437,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (viewWizard) viewWizard.classList.add("hidden");
                 
                 await initAuthenticatedApp();
-                window.location.hash = "#/traffic";
+                window.location.hash = "#/overview";
             } catch (err) {
                 window.showToast("Setup failed: " + err.message, "error");
             }
@@ -426,6 +455,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Bind View-specific event controls
+    bindOverviewEvents(loadData);
     bindTrafficEvents(loadData);
     bindDevicesEvents();
     bindAlertsEvents();

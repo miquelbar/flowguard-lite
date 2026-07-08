@@ -44,7 +44,12 @@ type APIServer struct {
 	authMu         sync.Mutex
 	sessions       map[string]authSession
 	loginAttempts  map[string]loginAttempt
+	statsMu        sync.RWMutex
+	statsSamples   []CollectorHealthSample
+	statsCancel    context.CancelFunc
 }
+
+const maxCollectorHealthSamples = 240
 
 // HealthResponse represents the structure of health check outputs.
 type HealthResponse struct {
@@ -53,6 +58,15 @@ type HealthResponse struct {
 	Timestamp   string           `json:"timestamp"`
 	Version     string           `json:"version"`
 	Collector   *collector.Stats `json:"collector,omitempty"`
+}
+
+// CollectorHealthSample is a bounded point-in-time snapshot used for Overview trends.
+type CollectorHealthSample struct {
+	Timestamp       time.Time `json:"timestamp"`
+	PacketsReceived uint64    `json:"packets_received"`
+	PacketsDropped  uint64    `json:"packets_dropped"`
+	DecodeErrors    uint64    `json:"decode_errors"`
+	QueueDepth      int       `json:"queue_depth"`
 }
 
 // NewAPIServer creates and configures a new APIServer instance.
@@ -116,6 +130,12 @@ func NewAPIServer(
 
 	// Threat risk scoring endpoints (Go 1.22+ wildcard patterns)
 	mux.HandleFunc("GET /api/risk/devices", s.handleListRiskDevices)
+	mux.HandleFunc("GET /api/security/summary", s.handleSecuritySummary)
+	mux.HandleFunc("GET /api/security/timeline", s.handleSecurityTimeline)
+	mux.HandleFunc("GET /api/stats/protocols", s.handleStatsProtocols)
+	mux.HandleFunc("GET /api/stats/top-devices", s.handleStatsTopDevices)
+	mux.HandleFunc("GET /api/stats/heatmap", s.handleStatsHeatmap)
+	mux.HandleFunc("GET /api/stats/collector-health", s.handleStatsCollectorHealth)
 
 	// Security audit log endpoints (Go 1.22+ wildcard patterns)
 	mux.HandleFunc("GET /api/audit-logs", s.handleListAuditLogs)
@@ -155,16 +175,98 @@ func NewAPIServer(
 // Start launches the HTTP server and blocks until it is stopped or encounters an error.
 func (s *APIServer) Start() error {
 	s.logger.Info("Starting HTTP API Server", slog.String("port", s.cfg.Port))
+	s.startCollectorStatsSampler()
 	if err := s.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		s.stopCollectorStatsSampler()
 		return fmt.Errorf("http server failure: %w", err)
 	}
+	s.stopCollectorStatsSampler()
 	return nil
 }
 
 // Shutdown gracefully stops the HTTP server within the provided context deadline.
 func (s *APIServer) Shutdown(ctx context.Context) error {
 	s.logger.Info("Shutting down HTTP API Server gracefully...")
+	s.stopCollectorStatsSampler()
 	return s.server.Shutdown(ctx)
+}
+
+func (s *APIServer) startCollectorStatsSampler() {
+	if s.collector == nil {
+		return
+	}
+	s.statsMu.Lock()
+	if s.statsCancel != nil {
+		s.statsMu.Unlock()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s.statsCancel = cancel
+	s.statsMu.Unlock()
+
+	s.recordCollectorStats(time.Now().UTC())
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case ts := <-ticker.C:
+				s.recordCollectorStats(ts.UTC())
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+func (s *APIServer) stopCollectorStatsSampler() {
+	s.statsMu.Lock()
+	cancel := s.statsCancel
+	s.statsCancel = nil
+	s.statsMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+func (s *APIServer) recordCollectorStats(ts time.Time) {
+	if s.collector == nil {
+		return
+	}
+	stats := s.collector.GetStats()
+	sample := CollectorHealthSample{
+		Timestamp:       ts,
+		PacketsReceived: stats.PacketsReceived,
+		PacketsDropped:  stats.PacketsDropped,
+		DecodeErrors:    stats.DecodeErrors,
+		QueueDepth:      stats.QueueDepth,
+	}
+
+	s.statsMu.Lock()
+	defer s.statsMu.Unlock()
+	s.statsSamples = append(s.statsSamples, sample)
+	if len(s.statsSamples) > maxCollectorHealthSamples {
+		s.statsSamples = s.statsSamples[len(s.statsSamples)-maxCollectorHealthSamples:]
+	}
+}
+
+func (s *APIServer) collectorHealthSamples(limit int) []CollectorHealthSample {
+	if limit <= 0 || limit > maxCollectorHealthSamples {
+		limit = maxCollectorHealthSamples
+	}
+
+	s.statsMu.RLock()
+	defer s.statsMu.RUnlock()
+	if len(s.statsSamples) == 0 {
+		return []CollectorHealthSample{}
+	}
+	start := len(s.statsSamples) - limit
+	if start < 0 {
+		start = 0
+	}
+	out := make([]CollectorHealthSample, len(s.statsSamples[start:]))
+	copy(out, s.statsSamples[start:])
+	return out
 }
 
 // handleHealth returns availability status and optionally collector performance counters.

@@ -392,6 +392,41 @@ func (r *SQLiteRepository) GetTopProtocols(ctx context.Context, start, end time.
 	return sortAndLimit(merged, limit), nil
 }
 
+// GetTopDevicesByVolume returns IPs with the highest source+destination byte volume.
+func (r *SQLiteRepository) GetTopDevicesByVolume(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error) {
+	dbs, err := r.GetShardsInRange(start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	merged := make(map[string]*flow.TopResult)
+	startUnix := start.Unix()
+	endUnix := end.Unix()
+
+	for _, db := range dbs {
+		rows, err := db.QueryContext(ctx, `
+			SELECT ip, SUM(bytes), SUM(packets), SUM(flows)
+			FROM (
+				SELECT src_ip AS ip, bytes, packets, flows
+				FROM flow_aggregates
+				WHERE bucket_ts >= ? AND bucket_ts <= ?
+				UNION ALL
+				SELECT dst_ip AS ip, bytes, packets, flows
+				FROM flow_aggregates
+				WHERE bucket_ts >= ? AND bucket_ts <= ?
+			)
+			GROUP BY ip
+		`, startUnix, endUnix, startUnix, endUnix)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query top devices: %w", err)
+		}
+		r.mergeRows(rows, merged)
+	}
+
+	r.filterTopResultsToKnownDevices(ctx, merged)
+	return sortAndLimit(merged, limit), nil
+}
+
 // GetTrafficTimeSeries returns total traffic counters grouped into fixed-size bounded time buckets.
 func (r *SQLiteRepository) GetTrafficTimeSeries(ctx context.Context, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error) {
 	dbs, err := r.GetShardsInRange(start, end)
@@ -439,6 +474,77 @@ func (r *SQLiteRepository) GetTrafficTimeSeries(ctx context.Context, start, end 
 	}
 
 	return sortTrafficBuckets(merged), nil
+}
+
+// GetDeviceActivityHeatmap returns hour-of-day traffic activity for the top device-like IPs.
+func (r *SQLiteRepository) GetDeviceActivityHeatmap(ctx context.Context, start, end time.Time, limit int) ([]flow.DeviceHeatmapCell, error) {
+	topDevices, err := r.GetTopDevicesByVolume(ctx, start, end, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(topDevices) == 0 {
+		return []flow.DeviceHeatmapCell{}, nil
+	}
+
+	allowed := make(map[string]struct{}, len(topDevices))
+	for _, item := range topDevices {
+		allowed[item.Key] = struct{}{}
+	}
+
+	dbs, err := r.GetShardsInRange(start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	startUnix := start.Unix()
+	endUnix := end.Unix()
+	merged := make(map[string]*flow.DeviceHeatmapCell)
+
+	for _, db := range dbs {
+		rows, err := db.QueryContext(ctx, `
+			SELECT ip, CAST(strftime('%H', bucket_ts, 'unixepoch') AS INTEGER) AS hour_of_day,
+			       SUM(bytes), SUM(packets), SUM(flows)
+			FROM (
+				SELECT src_ip AS ip, bucket_ts, bytes, packets, flows
+				FROM flow_aggregates
+				WHERE bucket_ts >= ? AND bucket_ts <= ?
+				UNION ALL
+				SELECT dst_ip AS ip, bucket_ts, bytes, packets, flows
+				FROM flow_aggregates
+				WHERE bucket_ts >= ? AND bucket_ts <= ?
+			)
+			GROUP BY ip, hour_of_day
+		`, startUnix, endUnix, startUnix, endUnix)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query device heatmap: %w", err)
+		}
+
+		for rows.Next() {
+			var cell flow.DeviceHeatmapCell
+			if err := rows.Scan(&cell.IP, &cell.Hour, &cell.Bytes, &cell.Packets, &cell.Flows); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("failed scanning device heatmap: %w", err)
+			}
+			if _, ok := allowed[cell.IP]; !ok {
+				continue
+			}
+			key := fmt.Sprintf("%s|%d", cell.IP, cell.Hour)
+			if existing, ok := merged[key]; ok {
+				existing.Bytes += cell.Bytes
+				existing.Packets += cell.Packets
+				existing.Flows += cell.Flows
+			} else {
+				merged[key] = &cell
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("failed iterating device heatmap rows: %w", err)
+		}
+		rows.Close()
+	}
+
+	return sortHeatmapCells(merged), nil
 }
 
 // === DeviceRepository Implementation ===
@@ -912,6 +1018,22 @@ func sortAndLimit(m map[string]*flow.TopResult, limit int) []flow.TopResult {
 	return slice
 }
 
+func (r *SQLiteRepository) filterTopResultsToKnownDevices(ctx context.Context, merged map[string]*flow.TopResult) {
+	devices, err := r.ListDevices(ctx)
+	if err != nil || len(devices) == 0 {
+		return
+	}
+	allowed := make(map[string]struct{}, len(devices))
+	for _, d := range devices {
+		allowed[d.IP] = struct{}{}
+	}
+	for key := range merged {
+		if _, ok := allowed[key]; !ok {
+			delete(merged, key)
+		}
+	}
+}
+
 func sortTrafficBuckets(m map[int64]*flow.TrafficTimeBucket) []flow.TrafficTimeBucket {
 	if len(m) == 0 {
 		return []flow.TrafficTimeBucket{}
@@ -927,6 +1049,23 @@ func sortTrafficBuckets(m map[int64]*flow.TrafficTimeBucket) []flow.TrafficTimeB
 	for _, key := range keys {
 		results = append(results, *m[key])
 	}
+	return results
+}
+
+func sortHeatmapCells(m map[string]*flow.DeviceHeatmapCell) []flow.DeviceHeatmapCell {
+	if len(m) == 0 {
+		return []flow.DeviceHeatmapCell{}
+	}
+	results := make([]flow.DeviceHeatmapCell, 0, len(m))
+	for _, val := range m {
+		results = append(results, *val)
+	}
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].IP == results[j].IP {
+			return results[i].Hour < results[j].Hour
+		}
+		return results[i].IP < results[j].IP
+	})
 	return results
 }
 
@@ -1463,7 +1602,7 @@ func (r *SQLiteRepository) GetPoliciesForIP(ctx context.Context, ip string) ([]P
 				}
 			}
 		}
-	if matches {
+		if matches {
 			matched = append(matched, p)
 		}
 	}

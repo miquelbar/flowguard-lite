@@ -169,8 +169,14 @@ type FlowRepository interface {
 	// GetTopProtocols returns transport protocols with the most bytes in the given time range.
 	GetTopProtocols(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error)
 
+	// GetTopDevicesByVolume returns local device-like IPs with the most source+destination byte volume.
+	GetTopDevicesByVolume(ctx context.Context, start, end time.Time, limit int) ([]flow.TopResult, error)
+
 	// GetTrafficTimeSeries returns total traffic counters grouped into fixed-size bounded time buckets.
 	GetTrafficTimeSeries(ctx context.Context, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error)
+
+	// GetDeviceActivityHeatmap returns hour-of-day device activity for the top devices in a bounded range.
+	GetDeviceActivityHeatmap(ctx context.Context, start, end time.Time, limit int) ([]flow.DeviceHeatmapCell, error)
 
 	// GetDeviceTrafficTimeSeries returns total traffic counters for a specific IP grouped into fixed-size bounded time buckets.
 	GetDeviceTrafficTimeSeries(ctx context.Context, ip string, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error)

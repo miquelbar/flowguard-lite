@@ -38,6 +38,9 @@ func TestDuckDBRepository_SaveAndQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed saving aggregates: %v", err)
 	}
+	if err := repo.UpsertDevice(ctx, "192.168.1.10", "workstation.local", now); err != nil {
+		t.Fatalf("failed upserting device: %v", err)
+	}
 
 	// 2. Query top sources
 	sources, err := repo.GetTopSources(ctx, now.Add(-1*time.Minute), now.Add(1*time.Minute), 5)
@@ -73,6 +76,23 @@ func TestDuckDBRepository_SaveAndQuery(t *testing.T) {
 	}
 	if len(series) != 1 || series[0].Bytes != 1536 || series[0].Packets != 15 || series[0].Flows != 2 {
 		t.Errorf("unexpected traffic time series result: %+v", series)
+	}
+
+	// 6. Query top devices and heatmap, filtering to known devices.
+	topDevices, err := repo.GetTopDevicesByVolume(ctx, now.Add(-1*time.Minute), now.Add(1*time.Minute), 5)
+	if err != nil {
+		t.Fatalf("failed querying top devices: %v", err)
+	}
+	if len(topDevices) != 1 || topDevices[0].Key != "192.168.1.10" || topDevices[0].Bytes != 1536 {
+		t.Errorf("unexpected top devices result: %+v", topDevices)
+	}
+
+	heatmap, err := repo.GetDeviceActivityHeatmap(ctx, now.Add(-1*time.Minute), now.Add(1*time.Minute), 5)
+	if err != nil {
+		t.Fatalf("failed querying device heatmap: %v", err)
+	}
+	if len(heatmap) != 1 || heatmap[0].IP != "192.168.1.10" || heatmap[0].Bytes != 1536 {
+		t.Errorf("unexpected device heatmap result: %+v", heatmap)
 	}
 }
 

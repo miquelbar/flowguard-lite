@@ -41,7 +41,13 @@
             </div>
 
             <nav class="nav-links">
-                <button id="nav-dashboard" class="nav-link active">
+                <button id="nav-overview" class="nav-link active">
+                    <svg class="icon nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    <span class="nav-text">Overview</span>
+                </button>
+                <button id="nav-dashboard" class="nav-link">
                     <svg class="icon nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
                     </svg>
@@ -136,8 +142,8 @@
         <!-- Header -->
         <header class="main-header">
             <div>
-                <h2 id="workspace-title">Traffic</h2>
-                <p class="workspace-subtitle">Flow telemetry, risk signals, and local device activity</p>
+                <h2 id="workspace-title">Overview</h2>
+                <p class="workspace-subtitle">Security posture, active attack signals, and coverage</p>
             </div>
             <div class="controls-area">
                 <button id="btn-refresh" class="btn-primary">
@@ -149,8 +155,225 @@
             </div>
         </header>
 
+        <!-- VIEW 0: Security & Network Overview -->
+        <div id="view-overview" class="view-content active">
+            <section class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon errors-glow">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                            <path d="M12 9v4M12 17h.01"/>
+                        </svg>
+                    </div>
+                    <div class="stat-content">
+                        <h3>Active Alerts</h3>
+                        <p class="stat-value" id="overview-active-alerts">-</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon drops-glow">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-content">
+                        <h3>Max Risk Score</h3>
+                        <p class="stat-value" id="overview-max-risk">-</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon queue-glow">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/>
+                            <path d="M8 11h8M8 15h5"/>
+                        </svg>
+                    </div>
+                    <div class="stat-content">
+                        <h3>Elevated Devices</h3>
+                        <p class="stat-value" id="overview-elevated-devices">-</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon packets-glow">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-content">
+                        <h3>High/Critical</h3>
+                        <p class="stat-value" id="overview-critical-alerts">-</p>
+                    </div>
+                </div>
+            </section>
+
+            <main class="overview-grid">
+                <section class="panel overview-panel overview-panel-wide overview-control-panel">
+                    <div class="panel-header flex-header">
+                        <div>
+                            <h2>Network Stats Window</h2>
+                            <p class="panel-subtitle text-muted">All panels use bounded aggregate queries for the selected range</p>
+                        </div>
+                        <div class="tab-buttons" id="overview-range-tabs">
+                            <button class="tab-btn overview-range-btn" data-range="1h">1h</button>
+                            <button class="tab-btn overview-range-btn" data-range="6h">6h</button>
+                            <button class="tab-btn overview-range-btn active" data-range="24h">24h</button>
+                            <button class="tab-btn overview-range-btn" data-range="7d">7d</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel overview-panel">
+                    <div class="panel-header">
+                        <h2>Threat Posture Summary</h2>
+                        <p class="panel-subtitle text-muted">Active alerts grouped by severity</p>
+                    </div>
+                    <div class="panel-body">
+                        <div id="overview-severity-summary" class="overview-stack"></div>
+                    </div>
+                </section>
+
+                <section class="panel overview-panel overview-panel-wide">
+                    <div class="panel-header">
+                        <h2>Attack Timeline</h2>
+                        <p class="panel-subtitle text-muted">Recent active alert clusters by hour</p>
+                    </div>
+                    <div class="panel-body">
+                        <div id="overview-attack-timeline"></div>
+                    </div>
+                </section>
+
+                <section class="panel overview-panel">
+                    <div class="panel-header">
+                        <h2>Detection Coverage</h2>
+                        <p class="panel-subtitle text-muted">Configured detector and delivery state</p>
+                    </div>
+                    <div class="panel-body">
+                        <div id="overview-detection-coverage" class="overview-stack"></div>
+                    </div>
+                </section>
+
+                <section class="panel overview-panel">
+                    <div class="panel-header">
+                        <h2>Top Threat Actors</h2>
+                        <p class="panel-subtitle text-muted">Local IPs with the most active alert evidence</p>
+                    </div>
+                    <div class="panel-body">
+                        <div class="table-container compact-table-container">
+                            <table id="overview-top-actors">
+                                <thead>
+                                    <tr>
+                                        <th>IP</th>
+                                        <th class="text-right">Alerts</th>
+                                        <th>Severity</th>
+                                        <th class="text-right">Risk</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="4" class="text-center text-muted">Loading threat actors...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel overview-panel">
+                    <div class="panel-header">
+                        <h2>Recent High-Severity Alerts</h2>
+                        <p class="panel-subtitle text-muted">Last active high or critical alerts</p>
+                    </div>
+                    <div class="panel-body">
+                        <div class="table-container compact-table-container">
+                            <table id="overview-recent-alerts">
+                                <thead>
+                                    <tr>
+                                        <th>IP</th>
+                                        <th>Type</th>
+                                        <th>Severity</th>
+                                        <th class="text-right">Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="4" class="text-center text-muted">Loading alerts...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel overview-panel">
+                    <div class="panel-header">
+                        <h2>Risk Distribution</h2>
+                        <p class="panel-subtitle text-muted">Device count by risk tier</p>
+                    </div>
+                    <div class="panel-body">
+                        <div id="overview-risk-distribution" class="overview-stack"></div>
+                    </div>
+                </section>
+
+                <section class="panel overview-panel">
+                    <div class="panel-header">
+                        <h2>Protocol Distribution</h2>
+                        <p class="panel-subtitle text-muted">Transport protocol byte share</p>
+                    </div>
+                    <div class="panel-body">
+                        <div id="overview-protocol-donut" class="overview-donut-wrap"></div>
+                    </div>
+                </section>
+
+                <section class="panel overview-panel">
+                    <div class="panel-header">
+                        <h2>Top 5 Devices by Volume</h2>
+                        <p class="panel-subtitle text-muted">Known devices ranked by source and destination bytes</p>
+                    </div>
+                    <div class="panel-body">
+                        <div id="overview-top-devices-bars" class="overview-stack"></div>
+                    </div>
+                </section>
+
+                <section class="panel overview-panel">
+                    <div class="panel-header">
+                        <h2>Traffic Rates</h2>
+                        <p class="panel-subtitle text-muted">Bytes/s, packets/s, and flows/s from aggregate buckets</p>
+                    </div>
+                    <div class="panel-body">
+                        <div id="overview-rate-sparklines" class="overview-stack"></div>
+                    </div>
+                </section>
+
+                <section class="panel overview-panel">
+                    <div class="panel-header">
+                        <h2>Subnet / VLAN Sparklines</h2>
+                        <p class="panel-subtitle text-muted">Top-device activity grouped by /24 subnet</p>
+                    </div>
+                    <div class="panel-body">
+                        <div id="overview-subnet-sparklines" class="overview-stack"></div>
+                    </div>
+                </section>
+
+                <section class="panel overview-panel overview-panel-wide">
+                    <div class="panel-header">
+                        <h2>Device Activity Heatmap</h2>
+                        <p class="panel-subtitle text-muted">Hour-of-day volume intensity for top devices</p>
+                    </div>
+                    <div class="panel-body">
+                        <div id="overview-device-heatmap" class="overview-heatmap"></div>
+                    </div>
+                </section>
+
+                <section class="panel overview-panel">
+                    <div class="panel-header">
+                        <h2>Collector Health</h2>
+                        <p class="panel-subtitle text-muted">Current drops, errors, and queue pressure</p>
+                    </div>
+                    <div class="panel-body">
+                        <div id="overview-collector-health" class="overview-stack"></div>
+                    </div>
+                </section>
+            </main>
+        </div>
+
         <!-- VIEW 1: Traffic Dashboard -->
-        <div id="view-dashboard" class="view-content active">
+        <div id="view-dashboard" class="view-content">
             <!-- Stats Grid -->
             <section class="stats-grid">
                 <div class="stat-card" id="card-total-volume">
@@ -1169,63 +1392,76 @@
                     <section id="settings-notifications" class="settings-card hidden">
                         <div class="settings-card-header">
                             <h3>Notifications &amp; Routing</h3>
-                            <p>Configure outbound alert channels. FlowGuard supports Slack/Discord webhooks and Telegram Bot alerts.</p>
+                            <p>Select a channel and configure how FlowGuard dispatches alerts.</p>
                         </div>
                         <form id="form-settings-webhook">
 
-                            <!-- Block A: Slack / Discord / Generic Webhook -->
-                            <div style="margin-bottom: 1.5rem;">
-                                <h4 style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">Webhook (Slack, Discord, Generic)</h4>
-                                <p class="text-muted" style="font-size: 0.75rem; margin-bottom: 0.85rem; line-height: 1.4;">
-                                    For Slack, create an <strong>Incoming Webhook</strong> in your workspace and paste the URL below.
-                                    For Discord, enable the Webhook integration in a channel and use the <code>/slack</code> suffix on the URL.
-                                    For generic HTTP endpoints, select <em>Generic JSON</em>.
-                                </p>
-                                <div class="form-group" style="margin-bottom: 1rem;">
-                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Webhook URL</label>
+                            <!-- Channel type selector -->
+                            <div class="form-group" style="margin-bottom: 1.5rem;">
+                                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Alert Channel</label>
+                                <select id="setting-channel-type" class="form-control" style="width: 100%;">
+                                    <option value="slack">Slack / Discord</option>
+                                    <option value="telegram">Telegram Bot</option>
+                                    <option value="webhook">Generic Webhook</option>
+                                </select>
+                            </div>
+
+                            <!-- Slack / Discord fields -->
+                            <div id="notif-fields-slack">
+                                <div class="form-group" style="margin-bottom: 0.35rem;">
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Incoming Webhook URL</label>
                                     <input type="url" id="setting-webhook-url" class="form-control" style="width: 100%;" placeholder="https://example.com/slack-webhook">
                                 </div>
+                                <p class="text-muted" style="font-size: 0.72rem; margin-bottom: 1rem; line-height: 1.4;">
+                                    Create an <strong>Incoming Webhook</strong> in your Slack workspace Apps settings. For Discord, use the Webhook URL with the <code>/slack</code> suffix.
+                                </p>
+                            </div>
+
+                            <!-- Telegram Bot fields -->
+                            <div id="notif-fields-telegram" class="hidden">
                                 <div class="form-group" style="margin-bottom: 1rem;">
-                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Payload Format</label>
-                                    <select id="setting-webhook-format" class="form-control" style="width: 100%;">
-                                        <option value="generic">Generic JSON (full anomaly object)</option>
-                                        <option value="slack">Slack / Discord ({"text": "..."})</option>
-                                    </select>
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Bot Token</label>
+                                    <input type="password" id="setting-telegram-token" class="form-control" style="width: 100%;" placeholder="e.g. 123456789:ABCdef..." autocomplete="off">
                                     <p class="text-muted" style="font-size: 0.72rem; margin-top: 0.3rem;">
-                                        Use <em>Slack / Discord</em> for any webhook that expects a <code>{"text": "message"}</code> payload.
+                                        Get a token from <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style="color: var(--primary-color);">@BotFather</a> on Telegram.
                                     </p>
                                 </div>
+                                <div class="form-group" style="margin-bottom: 1rem;">
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Chat ID</label>
+                                    <input type="text" id="setting-telegram-chat-id" class="form-control" style="width: 100%;" placeholder="e.g. -100123456789 (group) or 12345678 (user)">
+                                    <p class="text-muted" style="font-size: 0.72rem; margin-top: 0.3rem;">
+                                        Find your Chat ID with <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" style="color: var(--primary-color);">@userinfobot</a>.
+                                    </p>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 1rem;">
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+                                        API Endpoint <span style="font-weight: normal; color: var(--text-muted);">(auto-generated, read only)</span>
+                                    </label>
+                                    <input type="text" id="setting-telegram-url-preview" class="form-control" style="width: 100%; background: var(--border-highlight); cursor: default; color: var(--text-muted); font-size: 0.8rem;" readonly placeholder="https://api.telegram.org/bot{token}/sendMessage">
+                                </div>
+                            </div>
 
-                                <div>
-                                    <h4 style="margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 600; color: var(--text-primary);">Custom Headers <span style="font-weight: normal; color: var(--text-secondary);">(optional, for authentication)</span></h4>
-                                    <p class="text-muted" style="font-size: 0.75rem; margin-bottom: 0.75rem; line-height: 1.25;">e.g., Key: <code>Authorization</code>, Value: <code>Bearer token123</code></p>
+                            <!-- Generic Webhook fields -->
+                            <div id="notif-fields-webhook" class="hidden">
+                                <div class="form-group" style="margin-bottom: 1rem;">
+                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Webhook URL</label>
+                                    <input type="url" id="setting-webhook-url-generic" class="form-control" style="width: 100%;" placeholder="https://your-endpoint.com/hooks/alert">
+                                </div>
+                                <div style="margin-bottom: 1rem;">
+                                    <h4 style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">
+                                        Custom Headers <span style="font-weight: normal; color: var(--text-secondary);">(optional)</span>
+                                    </h4>
+                                    <p class="text-muted" style="font-size: 0.72rem; margin-bottom: 0.75rem;">e.g., Key: <code>Authorization</code>, Value: <code>Bearer token123</code></p>
                                     <div id="webhook-headers-list" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem;">
                                         <!-- Dynamically inserted header rows -->
                                     </div>
-                                    <button type="button" id="btn-add-webhook-header" class="btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; width: auto; align-self: flex-start; height: auto;">Add Header</button>
+                                    <button type="button" id="btn-add-webhook-header" class="btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; width: auto; height: auto;">Add Header</button>
                                 </div>
                             </div>
 
-                            <!-- Block B: Telegram Native Bot -->
-                            <div style="border-top: 1px solid var(--border-color); padding-top: 1.25rem;">
-                                <h4 style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">Telegram Bot</h4>
-                                <p class="text-muted" style="font-size: 0.75rem; margin-bottom: 0.85rem; line-height: 1.4;">
-                                    FlowGuard sends alerts directly to a Telegram chat via the Bot API.
-                                    Create a bot with <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style="color: var(--primary-color);">@BotFather</a>, copy the token, then find your Chat ID with <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" style="color: var(--primary-color);">@userinfobot</a>.
-                                </p>
-                                <div class="form-group" style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                                    <input type="checkbox" id="setting-telegram-enabled" style="width: auto; cursor: pointer;">
-                                    <label for="setting-telegram-enabled" style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0; cursor: pointer; user-select: none;">Enable Telegram Bot Alerts</label>
-                                </div>
-                                <div class="form-group" style="margin-bottom: 1rem;">
-                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Bot Token</label>
-                                    <input type="password" id="setting-telegram-token" class="form-control" style="width: 100%;" placeholder="e.g. 123456789:ABCdef...">
-                                </div>
-                                <div class="form-group" style="margin-bottom: 1.5rem;">
-                                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Chat ID</label>
-                                    <input type="text" id="setting-telegram-chat-id" class="form-control" style="width: 100%;" placeholder="e.g. -100123456789 (group) or 12345678 (user)">
-                                </div>
-                            </div>
+                            <!-- hidden fields still needed by backend save logic -->
+                            <input type="hidden" id="setting-webhook-format" value="slack">
+                            <input type="hidden" id="setting-telegram-enabled" value="false">
 
                             <div class="settings-actions">
                                 <button type="submit" class="btn-primary">Save Notifications</button>
@@ -1233,6 +1469,7 @@
                             </div>
                         </form>
                     </section>
+
 
                     <!-- 8. Integrations -->
                     <section id="settings-integrations" class="settings-card hidden">

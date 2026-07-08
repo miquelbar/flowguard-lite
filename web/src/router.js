@@ -34,7 +34,7 @@ export class Router {
     }
 
     switchView(viewName, param = null) {
-        const views = ["dashboard", "devices", "anomalies", "policies", "notifications", "audit", "settings"];
+        const views = ["overview", "dashboard", "devices", "anomalies", "policies", "notifications", "audit", "settings"];
         views.forEach(v => {
             const el = document.getElementById(`view-${v}`);
             if (el) {
