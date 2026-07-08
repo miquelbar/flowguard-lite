@@ -95,6 +95,14 @@ Start the collector using your configuration file:
 ./bin/flowguard -config /path/to/config.yaml
 ```
 
+### Development Demo Data
+Non-production builds expose a `-seed` flag for local demos:
+```bash
+go run ./cmd/flowguard -config config-dev.yaml -seed
+```
+
+The seed is deterministic and resets existing demo devices, flow aggregates, anomalies, policies, notification logs, and audit logs before repopulating them. It also marks first-run setup complete. Flow history remains bounded by `retention_days`; for example, the default `retention_days: 7` keeps roughly the latest week of seeded flow shards visible after startup retention cleanup.
+
 ---
 
 ## Verifying the Installation

@@ -10,7 +10,7 @@ import (
 	"github.com/flowguard/flowguard/internal/storage"
 )
 
-var seedFlag = flag.Bool("seed", false, "Seed database with 30 days of mock development telemetry and bypass wizard")
+var seedFlag = flag.Bool("seed", false, "Reset and seed the database with mock development telemetry and bypass the setup wizard")
 
 func handleSeed(repo storage.StorageRepository, log *slog.Logger, cfg *config.Config, configPath string) {
 	if !*seedFlag {

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/flowguard/flowguard/internal/config"
 	"github.com/flowguard/flowguard/internal/flow"
 )
 
@@ -168,6 +169,100 @@ func TestSQLiteRepository_SaveAndQuery(t *testing.T) {
 	}
 	if series[0].Bytes != 12000 || series[0].Packets != 40 {
 		t.Errorf("unexpected traffic time-series bucket: %+v", series[0])
+	}
+}
+
+func TestSeedMockData_IsIdempotentForSQLite(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sqlite_seed_idempotent")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo, err := NewSQLiteRepository(tmpDir, logger)
+	if err != nil {
+		t.Fatalf("failed to create repository: %v", err)
+	}
+	defer repo.Close()
+
+	cfg := config.DefaultConfig()
+	cfg.StorageDir = tmpDir
+	cfg.Environment = "development"
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	if err := SeedMockData(repo, logger, cfg, configPath); err != nil {
+		t.Fatalf("failed first seed: %v", err)
+	}
+	first := collectSeedSnapshot(t, repo)
+
+	if err := SeedMockData(repo, logger, cfg, configPath); err != nil {
+		t.Fatalf("failed second seed: %v", err)
+	}
+	second := collectSeedSnapshot(t, repo)
+
+	if first != second {
+		t.Fatalf("expected repeated seed to keep stable counts, first=%+v second=%+v", first, second)
+	}
+	if second.devices != 12 || second.policies != 3 || second.anomalies != 8 || second.activeAnomalies != 6 || second.auditLogs != 13 || second.notificationLogs != 6 {
+		t.Fatalf("unexpected seed counts: %+v", second)
+	}
+	if !cfg.FirstRunCompleted {
+		t.Fatal("expected seed to mark first-run setup completed")
+	}
+}
+
+type seedSnapshot struct {
+	devices          int
+	policies         int
+	anomalies        int
+	activeAnomalies  int
+	auditLogs        int
+	notificationLogs int
+	topSources       int
+}
+
+func collectSeedSnapshot(t *testing.T, repo *SQLiteRepository) seedSnapshot {
+	t.Helper()
+
+	ctx := context.Background()
+	devices, err := repo.ListDevices(ctx)
+	if err != nil {
+		t.Fatalf("failed listing devices: %v", err)
+	}
+	policies, err := repo.ListPolicies(ctx)
+	if err != nil {
+		t.Fatalf("failed listing policies: %v", err)
+	}
+	anomalies, err := repo.ListAnomalies(ctx, 100)
+	if err != nil {
+		t.Fatalf("failed listing anomalies: %v", err)
+	}
+	active, err := repo.GetActiveAnomalies(ctx, time.Now().Add(-24*time.Hour))
+	if err != nil {
+		t.Fatalf("failed listing active anomalies: %v", err)
+	}
+	auditLogs, err := repo.ListAuditLogs(ctx, 100)
+	if err != nil {
+		t.Fatalf("failed listing audit logs: %v", err)
+	}
+	notificationLogs, err := repo.ListNotificationLogs(ctx, 100)
+	if err != nil {
+		t.Fatalf("failed listing notification logs: %v", err)
+	}
+	topSources, err := repo.GetTopSources(ctx, time.Now().Add(-24*time.Hour), time.Now().Add(time.Hour), 10)
+	if err != nil {
+		t.Fatalf("failed listing seeded top sources: %v", err)
+	}
+
+	return seedSnapshot{
+		devices:          len(devices),
+		policies:         len(policies),
+		anomalies:        len(anomalies),
+		activeAnomalies:  len(active),
+		auditLogs:        len(auditLogs),
+		notificationLogs: len(notificationLogs),
+		topSources:       len(topSources),
 	}
 }
 

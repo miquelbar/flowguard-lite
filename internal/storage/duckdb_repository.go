@@ -170,6 +170,30 @@ func (r *DuckDBRepository) CleanupRetention(retentionDays int) error {
 	return nil
 }
 
+// ResetDevelopmentSeed clears demo data so repeated -seed runs stay deterministic.
+func (r *DuckDBRepository) ResetDevelopmentSeed(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	deletes := []string{
+		"DELETE FROM notification_logs",
+		"DELETE FROM notification_rules",
+		"DELETE FROM policies",
+		"DELETE FROM audit_logs",
+		"DELETE FROM anomalies",
+		"DELETE FROM device_baselines",
+		"DELETE FROM devices",
+		"DELETE FROM flow_aggregates",
+	}
+	for _, stmt := range deletes {
+		if _, err := r.db.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("failed to clear development seed data in DuckDB: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // SaveAggregates writes a slice of aggregated flow records to the single flow_aggregates table.
 func (r *DuckDBRepository) SaveAggregates(ctx context.Context, ts time.Time, aggregates []flow.FlowEvent) error {
 	if len(aggregates) == 0 {

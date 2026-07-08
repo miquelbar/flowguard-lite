@@ -228,6 +228,48 @@ func (r *SQLiteRepository) CleanupRetention(retentionDays int) error {
 	return nil
 }
 
+// ResetDevelopmentSeed clears demo data so repeated -seed runs stay deterministic.
+func (r *SQLiteRepository) ResetDevelopmentSeed(ctx context.Context) error {
+	r.mu.Lock()
+	metaDeletes := []string{
+		"DELETE FROM notification_logs",
+		"DELETE FROM notification_rules",
+		"DELETE FROM policies",
+		"DELETE FROM audit_logs",
+		"DELETE FROM anomalies",
+		"DELETE FROM device_baselines",
+		"DELETE FROM devices",
+		"DELETE FROM sqlite_sequence WHERE name IN ('notification_logs', 'notification_rules', 'policies', 'audit_logs', 'anomalies')",
+	}
+	for _, stmt := range metaDeletes {
+		if _, err := r.metaDB.ExecContext(ctx, stmt); err != nil {
+			r.mu.Unlock()
+			return fmt.Errorf("failed to clear development seed metadata: %w", err)
+		}
+	}
+	r.mu.Unlock()
+
+	files, err := os.ReadDir(r.dataDir)
+	if err != nil {
+		return fmt.Errorf("failed to read flow shard directory: %w", err)
+	}
+	for _, file := range files {
+		if file.IsDir() || !strings.HasSuffix(file.Name(), ".sqlite") {
+			continue
+		}
+		dateStr := strings.TrimSuffix(file.Name(), ".sqlite")
+		db, err := r.getOrCreateShard(dateStr)
+		if err != nil {
+			return fmt.Errorf("failed to open development seed shard %s: %w", dateStr, err)
+		}
+		if _, err := db.ExecContext(ctx, "DELETE FROM flow_aggregates"); err != nil {
+			return fmt.Errorf("failed to clear development seed shard %s: %w", dateStr, err)
+		}
+	}
+
+	return nil
+}
+
 // SaveAggregates writes aggregated minute records to the shard matching the bucket date.
 func (r *SQLiteRepository) SaveAggregates(ctx context.Context, ts time.Time, aggregates []flow.FlowEvent) error {
 	if len(aggregates) == 0 {

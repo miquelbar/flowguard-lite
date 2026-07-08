@@ -10,9 +10,20 @@ import (
 	"github.com/flowguard/flowguard/internal/flow"
 )
 
+type developmentSeedResetter interface {
+	ResetDevelopmentSeed(ctx context.Context) error
+}
+
 // SeedMockData populates 30 days of realistic mock telemetry, devices, baselines, and alerts.
 func SeedMockData(repo StorageRepository, log *slog.Logger, cfg *config.Config, configPath string) error {
 	ctx := context.Background()
+	if resetter, ok := repo.(developmentSeedResetter); ok {
+		log.Info("Resetting existing development seed data...")
+		if err := resetter.ResetDevelopmentSeed(ctx); err != nil {
+			return fmt.Errorf("reset development seed data: %w", err)
+		}
+	}
+
 	now := time.Now()
 
 	log.Info("Seeding discovered device records...")
