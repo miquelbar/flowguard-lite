@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
 
 type MockDeviceRepository struct {
@@ -109,7 +109,8 @@ func TestRiskEngine_CalculateDeviceRisks_DecayAndCapping(t *testing.T) {
 			Status:    "active",
 			CreatedAt: now.Add(-6 * time.Hour),
 		},
-		// Device 2: Older than 24 hours (should be ignored)
+		// Device 2: older than 24 hours but still active; it should remain visible
+		// with the unresolved-alert decay floor.
 		{
 			IP:        "192.168.1.50",
 			Type:      "TRAFFIC_SPIKE",
@@ -124,8 +125,8 @@ func TestRiskEngine_CalculateDeviceRisks_DecayAndCapping(t *testing.T) {
 		t.Fatalf("failed CalculateDeviceRisks: %v", err)
 	}
 
-	if len(results) != 1 {
-		t.Fatalf("expected 1 risky device, got %d", len(results))
+	if len(results) != 2 {
+		t.Fatalf("expected 2 risky devices, got %d", len(results))
 	}
 
 	if results[0].IP != "192.168.1.100" || results[0].RiskScore != 30 || results[0].RiskLevel != "medium" {
@@ -133,6 +134,12 @@ func TestRiskEngine_CalculateDeviceRisks_DecayAndCapping(t *testing.T) {
 	}
 	if len(results[0].Evidence) != 1 || results[0].Evidence[0].Type != "TRAFFIC_SPIKE" {
 		t.Errorf("expected 1 evidence item for TRAFFIC_SPIKE, got %+v", results[0].Evidence)
+	}
+	if results[1].IP != "192.168.1.50" || results[1].RiskScore != 6 || results[1].RiskLevel != "low" {
+		t.Errorf("expected older active alert to remain visible with score 6, got %+v", results[1])
+	}
+	if results[1].Breakdown.AlertBreakdown[0].DecayFactor != activeRiskDecayFloor {
+		t.Errorf("expected older active alert decay floor %.2f, got %+v", activeRiskDecayFloor, results[1].Breakdown.AlertBreakdown)
 	}
 }
 
@@ -231,7 +238,7 @@ func TestRiskEngine_BreakdownCalculations(t *testing.T) {
 			Type:      "TRAFFIC_SPIKE",
 			Severity:  "medium",
 			Status:    "active",
-			CreatedAt: now.Add(-11 * time.Hour - 30 * time.Minute), // ~11.5 hours ago -> correlates with Suricata alert (0.5h difference)
+			CreatedAt: now.Add(-11*time.Hour - 30*time.Minute), // ~11.5 hours ago -> correlates with Suricata alert (0.5h difference)
 		},
 	}
 

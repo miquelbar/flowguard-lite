@@ -13,8 +13,11 @@ Retrieves daemon health status, collector statistics, and queue depth indicators
 *   **Example Response:**
 ```json
 {
-  "status": "healthy",
-  "version": "1.0.0",
+  "status": "OK",
+  "healthy": true,
+  "environment": "production",
+  "timestamp": "2026-07-09T15:28:33Z",
+  "version": "0.1.0",
   "collector": {
     "packets_received": 145028,
     "packets_dropped": 0,
@@ -123,6 +126,7 @@ The default Overview dashboard uses bounded summary and stats endpoints.
 
 *   **Security posture:** `GET /api/security/summary` and `GET /api/security/timeline`.
 *   **Network stats:** `GET /api/stats/protocols`, `GET /api/stats/top-devices`, `GET /api/stats/heatmap`, plus `GET /api/traffic/timeseries`.
+*   **Flow explorer:** `GET /api/traffic/records` returns retained aggregate rows for bounded analyst filtering. It does not expose raw packets or unbounded raw flow storage.
 *   **Security:** Secret settings are not displayed in the dashboard; only configuration presence is shown.
 
 ### GET `/api/security/summary`
@@ -187,6 +191,33 @@ Returns bounded aggregate traffic counters for network charts.
 ]
 ```
 
+### GET `/api/traffic/records`
+Returns retained aggregate rows for analyst search/filter workflows. Each row is a bounded rollup from `flow_aggregates`, not a raw packet or indefinite raw flow record.
+
+*   **Query Parameters:**
+    *   `start` (Optional, RFC3339): Defaults to one hour before `end`.
+    *   `end` (Optional, RFC3339): Defaults to now.
+    *   `limit` (Optional, integer): Defaults to `10`; capped by API pagination.
+    *   `q` (Optional, string): Case-insensitive match against source or destination IP; capped at 128 characters.
+    *   `protocol` (Optional, integer): IP protocol number, `0`-`255`.
+    *   `dst_port` (Optional, integer): Destination port, `0`-`65535`.
+*   **Limits:** The maximum query range is 7 days.
+*   **Example Response:**
+```json
+[
+  {
+    "timestamp": "2026-07-04T14:00:00Z",
+    "src_ip": "192.168.30.150",
+    "dst_ip": "8.8.8.8",
+    "dst_port": 53,
+    "protocol": 17,
+    "bytes": 1200,
+    "packets": 12,
+    "flows": 2
+  }
+]
+```
+
 ### GET `/api/top/sources`
 Returns the top source IP addresses by byte volume for a bounded time range.
 
@@ -237,16 +268,20 @@ Lists all flagged anomalies, baseline breaches, or volumetric DDoS detections.
 ```json
 [
   {
-    "id": "anom_01",
-    "timestamp": "2026-07-04T14:38:00Z",
-    "device_ip": "192.168.1.50",
-    "type": "outbound_volume",
-    "details": "Outgoing traffic of 5.2 MB/s exceeded baseline mean by 5.4 std deviations.",
-    "severity": "high",
-    "status": "active"
+    "id": 42,
+    "ip": "192.168.1.50",
+    "destination_ip": "192.168.1.25",
+    "type": "NEW_INTERNAL_COMMUNICATION",
+    "description": "what happened: device contacted internal peer 192.168.1.25 after its east-west peer set was learned; why unusual: this local-to-local communication pattern was not present in the learned internal peer baseline...",
+    "severity": "medium",
+    "status": "active",
+    "created_at": "2026-07-04T14:38:00Z",
+    "updated_at": "2026-07-04T14:38:00Z"
   }
 ]
 ```
+
+`destination_ip` is omitted or empty when a detector does not have one specific destination. When present, `ip`/`subnet` policies can match either the source `ip` or the structured `destination_ip`.
 
 ### GET `/api/audit-logs`
 Lists security audit entries documenting configuration modifications and threat triage responses.
@@ -277,6 +312,9 @@ Returns the active configuration schema.
   "port": "8080",
   "netflow_port": 2055,
   "sflow_port": 6343,
+  "capture_interface": "",
+  "capture_bpf_filter": "ip or ip6",
+  "capture_promiscuous": false,
   "storage_backend": "sqlite",
   "local_subnets": [
     "192.168.1.0/24"
@@ -303,6 +341,7 @@ Updates the configuration keys and saves them to `config.yaml` on disk.
 
 *   **Request Body JSON Schema:** (Same as GET response)
 *   **Response Status:** `200 OK` (Returns the updated config)
+*   **Passive capture validation:** `capture_interface` is optional and enables capture when non-empty. An enabled interface requires a non-empty `capture_bpf_filter`; interface and filter values are length-bounded and reject null/control line breaks. Capture changes require a daemon restart.
 
 ---
 
@@ -350,6 +389,26 @@ Creates a new policy.
 }
 ```
 *   **Response Status:** `200 OK` (Returns the created policy object with populated `id`, `created_at` and `updated_at`)
+
+To suppress all anomaly types for one verified noisy device, create an exact-IP policy:
+
+```json
+{
+  "name": "Authorized infrastructure scanner",
+  "scope": "ip",
+  "target": "192.168.10.25",
+  "severity_threshold": "",
+  "suppressed": true,
+  "cooldown_seconds": 0,
+  "quiet_hours_start": "",
+  "quiet_hours_end": "",
+  "notification_channels": []
+}
+```
+
+Matching anomalies remain persisted with status `silenced`. Policy precedence is `ip` > `subnet` > `alert_type` > `global`; the newest policy wins when scopes have equal precedence. Equivalent textual forms of the same IPv6 address are treated as one address.
+
+To suppress a verified benign destination, use the same `ip` scope with the destination address as `target`. The policy matches anomalies whose structured `destination_ip` equals that address while leaving unrelated destinations active.
 
 ### PUT `/api/policies/{id}`
 Updates an existing policy.

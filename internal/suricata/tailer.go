@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
 
 // EveAlert holds specific Suricata threat signature alert fields.

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
 )
 
 type MockFlowRepository struct {

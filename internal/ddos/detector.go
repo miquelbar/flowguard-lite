@@ -11,9 +11,9 @@ import (
 
 	"strings"
 
-	"github.com/flowguard/flowguard/internal/config"
-	"github.com/flowguard/flowguard/internal/flow"
-	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/config"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
 
 // DeviceRates tracks packet and byte counters atomically inside the sliding window.

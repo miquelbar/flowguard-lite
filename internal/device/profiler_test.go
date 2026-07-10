@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/flow"
-	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
 
 type MockDeviceRepository struct {
@@ -194,5 +194,44 @@ func TestDeviceProfiler_DiscoveryAndChaining(t *testing.T) {
 	}
 	if next.Events[0].SrcIP != "192.168.1.100" {
 		t.Errorf("expected chained event SrcIP to match, got %s", next.Events[0].SrcIP)
+	}
+}
+
+func TestDeviceProfiler_LocalDestinationDiscovery(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo := NewMockDeviceRepository()
+	subnets := []string{"192.168.1.0/24"}
+
+	p := NewDeviceProfiler(repo, logger, subnets, nil)
+	p.Start()
+	defer p.Shutdown()
+
+	now := time.Now()
+	p.Process(&flow.FlowEvent{
+		Timestamp: now,
+		SrcIP:     "8.8.8.8",
+		DstIP:     "192.168.1.150",
+		Bytes:     100,
+	})
+
+	time.Sleep(50 * time.Millisecond)
+
+	dev, err := repo.GetDevice(context.Background(), "192.168.1.150")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dev == nil {
+		t.Fatal("expected local destination device to be discovered")
+	}
+	if dev.IP != "192.168.1.150" || !dev.LastSeen.Equal(now) {
+		t.Fatalf("unexpected local destination device: %+v", dev)
+	}
+
+	externalSource, err := repo.GetDevice(context.Background(), "8.8.8.8")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if externalSource != nil {
+		t.Fatalf("external source must not become a local device: %+v", externalSource)
 	}
 }

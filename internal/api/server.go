@@ -7,18 +7,19 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/baseline"
-	"github.com/flowguard/flowguard/internal/collector"
-	"github.com/flowguard/flowguard/internal/config"
-	"github.com/flowguard/flowguard/internal/ddos"
-	"github.com/flowguard/flowguard/internal/device"
-	"github.com/flowguard/flowguard/internal/risk"
-	"github.com/flowguard/flowguard/internal/storage"
-	"github.com/flowguard/flowguard/internal/ui"
-	"github.com/flowguard/flowguard/internal/webhook"
+	"github.com/miquelbar/flowguard-lite/internal/baseline"
+	"github.com/miquelbar/flowguard-lite/internal/collector"
+	"github.com/miquelbar/flowguard-lite/internal/config"
+	"github.com/miquelbar/flowguard-lite/internal/ddos"
+	"github.com/miquelbar/flowguard-lite/internal/device"
+	"github.com/miquelbar/flowguard-lite/internal/risk"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/ui"
+	"github.com/miquelbar/flowguard-lite/internal/webhook"
 )
 
 // CollectorProvider defines the contract for fetching collector stats and exporters.
@@ -53,11 +54,13 @@ const maxCollectorHealthSamples = 240
 
 // HealthResponse represents the structure of health check outputs.
 type HealthResponse struct {
-	Status      string           `json:"status"`
-	Environment string           `json:"environment"`
-	Timestamp   string           `json:"timestamp"`
-	Version     string           `json:"version"`
-	Collector   *collector.Stats `json:"collector,omitempty"`
+	Status       string           `json:"status"`
+	Healthy      bool             `json:"healthy"`
+	ErrorMessage string           `json:"error_message,omitempty"`
+	Environment  string           `json:"environment"`
+	Timestamp    string           `json:"timestamp"`
+	Version      string           `json:"version"`
+	Collector    *collector.Stats `json:"collector,omitempty"`
 }
 
 // CollectorHealthSample is a bounded point-in-time snapshot used for Overview trends.
@@ -116,6 +119,7 @@ func NewAPIServer(
 	mux.HandleFunc("/api/top/ports", s.handleTopPorts)
 	mux.HandleFunc("/api/top/protocols", s.handleTopProtocols)
 	mux.HandleFunc("GET /api/traffic/timeseries", s.handleTrafficTimeSeries)
+	mux.HandleFunc("GET /api/traffic/records", s.handleTrafficRecords)
 
 	// Device inventory endpoints (Go 1.22+ wildcard patterns)
 	mux.HandleFunc("GET /api/devices", s.handleListDevices)
@@ -167,9 +171,71 @@ func NewAPIServer(
 	mux.HandleFunc("POST /api/auth/logout", s.handleAuthLogout)
 
 	mux.Handle("/", ui.Handler())
-	s.server.Handler = s.authMiddleware(mux)
+	s.server.Handler = s.accessLogMiddleware(s.authMiddleware(mux))
 
 	return s
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	if r.status != 0 {
+		return
+	}
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *statusRecorder) Write(p []byte) (int, error) {
+	if r.status == 0 {
+		r.status = http.StatusOK
+	}
+	n, err := r.ResponseWriter.Write(p)
+	r.bytes += n
+	return n, err
+}
+
+func (s *APIServer) accessLogMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w}
+		next.ServeHTTP(rec, r)
+		status := rec.status
+		if status == 0 {
+			status = http.StatusOK
+		}
+		s.logger.Info("HTTP request",
+			slog.String("method", r.Method),
+			slog.String("path", r.URL.Path),
+			slog.String("query", sanitizedQuery(r)),
+			slog.Int("status", status),
+			slog.Int("bytes", rec.bytes),
+			slog.Duration("duration", time.Since(start)),
+			slog.String("remote_addr", r.RemoteAddr),
+		)
+	})
+}
+
+func sanitizedQuery(r *http.Request) string {
+	if r.URL.RawQuery == "" {
+		return ""
+	}
+	values := r.URL.Query()
+	for key := range values {
+		lower := strings.ToLower(key)
+		if strings.Contains(lower, "password") ||
+			strings.Contains(lower, "token") ||
+			strings.Contains(lower, "secret") ||
+			strings.Contains(lower, "key") ||
+			strings.Contains(lower, "webhook") {
+			values.Set(key, "REDACTED")
+		}
+	}
+	return values.Encode()
 }
 
 // Start launches the HTTP server and blocks until it is stopped or encounters an error.
@@ -278,6 +344,7 @@ func (s *APIServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	res := HealthResponse{
 		Status:      "OK",
+		Healthy:     true,
 		Environment: s.cfg.Environment,
 		Timestamp:   time.Now().UTC().Format(time.RFC3339),
 		Version:     "0.1.0",

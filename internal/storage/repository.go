@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
 )
 
 // Validate checks policy properties against safety rules to prevent unbounded queries or destructive loops.
@@ -92,14 +92,15 @@ type DeviceBaseline struct {
 
 // Anomaly represents a detected behavioral deviance.
 type Anomaly struct {
-	ID          int64     `json:"id"`
-	IP          string    `json:"ip"`
-	Type        string    `json:"type"`
-	Description string    `json:"description"`
-	Severity    string    `json:"severity"`
-	Status      string    `json:"status"` // "active", "acknowledged", "silenced"
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID            int64     `json:"id"`
+	IP            string    `json:"ip"`
+	DestinationIP string    `json:"destination_ip,omitempty"`
+	Type          string    `json:"type"`
+	Description   string    `json:"description"`
+	Severity      string    `json:"severity"`
+	Status        string    `json:"status"` // "active", "acknowledged", "silenced"
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // Policy represents a user-defined rule specifying how FlowGuard handles alerts/devices in scopes.
@@ -116,6 +117,33 @@ type Policy struct {
 	NotificationChannels []string  `json:"notification_channels"` // serialized as JSON array text in DB
 	CreatedAt            time.Time `json:"created_at"`
 	UpdatedAt            time.Time `json:"updated_at"`
+}
+
+// matchesAnomaly reports whether a policy applies to an anomaly. IP policies
+// compare parsed addresses so equivalent IPv6 spellings cannot bypass a rule.
+func (p Policy) matchesAnomaly(a *Anomaly) bool {
+	switch p.Scope {
+	case "global":
+		return true
+	case "ip":
+		targetIP := net.ParseIP(p.Target)
+		anomalyIP := net.ParseIP(a.IP)
+		destinationIP := net.ParseIP(a.DestinationIP)
+		return targetIP != nil &&
+			((anomalyIP != nil && targetIP.Equal(anomalyIP)) ||
+				(destinationIP != nil && targetIP.Equal(destinationIP)))
+	case "subnet":
+		_, ipNet, err := net.ParseCIDR(p.Target)
+		anomalyIP := net.ParseIP(a.IP)
+		destinationIP := net.ParseIP(a.DestinationIP)
+		return err == nil &&
+			((anomalyIP != nil && ipNet.Contains(anomalyIP)) ||
+				(destinationIP != nil && ipNet.Contains(destinationIP)))
+	case "alert_type":
+		return p.Target == a.Type
+	default:
+		return false
+	}
 }
 
 // AuditLog represents a security review or configuration action logged for auditing.

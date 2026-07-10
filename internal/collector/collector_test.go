@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/config"
-	"github.com/flowguard/flowguard/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/config"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
 	"github.com/netsampler/goflow2/pb"
 )
 
@@ -110,14 +110,51 @@ func TestFlowCollector_NormalizeFlowMessage(t *testing.T) {
 	}
 }
 
+func TestFlowCollector_NormalizeIPv6FlowMessage(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	c := NewFlowCollector(cfg, logger, nil)
+	start := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
+
+	msg := &flowpb.FlowMessage{
+		SrcAddr:       net.ParseIP("2001:db8::10").To16(),
+		DstAddr:       net.ParseIP("2001:db8::20").To16(),
+		SrcPort:       12345,
+		DstPort:       443,
+		Proto:         6,
+		Bytes:         4096,
+		Packets:       8,
+		TimeReceived:  uint64(start.Add(10 * time.Second).Unix()),
+		TimeFlowStart: uint64(start.Unix()),
+		TcpFlags:      0x12,
+	}
+
+	event := c.normalizeFlowMessage(msg, "2001:db8::1")
+	if event == nil {
+		t.Fatal("expected normalized IPv6 event, got nil")
+	}
+	if event.SrcIP != "2001:db8::10" || event.DstIP != "2001:db8::20" {
+		t.Fatalf("unexpected IPv6 normalization: %+v", event)
+	}
+	if !event.Timestamp.Equal(start) {
+		t.Fatalf("expected flow start timestamp %s, got %s", start, event.Timestamp)
+	}
+	if event.Protocol != 6 || event.SrcPort != 12345 || event.DstPort != 443 ||
+		event.Bytes != 4096 || event.Packets != 8 || event.TCPFlags != 0x12 {
+		t.Fatalf("unexpected normalized IPv6 counters/ports: %+v", event)
+	}
+}
+
 func TestFlowCollector_ExporterRegistry(t *testing.T) {
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	c := NewFlowCollector(cfg, logger, nil)
 
+	before := time.Now()
 	c.updateExporterStats("10.0.0.1")
 	c.updateExporterStats("10.0.0.1")
 	c.updateExporterStats("10.0.0.2")
+	after := time.Now()
 
 	exporters := c.GetExporters()
 	if len(exporters) != 2 {
@@ -136,8 +173,14 @@ func TestFlowCollector_ExporterRegistry(t *testing.T) {
 	if exp1.PacketCount != 2 {
 		t.Errorf("expected exporter 10.0.0.1 packet count 2, got %d", exp1.PacketCount)
 	}
+	if exp1.LastSeen.Before(before) || exp1.LastSeen.After(after) {
+		t.Errorf("expected exporter 10.0.0.1 last-seen within test window, got %s", exp1.LastSeen)
+	}
 	if exp2.PacketCount != 1 {
 		t.Errorf("expected exporter 10.0.0.2 packet count 1, got %d", exp2.PacketCount)
+	}
+	if exp2.LastSeen.Before(before) || exp2.LastSeen.After(after) {
+		t.Errorf("expected exporter 10.0.0.2 last-seen within test window, got %s", exp2.LastSeen)
 	}
 }
 

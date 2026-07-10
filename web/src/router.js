@@ -52,7 +52,13 @@ export class Router {
 
         state.activeView = viewName;
         if (viewName === "devices") {
-            state.selectedDeviceIP = param;
+            if (param && param.startsWith("subnet/")) {
+                state.selectedDeviceSubnet = decodeURIComponent(param.slice("subnet/".length));
+                state.selectedDeviceIP = null;
+            } else {
+                state.selectedDeviceSubnet = "";
+                state.selectedDeviceIP = param ? decodeURIComponent(param) : null;
+            }
         } else if (viewName === "anomalies") {
             state.selectedAnomalyId = param;
         }

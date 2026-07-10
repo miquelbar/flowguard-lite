@@ -2,6 +2,8 @@
 
 FlowGuard Lite uses a single configuration file (`config.yaml`) to adjust ports, networks, storage parameters, and outbound integrations.
 
+Behavioral detections that depend on local clock time use the process timezone. In Docker, set the standard `TZ` environment variable (for example `Europe/Madrid`) to match the monitored network.
+
 ---
 
 ## Modeline & Autocomplete
@@ -9,7 +11,7 @@ FlowGuard Lite uses a single configuration file (`config.yaml`) to adjust ports,
 To get live schema validation and autocompletion in IDEs like VS Code or GoLand, prepend the following line to your `config.yaml`:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/flowguard/flowguard/main/docs/config.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/miquelbar/flowguard-lite/main/docs/config.schema.json
 ```
 
 ---
@@ -27,6 +29,15 @@ netflow_port: 2055
 
 # UDP listening port for incoming sFlow telemetry
 sflow_port: 6343
+
+# Optional local interface for passive packet-to-flow capture. Empty disables it.
+capture_interface: ""
+
+# Kernel BPF filter applied before passive packets enter FlowGuard
+capture_bpf_filter: "ip or ip6"
+
+# Enable only when traffic visibility requires promiscuous interface capture
+capture_promiscuous: false
 
 # Directory where database shards, evidence, and logs will be written
 storage_dir: "/data"
@@ -94,6 +105,23 @@ suricata_eve_path: ""
 *   **Type:** Integer
 *   **Default:** `6343`
 *   **Description:** UDP port where the sFlow worker pool listens. Set to `0` to disable the sFlow collector.
+
+### `capture_interface`
+*   **Type:** String
+*   **Default:** `""` (disabled)
+*   **Description:** Local interface used for passive packet capture, such as `eth0` or `en0`. When enabled, FlowGuard reduces TCP and UDP packets to bounded 5-tuple flow counters. It does not persist payload bytes or PCAP data. The process needs permission to open a packet capture device.
+
+### `capture_bpf_filter`
+*   **Type:** String
+*   **Default:** `"ip or ip6"`
+*   **Description:** Berkeley Packet Filter applied by libpcap in the kernel. Invalid filters prevent capture startup. Use a restrictive filter where possible to reduce CPU load.
+
+### `capture_promiscuous`
+*   **Type:** Boolean
+*   **Default:** `false`
+*   **Description:** Requests promiscuous mode from libpcap. Leave disabled unless the selected interface receives traffic addressed to other hosts and the deployment has explicitly granted the required raw-packet privileges.
+
+These values are also available in **Settings → Collectors Setup → Passive Network Capture**. Saving capture changes persists them to the YAML configuration but does not re-open packet devices in the running process; restart the FlowGuard daemon after changing the interface, BPF filter, or promiscuous mode. The UI keeps capture disabled when the interface is empty and warns before enabling options that require raw-packet privileges.
 
 ### `storage_dir`
 *   **Type:** String
@@ -182,6 +210,9 @@ Any parameter can be overridden using environment variables prefixed with `FLOWG
 *   `FLOWGUARD_PORT` overrides `port`
 *   `FLOWGUARD_NETFLOW_PORT` overrides `netflow_port`
 *   `FLOWGUARD_SFLOW_PORT` overrides `sflow_port`
+*   `FLOWGUARD_CAPTURE_INTERFACE` overrides `capture_interface`
+*   `FLOWGUARD_CAPTURE_BPF_FILTER` overrides `capture_bpf_filter`
+*   `FLOWGUARD_CAPTURE_PROMISCUOUS` overrides `capture_promiscuous`
 *   `FLOWGUARD_STORAGE_DIR` overrides `storage_dir`
 *   `FLOWGUARD_STORAGE_BACKEND` overrides `storage_backend`
 *   `FLOWGUARD_LOG_LEVEL` overrides `log_level`
@@ -197,4 +228,3 @@ Any parameter can be overridden using environment variables prefixed with `FLOWG
 *   `FLOWGUARD_UDP_FLOOD_THRESHOLD_PPS` overrides `udp_flood_threshold_pps`
 *   `FLOWGUARD_ICMP_FLOOD_THRESHOLD_PPS` overrides `icmp_flood_threshold_pps`
 *   `FLOWGUARD_SURICATA_EVE_PATH` overrides `suricata_eve_path`
-

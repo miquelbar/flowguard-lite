@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,13 +15,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/baseline"
-	"github.com/flowguard/flowguard/internal/collector"
-	"github.com/flowguard/flowguard/internal/config"
-	"github.com/flowguard/flowguard/internal/flow"
-	"github.com/flowguard/flowguard/internal/risk"
-	"github.com/flowguard/flowguard/internal/storage"
-	"github.com/flowguard/flowguard/internal/webhook"
+	"github.com/miquelbar/flowguard-lite/internal/baseline"
+	"github.com/miquelbar/flowguard-lite/internal/collector"
+	"github.com/miquelbar/flowguard-lite/internal/config"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/risk"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/webhook"
 )
 
 type MockCollector struct {
@@ -72,6 +73,9 @@ func TestHandleHealth(t *testing.T) {
 	if res.Status != "OK" {
 		t.Errorf("expected status 'OK', got %s", res.Status)
 	}
+	if !res.Healthy {
+		t.Error("expected healthy flag to be true")
+	}
 	if res.Collector == nil {
 		t.Fatal("expected collector stats in response, got nil")
 	}
@@ -80,6 +84,32 @@ func TestHandleHealth(t *testing.T) {
 	}
 	if res.Collector.DecodeErrors != 1 {
 		t.Errorf("expected DecodeErrors 1, got %d", res.Collector.DecodeErrors)
+	}
+}
+
+func TestAccessLogMiddleware(t *testing.T) {
+	cfg := config.DefaultConfig()
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	server := NewAPIServer(cfg, logger, nil, nil, nil, nil, nil, nil, nil, nil, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status OK, got %d", w.Code)
+	}
+	logLine := buf.String()
+	for _, want := range []string{
+		"msg=\"HTTP request\"",
+		"method=GET",
+		"path=/api/health",
+		"status=200",
+	} {
+		if !strings.Contains(logLine, want) {
+			t.Fatalf("expected access log to contain %q, got %s", want, logLine)
+		}
 	}
 }
 
@@ -148,6 +178,7 @@ type MockFlowRepository struct {
 	Protocols    []flow.TopResult
 	TopDevices   []flow.TopResult
 	Heatmap      []flow.DeviceHeatmapCell
+	Records      []flow.AggregateRecord
 	Baseline     *storage.DeviceBaseline
 	Devices      []storage.Device
 	Anomalies    []storage.Anomaly
@@ -181,6 +212,15 @@ func (m *MockFlowRepository) GetTopDevicesByVolume(ctx context.Context, start, e
 func (m *MockFlowRepository) GetTrafficTimeSeries(ctx context.Context, start, end time.Time, bucketSeconds int) ([]flow.TrafficTimeBucket, error) {
 	return []flow.TrafficTimeBucket{
 		{Timestamp: start.UTC(), Bytes: 1000, Packets: 10, Flows: 2},
+	}, m.Err
+}
+
+func (m *MockFlowRepository) QueryFlowAggregateRecords(ctx context.Context, start, end time.Time, q string, protocol, dstPort, limit int) ([]flow.AggregateRecord, error) {
+	if m.Records != nil {
+		return m.Records, m.Err
+	}
+	return []flow.AggregateRecord{
+		{Timestamp: start.UTC(), SrcIP: "192.168.1.10", DstIP: "8.8.8.8", DstPort: 53, Protocol: 17, Bytes: 1200, Packets: 12, Flows: 2},
 	}, m.Err
 }
 
@@ -521,6 +561,41 @@ func TestHandleTrafficTimeSeries(t *testing.T) {
 	server.server.Handler.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected invalid bucket to return 400, got %d", w.Code)
+	}
+}
+
+func TestHandleTrafficRecords(t *testing.T) {
+	cfg := config.DefaultConfig()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	now := time.Now().UTC()
+	mockRepo := &MockFlowRepository{
+		Records: []flow.AggregateRecord{
+			{Timestamp: now.Add(-5 * time.Minute), SrcIP: "192.168.1.10", DstIP: "8.8.8.8", DstPort: 53, Protocol: 17, Bytes: 1200, Packets: 12, Flows: 2},
+		},
+	}
+	server := NewAPIServer(cfg, logger, nil, mockRepo, nil, nil, nil, nil, nil, nil, "")
+
+	start := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	end := now.Format(time.RFC3339)
+	req := httptest.NewRequest(http.MethodGet, "/api/traffic/records?start="+start+"&end="+end+"&q=192.168&protocol=17&dst_port=53&limit=200", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected records 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+	var records []flow.AggregateRecord
+	if err := json.Unmarshal(w.Body.Bytes(), &records); err != nil {
+		t.Fatalf("failed decoding traffic records: %v", err)
+	}
+	if len(records) != 1 || records[0].SrcIP != "192.168.1.10" || records[0].DstPort != 53 || records[0].Protocol != 17 {
+		t.Fatalf("unexpected records response: %+v", records)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/traffic/records?protocol=999", nil)
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected invalid protocol to return 400, got %d", w.Code)
 	}
 }
 
@@ -969,12 +1044,18 @@ func TestHandleSettings(t *testing.T) {
 	if current.Port != "8080" || current.FirstRunCompleted {
 		t.Errorf("unexpected current settings: %+v", current)
 	}
+	if current.CaptureInterface != "" || current.CaptureBPFFilter != "ip or ip6" || current.CapturePromiscuous {
+		t.Errorf("unexpected default capture settings: %+v", current)
+	}
 
 	// 2. POST settings
 	newSettings := SettingsPayload{
 		Port:                  "9090",
 		NetflowPort:           3000,
 		SflowPort:             4000,
+		CaptureInterface:      "eth0",
+		CaptureBPFFilter:      "tcp or udp",
+		CapturePromiscuous:    true,
 		StorageDir:            "/tmp/foo",
 		LogLevel:              "debug",
 		Environment:           "development",
@@ -1004,6 +1085,9 @@ func TestHandleSettings(t *testing.T) {
 	if server.cfg.Port != "9090" || server.cfg.StorageBackend != "duckdb" || !server.cfg.FirstRunCompleted {
 		t.Errorf("expected updated server configuration, got %+v", server.cfg)
 	}
+	if server.cfg.CaptureInterface != "eth0" || server.cfg.CaptureBPFFilter != "tcp or udp" || !server.cfg.CapturePromiscuous {
+		t.Errorf("expected capture settings to update in memory, got %+v", server.cfg)
+	}
 	if server.cfg.WebhookHeaders["Authorization"] != "Bearer test" {
 		t.Errorf("expected webhook headers to update in memory, got %+v", server.cfg.WebhookHeaders)
 	}
@@ -1015,6 +1099,9 @@ func TestHandleSettings(t *testing.T) {
 	}
 	if loadedConfig.Port != "9090" || !loadedConfig.FirstRunCompleted {
 		t.Errorf("expected loaded config to have updated values, got %+v", loadedConfig)
+	}
+	if loadedConfig.CaptureInterface != "eth0" || loadedConfig.CaptureBPFFilter != "tcp or udp" || !loadedConfig.CapturePromiscuous {
+		t.Errorf("expected capture settings to persist, got %+v", loadedConfig)
 	}
 	if loadedConfig.WebhookHeaders["Authorization"] != "Bearer test" {
 		t.Errorf("expected loaded config to persist webhook headers, got %+v", loadedConfig.WebhookHeaders)
@@ -1395,6 +1482,15 @@ func TestSettingsAPI_ValidationAndMasking(t *testing.T) {
 	server.server.Handler.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 Bad Request for out-of-bounds port, got %d", w.Code)
+	}
+
+	// D. Passive capture requires a bounded, non-empty BPF filter.
+	badCapture := `{"port":"8080","netflow_port":2055,"sflow_port":6343,"capture_interface":"eth0","capture_bpf_filter":"","storage_backend":"sqlite","local_subnets":["192.168.0.0/24"],"retention_days":7,"ddos_threshold_pps":5000,"ddos_threshold_bps":10000000,"syn_flood_threshold_pps":1000,"udp_flood_threshold_pps":3000,"icmp_flood_threshold_pps":500,"log_level":"info","environment":"production"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader(badCapture))
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for enabled capture without BPF filter, got %d", w.Code)
 	}
 
 	// 3. POST settings - verify successful update with masked token preservation

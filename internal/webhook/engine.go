@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
 
 // WebhookEngine handles asynchronous dispatching of security anomaly alerts to external channels.
@@ -343,7 +343,7 @@ func (w *WebhookEngine) dispatchHTTP(ctx context.Context, anomalyID int64, ruleI
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		errMsg := fmt.Sprintf("endpoint returned failure status code: %d", resp.StatusCode)
-		w.logger.Error(channel+" "+errMsg)
+		w.logger.Error(channel + " " + errMsg)
 		if w.repo != nil {
 			_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
 				AnomalyID:    anomalyID,

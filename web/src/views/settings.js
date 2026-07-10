@@ -1,10 +1,12 @@
 import { state } from '../state.js';
 import * as api from '../api.js';
+import { setNormalizedTrafficRange } from '../utils/timeRanges.js';
 
 let activeSettingsSection = "access";
 
 export function renderSettingsView() {
     if (!state.settingsData) return;
+    activeSettingsSection = normalizeSettingsSection(state.activeSettingsSection);
 
     const viewWizard = document.getElementById("view-wizard");
     if (viewWizard) {
@@ -22,6 +24,10 @@ export function renderSettingsView() {
     const setVal = (id, val) => {
         const el = document.getElementById(id);
         if (el) el.value = val;
+    };
+    const setChecked = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.checked = Boolean(val);
     };
 
     // Helper: only populate a section if the user hasn't made unsaved changes to it.
@@ -41,6 +47,9 @@ export function renderSettingsView() {
         setVal("setting-netflow", state.settingsData.netflow_port);
         setVal("setting-sflow", state.settingsData.sflow_port);
         setVal("setting-suricata-path", state.settingsData.suricata_eve_path || "");
+        setVal("setting-capture-interface", state.settingsData.capture_interface || "");
+        setVal("setting-capture-bpf-filter", state.settingsData.capture_bpf_filter || "ip or ip6");
+        setChecked("setting-capture-promiscuous", state.settingsData.capture_promiscuous);
     }
 
     if (noUnsaved("storage")) {
@@ -87,8 +96,13 @@ export function renderSettingsView() {
     Object.keys(state.unsavedChanges).forEach(k => {
         if (!state.unsavedChanges[k]) markUnsaved(k, false);
     });
+    switchSettingsSection(activeSettingsSection, { confirmUnsaved: false, updateHash: false });
 }
 
+function normalizeSettingsSection(section) {
+    const allowed = new Set(["access", "network", "collectors", "storage", "thresholds", "notifications", "integrations", "system"]);
+    return allowed.has(section) ? section : "access";
+}
 
 function getSettingsSectionLabel(sec) {
     const labels = {
@@ -113,8 +127,10 @@ function updateSettingsNavActive(sec) {
     });
 }
 
-function switchSettingsSection(section) {
-    if (state.unsavedChanges[activeSettingsSection]) {
+function switchSettingsSection(section, options = {}) {
+    const opts = { confirmUnsaved: true, updateHash: true, ...options };
+    section = normalizeSettingsSection(section);
+    if (section !== activeSettingsSection && opts.confirmUnsaved && state.unsavedChanges[activeSettingsSection]) {
         if (!confirm(`You have unsaved changes in the ${getSettingsSectionLabel(activeSettingsSection)} section. Do you want to discard them?`)) {
             updateSettingsNavActive(activeSettingsSection);
             return;
@@ -123,6 +139,7 @@ function switchSettingsSection(section) {
     }
 
     activeSettingsSection = section;
+    state.activeSettingsSection = section;
 
     document.querySelectorAll(".settings-main .settings-card").forEach(card => {
         const id = card.getAttribute("id");
@@ -134,6 +151,12 @@ function switchSettingsSection(section) {
     });
 
     updateSettingsNavActive(section);
+    if (opts.updateHash) {
+        const nextHash = `#/settings/${section}`;
+        if (window.location.hash !== nextHash) {
+            window.location.hash = nextHash;
+        }
+    }
 }
 
 function markUnsaved(section, isUnsaved) {
@@ -338,17 +361,31 @@ export function bindSettingsEvents(onReload) {
             const netflow = parseInt(document.getElementById("setting-netflow").value, 10);
             const sflow = parseInt(document.getElementById("setting-sflow").value, 10);
             const suricata = document.getElementById("setting-suricata-path").value.trim();
+            const captureInterface = document.getElementById("setting-capture-interface").value.trim();
+            const captureBPFFilter = document.getElementById("setting-capture-bpf-filter").value.trim();
+            const capturePromiscuous = document.getElementById("setting-capture-promiscuous").checked;
+            if (captureInterface && !captureBPFFilter) {
+                window.showToast("A BPF filter is required when passive capture is enabled.", "error");
+                return;
+            }
             const payload = {
                 ...state.settingsData,
                 netflow_port: netflow,
                 sflow_port: sflow,
-                suricata_eve_path: suricata
+                suricata_eve_path: suricata,
+                capture_interface: captureInterface,
+                capture_bpf_filter: captureBPFFilter,
+                capture_promiscuous: capturePromiscuous
             };
             try {
                 await api.saveSettings("collectors", payload);
                 let note = "";
-                if (payload.netflow_port !== state.settingsData.netflow_port || payload.sflow_port !== state.settingsData.sflow_port) {
-                    note = " (Note: Collector port changes require a daemon restart)";
+                if (payload.netflow_port !== state.settingsData.netflow_port ||
+                    payload.sflow_port !== state.settingsData.sflow_port ||
+                    payload.capture_interface !== state.settingsData.capture_interface ||
+                    payload.capture_bpf_filter !== state.settingsData.capture_bpf_filter ||
+                    payload.capture_promiscuous !== state.settingsData.capture_promiscuous) {
+                    note = " (Note: Collector and passive capture changes require a daemon restart)";
                 }
                 window.showToast("Collectors settings saved successfully." + note);
                 state.settingsData = await api.fetchSettings();
@@ -382,6 +419,7 @@ export function bindSettingsEvents(onReload) {
                 }
                 window.showToast("Storage settings saved successfully." + note);
                 state.settingsData = await api.fetchSettings();
+                setNormalizedTrafficRange();
                 markUnsaved("storage", false);
             } catch (err) {
                 window.showToast("Settings save failed: " + err.message, "error");
@@ -513,25 +551,7 @@ export function bindSettingsEvents(onReload) {
         link.addEventListener("click", (e) => {
             e.preventDefault();
             const sec = link.getAttribute("data-section");
-            if (sec === "integrations") {
-                if (state.unsavedChanges[activeSettingsSection]) {
-                    if (!confirm(`You have unsaved changes in the ${getSettingsSectionLabel(activeSettingsSection)} section. Do you want to discard them?`)) {
-                        return;
-                    }
-                    markUnsaved(activeSettingsSection, false);
-                }
-                activeSettingsSection = sec;
-                document.querySelectorAll(".settings-main .settings-card").forEach(c => {
-                    if (c.getAttribute("id") === "settings-integrations") {
-                        c.classList.remove("hidden");
-                    } else {
-                        c.classList.add("hidden");
-                    }
-                });
-                updateSettingsNavActive(sec);
-            } else {
-                switchSettingsSection(sec);
-            }
+            switchSettingsSection(sec);
         });
     });
 

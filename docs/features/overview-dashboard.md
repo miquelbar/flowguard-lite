@@ -21,6 +21,8 @@ The first M26 implementation adds these security-focused panels:
 - device risk distribution;
 - detection coverage summary.
 
+The active time range is selected globally from the application header and applies consistently to Overview and Traffic analysis panels.
+
 ## Data Sources
 
 The Overview dashboard uses dedicated bounded APIs for M26.2/M26.3:
@@ -32,6 +34,7 @@ The Overview dashboard uses dedicated bounded APIs for M26.2/M26.3:
 - `GET /api/stats/heatmap`;
 - `GET /api/stats/collector-health`;
 - `GET /api/traffic/timeseries`.
+- `GET /api/traffic/records` for bounded aggregate-row exploration in the Traffic Flow Explorer.
 
 The view does not expose secret values. Settings are used only to show detector and routing configuration presence, such as Suricata path configured/not configured and notification channel configured/not configured.
 
@@ -39,6 +42,7 @@ The view does not expose secret values. Settings are used only to show detector 
 
 M26.2 adds these network operations panels:
 
+- selected time-window summary showing aggregate traffic, packets, flows, and bucket coverage for the global range;
 - protocol distribution donut, responsive to the selected time range;
 - top 5 known devices by source and destination byte volume;
 - bytes/s, packets/s, and flows/s mini sparklines from aggregate buckets;
@@ -46,6 +50,8 @@ M26.2 adds these network operations panels:
 - device activity heatmap by hour of day;
 - collector health gauge with current packet, drop, decode error, and queue counters;
 - collector drops, decode errors, and queue-depth sparklines backed by a bounded in-memory sample ring.
+
+The Traffic workspace includes a Flow Explorer for analyst-style filtering over retained aggregate rows. This is intentionally not Kibana/Elastic and does not expose raw packet payloads or indefinite raw-flow storage; it searches the bounded `flow_aggregates` rollups by IP, protocol, destination port, and global time range.
 
 ## Performance Constraints
 

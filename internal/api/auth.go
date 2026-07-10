@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/config"
+	"github.com/miquelbar/flowguard-lite/internal/config"
 )
 
 const (

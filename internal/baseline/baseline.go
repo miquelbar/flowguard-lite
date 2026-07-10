@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
 
 // BaselineEngine manages calculation of historical device baselines and anomaly checks.

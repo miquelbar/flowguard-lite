@@ -59,6 +59,8 @@ Verify that FlowGuard Lite is running and listening on the designated ports:
 docker compose ps
 ```
 
+Passive capture requires a separate opt-in Linux deployment using host networking and narrowly scoped packet capabilities. The normal Compose file remains unprivileged. See [Passive Network Capture](features/passive-capture.md) before enabling it; never substitute `privileged: true`.
+
 ---
 
 ## Option 2: Host-Native Installation
@@ -72,7 +74,7 @@ If you prefer to run the binary directly on your system without virtualization, 
 
 ### 1. Clone and Prepare the Workspace
 ```bash
-git clone https://github.com/flowguard/flowguard.git
+git clone https://github.com/miquelbar/flowguard-lite.git
 cd flowguard
 ```
 
@@ -111,6 +113,17 @@ Open your browser and navigate to `http://localhost:8080`.
 *   If this is the first run, FlowGuard Lite prompts you to create the local admin password before protected API data is available.
 *   The setup wizard then guides you through local subnet range and storage preferences.
 *   Once configured, the analyst console unlocks.
+
+## Frontend Regression Checks
+
+Frontend changes should pass both the static UI check and the Cypress smoke suite:
+
+```bash
+make docker-ui-test
+make docker-ui-smoke
+```
+
+`make docker-ui-test` builds and lints the Vite application in Docker. `make docker-ui-smoke` runs Cypress against the Vite UI with mocked API responses, covering route rendering, mobile detail close controls, retention-aware time ranges, device/subnet drilldowns, Notifications editor behavior, and sortable tables without requiring a live FlowGuard daemon or local login state.
 
 ## Public Exposure and Reverse Proxies
 

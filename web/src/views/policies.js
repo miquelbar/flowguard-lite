@@ -20,13 +20,13 @@ export function renderPolicies() {
         
         let priorityBadge = "";
         if (p.scope === "ip") {
-            priorityBadge = `<span class="badge badge-label" style="background-color: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.2); color: #10b981; font-weight: 600;">4 (Highest)</span>`;
+            priorityBadge = `<span class="policy-priority-badge priority-highest"><span>4</span><small>Highest</small></span>`;
         } else if (p.scope === "subnet") {
-            priorityBadge = `<span class="badge badge-label" style="background-color: rgba(56,189,248,0.1); border-color: rgba(56,189,248,0.2); color: #38bdf8;">3</span>`;
+            priorityBadge = `<span class="policy-priority-badge priority-high"><span>3</span><small>Subnet</small></span>`;
         } else if (p.scope === "alert_type") {
-            priorityBadge = `<span class="badge badge-label" style="background-color: rgba(251,146,60,0.1); border-color: rgba(251,146,60,0.2); color: #fb923c;">2</span>`;
+            priorityBadge = `<span class="policy-priority-badge priority-medium"><span>2</span><small>Alert type</small></span>`;
         } else {
-            priorityBadge = `<span class="badge badge-label" style="background-color: rgba(148,163,184,0.1); border-color: rgba(148,163,184,0.2); color: #94a3b8;">1 (Lowest)</span>`;
+            priorityBadge = `<span class="policy-priority-badge priority-lowest"><span>1</span><small>Lowest</small></span>`;
         }
 
         return `

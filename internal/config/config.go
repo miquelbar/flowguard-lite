@@ -15,6 +15,9 @@ type Config struct {
 	Port                  string            `yaml:"port"`
 	NetflowPort           int               `yaml:"netflow_port"`
 	SflowPort             int               `yaml:"sflow_port"`
+	CaptureInterface      string            `yaml:"capture_interface"`
+	CaptureBPFFilter      string            `yaml:"capture_bpf_filter"`
+	CapturePromiscuous    bool              `yaml:"capture_promiscuous"`
 	StorageDir            string            `yaml:"storage_dir"`
 	LogLevel              string            `yaml:"log_level"`
 	Environment           string            `yaml:"environment"`
@@ -44,6 +47,9 @@ func DefaultConfig() *Config {
 		Port:                  "8080",
 		NetflowPort:           2055,
 		SflowPort:             6343,
+		CaptureInterface:      "",
+		CaptureBPFFilter:      "ip or ip6",
+		CapturePromiscuous:    false,
 		StorageDir:            "/data",
 		LogLevel:              "info",
 		Environment:           "production",
@@ -95,6 +101,17 @@ func LoadConfig(path string) (*Config, error) {
 	if val := os.Getenv("FLOWGUARD_SFLOW_PORT"); val != "" {
 		if p, err := strconv.Atoi(val); err == nil {
 			cfg.SflowPort = p
+		}
+	}
+	if val := os.Getenv("FLOWGUARD_CAPTURE_INTERFACE"); val != "" {
+		cfg.CaptureInterface = val
+	}
+	if val := os.Getenv("FLOWGUARD_CAPTURE_BPF_FILTER"); val != "" {
+		cfg.CaptureBPFFilter = val
+	}
+	if val := os.Getenv("FLOWGUARD_CAPTURE_PROMISCUOUS"); val != "" {
+		if enabled, err := strconv.ParseBool(val); err == nil {
+			cfg.CapturePromiscuous = enabled
 		}
 	}
 	if val := os.Getenv("FLOWGUARD_STORAGE_DIR"); val != "" {

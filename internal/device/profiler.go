@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/flow"
-	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
 
 type dnsCacheEntry struct {

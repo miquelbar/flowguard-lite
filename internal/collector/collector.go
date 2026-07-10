@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/config"
-	"github.com/flowguard/flowguard/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/config"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
 	"github.com/netsampler/goflow2/decoders/netflow"
 	"github.com/netsampler/goflow2/decoders/sflow"
 	"github.com/netsampler/goflow2/pb"

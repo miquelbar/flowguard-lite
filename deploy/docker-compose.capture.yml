@@ -1,0 +1,35 @@
+services:
+  flowguard:
+    image: flowguard:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: flowguard
+    restart: unless-stopped
+
+    # Linux only: expose the host network namespace so libpcap can see host
+    # interfaces. Port mappings are intentionally omitted in host mode.
+    network_mode: host
+
+    # Packet sockets require NET_RAW. Do not replace this with privileged:true.
+    # If capture_promiscuous=true, also add NET_ADMIN as documented.
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
+    security_opt:
+      - no-new-privileges:true
+
+    volumes:
+      - flowguard_capture_data:/data
+    environment:
+      FLOWGUARD_LOG_LEVEL: ${FLOWGUARD_LOG_LEVEL:-info}
+      FLOWGUARD_ENV: production
+      TZ: ${TZ:-UTC}
+      # Empty remains disabled, even in this opt-in deployment file.
+      FLOWGUARD_CAPTURE_INTERFACE: ${FLOWGUARD_CAPTURE_INTERFACE:-}
+      FLOWGUARD_CAPTURE_BPF_FILTER: ${FLOWGUARD_CAPTURE_BPF_FILTER:-ip or ip6}
+      FLOWGUARD_CAPTURE_PROMISCUOUS: ${FLOWGUARD_CAPTURE_PROMISCUOUS:-false}
+
+volumes:
+  flowguard_capture_data:

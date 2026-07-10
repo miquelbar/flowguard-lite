@@ -1,18 +1,26 @@
 import { state } from '../state.js';
 import { formatBytes, formatNumber, formatTime, formatShortTime, escapeHtml } from '../utils/format.js';
 import * as api from '../api.js';
-import { trafficRangeConfig } from './traffic.js';
+import { trafficRangeConfig } from '../utils/timeRanges.js';
+import { isKnownDeviceIP } from '../utils/deviceLinks.js';
 
 export function renderDevices() {
     const tblDevices = document.getElementById("tbl-devices").querySelector("tbody");
     const inputDeviceSearch = document.getElementById("input-device-search");
+    const selectDeviceSubnet = document.getElementById("select-device-subnet");
     if (!tblDevices) return;
 
+    renderDeviceSubnetOptions(selectDeviceSubnet);
+
     const query = inputDeviceSearch ? inputDeviceSearch.value.trim().toLowerCase() : "";
+    const selectedSubnet = state.selectedDeviceSubnet || "";
     const filtered = (state.devicesData || []).filter(dev => {
-        return dev.ip.toLowerCase().includes(query) || 
+        const subnet = subnetLabelForDevice(dev.ip);
+        const subnetMatch = !selectedSubnet || subnet === selectedSubnet;
+        const searchMatch = dev.ip.toLowerCase().includes(query) ||
                (dev.hostname && dev.hostname.toLowerCase().includes(query)) ||
                (dev.label && dev.label.toLowerCase().includes(query));
+        return subnetMatch && searchMatch;
     });
 
     if (filtered.length === 0) {
@@ -48,6 +56,21 @@ export function renderDevices() {
             window.location.hash = `#/devices/${ip}`;
         });
     });
+}
+
+function subnetLabelForDevice(ip) {
+    const parts = String(ip || "").split(".");
+    if (parts.length < 3) return "Unknown";
+    return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+}
+
+function renderDeviceSubnetOptions(selectEl) {
+    if (!selectEl) return;
+    const subnets = [...new Set((state.devicesData || []).map(dev => subnetLabelForDevice(dev.ip)))].sort();
+    const selected = state.selectedDeviceSubnet || "";
+    selectEl.innerHTML = `<option value="">All subnets / VLANs</option>${subnets.map(subnet => `
+        <option value="${escapeHtml(subnet)}"${subnet === selected ? " selected" : ""}>${escapeHtml(subnet)}</option>
+    `).join("")}`;
 }
 
 function drawDeviceTrafficChart(timeSeries) {
@@ -111,8 +134,17 @@ function drawDeviceTrafficChart(timeSeries) {
 }
 
 export async function selectDevice(ip) {
+    if (!isKnownDeviceIP(ip)) {
+        state.selectedDeviceIP = null;
+        window.location.hash = "#/devices";
+        window.showToast(`No local device profile exists for ${ip}.`, "error");
+        renderDevicesView();
+        return;
+    }
     state.selectedDeviceIP = ip;
     renderDevices();
+    const deviceDetailsPanel = document.getElementById("panel-device-details");
+    if (deviceDetailsPanel) deviceDetailsPanel.scrollTop = 0;
 
     const detailsEmpty = document.getElementById("device-details-empty");
     const detailsContent = document.getElementById("device-details-content");
@@ -463,6 +495,15 @@ export function bindDevicesEvents() {
             renderDevices();
         });
     }
+    const selectDeviceSubnet = document.getElementById("select-device-subnet");
+    if (selectDeviceSubnet) {
+        selectDeviceSubnet.addEventListener("change", (e) => {
+            const subnet = e.target.value;
+            state.selectedDeviceSubnet = subnet;
+            state.selectedDeviceIP = null;
+            window.location.hash = subnet ? `#/devices/subnet/${encodeURIComponent(subnet)}` : "#/devices";
+        });
+    }
 
     const formUpdateLabel = document.getElementById("form-update-label");
     const inputDetailLabel = document.getElementById("input-detail-label");
@@ -524,9 +565,11 @@ export function bindDevicesEvents() {
     });
 
     const btnCloseDetails = document.getElementById("btn-close-device-details");
-    if (btnCloseDetails) {
-        btnCloseDetails.addEventListener("click", () => {
+    const btnCloseDetailsFloating = document.getElementById("btn-close-device-details-floating");
+    [btnCloseDetails, btnCloseDetailsFloating].forEach(btn => {
+        if (!btn) return;
+        btn.addEventListener("click", () => {
             window.location.hash = "#/devices";
         });
-    }
+    });
 }

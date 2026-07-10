@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
 	_ "modernc.org/sqlite"
 )
 
@@ -87,6 +87,7 @@ func NewSQLiteRepository(dataDir string, logger *slog.Logger) (*SQLiteRepository
 		CREATE TABLE IF NOT EXISTS anomalies (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			ip TEXT NOT NULL,
+			destination_ip TEXT NOT NULL DEFAULT '',
 			type TEXT NOT NULL,
 			description TEXT NOT NULL,
 			severity TEXT NOT NULL DEFAULT 'medium',
@@ -152,6 +153,14 @@ func NewSQLiteRepository(dataDir string, logger *slog.Logger) (*SQLiteRepository
 	if err != nil {
 		metaDB.Close()
 		return nil, fmt.Errorf("failed schema metadata setup: %w", err)
+	}
+	if _, err := metaDB.Exec(`ALTER TABLE anomalies ADD COLUMN destination_ip TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+		metaDB.Close()
+		return nil, fmt.Errorf("failed to migrate anomalies destination_ip column: %w", err)
+	}
+	if _, err := metaDB.Exec(`CREATE INDEX IF NOT EXISTS idx_anomalies_destination_ip ON anomalies (destination_ip)`); err != nil {
+		metaDB.Close()
+		return nil, fmt.Errorf("failed to create anomalies destination index: %w", err)
 	}
 
 	return &SQLiteRepository{
@@ -518,6 +527,81 @@ func (r *SQLiteRepository) GetTrafficTimeSeries(ctx context.Context, start, end 
 	return sortTrafficBuckets(merged), nil
 }
 
+// QueryFlowAggregateRecords returns bounded aggregate rows for analyst filtering.
+func (r *SQLiteRepository) QueryFlowAggregateRecords(ctx context.Context, start, end time.Time, q string, protocol, dstPort, limit int) ([]flow.AggregateRecord, error) {
+	dbs, err := r.GetShardsInRange(start, end)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+
+	startUnix := start.Unix()
+	endUnix := end.Unix()
+	queryText := strings.TrimSpace(strings.ToLower(q))
+	var out []flow.AggregateRecord
+
+	for _, db := range dbs {
+		clauses := []string{"bucket_ts >= ?", "bucket_ts <= ?"}
+		args := []interface{}{startUnix, endUnix}
+		if queryText != "" {
+			clauses = append(clauses, "(lower(src_ip) LIKE ? OR lower(dst_ip) LIKE ?)")
+			like := "%" + queryText + "%"
+			args = append(args, like, like)
+		}
+		if protocol > 0 {
+			clauses = append(clauses, "protocol = ?")
+			args = append(args, protocol)
+		}
+		if dstPort > 0 {
+			clauses = append(clauses, "dst_port = ?")
+			args = append(args, dstPort)
+		}
+		args = append(args, limit)
+
+		rows, err := db.QueryContext(ctx, `
+			SELECT bucket_ts, src_ip, dst_ip, dst_port, protocol, bytes, packets, flows
+			FROM flow_aggregates
+			WHERE `+strings.Join(clauses, " AND ")+`
+			ORDER BY bucket_ts DESC, bytes DESC
+			LIMIT ?
+		`, args...)
+		if err != nil {
+			return nil, fmt.Errorf("failed querying flow aggregate records: %w", err)
+		}
+		for rows.Next() {
+			var rec flow.AggregateRecord
+			var ts int64
+			if err := rows.Scan(&ts, &rec.SrcIP, &rec.DstIP, &rec.DstPort, &rec.Protocol, &rec.Bytes, &rec.Packets, &rec.Flows); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("failed scanning flow aggregate record: %w", err)
+			}
+			rec.Timestamp = time.Unix(ts, 0).UTC()
+			out = append(out, rec)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("failed iterating flow aggregate records: %w", err)
+		}
+		rows.Close()
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].Timestamp.Equal(out[j].Timestamp) {
+			return out[i].Timestamp.After(out[j].Timestamp)
+		}
+		return out[i].Bytes > out[j].Bytes
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	if out == nil {
+		out = []flow.AggregateRecord{}
+	}
+	return out, nil
+}
+
 // GetDeviceActivityHeatmap returns hour-of-day traffic activity for the top device-like IPs.
 func (r *SQLiteRepository) GetDeviceActivityHeatmap(ctx context.Context, start, end time.Time, limit int) ([]flow.DeviceHeatmapCell, error) {
 	topDevices, err := r.GetTopDevicesByVolume(ctx, start, end, limit)
@@ -774,9 +858,9 @@ func (r *SQLiteRepository) SaveAnomaly(ctx context.Context, a *Anomaly) error {
 	updatedStr := a.UpdatedAt.Format(time.RFC3339)
 
 	res, err := r.metaDB.ExecContext(ctx, `
-		INSERT INTO anomalies (ip, type, description, severity, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, a.IP, a.Type, a.Description, a.Severity, a.Status, createdStr, updatedStr)
+		INSERT INTO anomalies (ip, destination_ip, type, description, severity, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, a.IP, a.DestinationIP, a.Type, a.Description, a.Severity, a.Status, createdStr, updatedStr)
 	if err != nil {
 		return fmt.Errorf("failed to save anomaly for IP %s: %w", a.IP, err)
 	}
@@ -830,7 +914,7 @@ func (r *SQLiteRepository) ListAnomalies(ctx context.Context, limit int) ([]Anom
 	defer r.mu.RUnlock()
 
 	rows, err := r.metaDB.QueryContext(ctx, `
-		SELECT id, ip, type, description, severity, status, created_at, updated_at
+		SELECT id, ip, COALESCE(destination_ip, ''), type, description, severity, status, created_at, updated_at
 		FROM anomalies
 		ORDER BY created_at DESC
 		LIMIT ?
@@ -845,7 +929,7 @@ func (r *SQLiteRepository) ListAnomalies(ctx context.Context, limit int) ([]Anom
 		var a Anomaly
 		var createdStr, updatedStr string
 
-		err = rows.Scan(&a.ID, &a.IP, &a.Type, &a.Description, &a.Severity, &a.Status, &createdStr, &updatedStr)
+		err = rows.Scan(&a.ID, &a.IP, &a.DestinationIP, &a.Type, &a.Description, &a.Severity, &a.Status, &createdStr, &updatedStr)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan anomaly row: %w", err)
 		}
@@ -874,7 +958,7 @@ func (r *SQLiteRepository) GetActiveAnomalies(ctx context.Context, since time.Ti
 	sinceStr := since.Format(time.RFC3339)
 
 	rows, err := r.metaDB.QueryContext(ctx, `
-		SELECT id, ip, type, description, severity, status, created_at, updated_at
+		SELECT id, ip, COALESCE(destination_ip, ''), type, description, severity, status, created_at, updated_at
 		FROM anomalies
 		WHERE status = 'active' AND created_at >= ?
 		ORDER BY created_at DESC
@@ -889,7 +973,7 @@ func (r *SQLiteRepository) GetActiveAnomalies(ctx context.Context, since time.Ti
 		var a Anomaly
 		var createdStr, updatedStr string
 
-		err = rows.Scan(&a.ID, &a.IP, &a.Type, &a.Description, &a.Severity, &a.Status, &createdStr, &updatedStr)
+		err = rows.Scan(&a.ID, &a.IP, &a.DestinationIP, &a.Type, &a.Description, &a.Severity, &a.Status, &createdStr, &updatedStr)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan active anomaly row: %w", err)
 		}
@@ -1177,7 +1261,7 @@ func (r *SQLiteRepository) GetAnomaliesForIP(ctx context.Context, ip string, lim
 	defer r.mu.RUnlock()
 
 	rows, err := r.metaDB.QueryContext(ctx, `
-		SELECT id, ip, type, description, severity, status, created_at, updated_at
+		SELECT id, ip, COALESCE(destination_ip, ''), type, description, severity, status, created_at, updated_at
 		FROM anomalies
 		WHERE ip = ?
 		ORDER BY created_at DESC
@@ -1193,7 +1277,7 @@ func (r *SQLiteRepository) GetAnomaliesForIP(ctx context.Context, ip string, lim
 		var a Anomaly
 		var createdStr, updatedStr string
 
-		err = rows.Scan(&a.ID, &a.IP, &a.Type, &a.Description, &a.Severity, &a.Status, &createdStr, &updatedStr)
+		err = rows.Scan(&a.ID, &a.IP, &a.DestinationIP, &a.Type, &a.Description, &a.Severity, &a.Status, &createdStr, &updatedStr)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan anomaly row: %w", err)
 		}
@@ -1489,25 +1573,7 @@ func (r *SQLiteRepository) evaluateAnomalyPoliciesLocked(ctx context.Context, a 
 	// 1. Find matching policies
 	var matchedPolicies []Policy
 	for _, p := range policies {
-		matches := false
-		switch p.Scope {
-		case "global":
-			matches = true
-		case "ip":
-			matches = p.Target == a.IP
-		case "subnet":
-			_, ipNet, err := net.ParseCIDR(p.Target)
-			if err == nil {
-				ipObj := net.ParseIP(a.IP)
-				if ipObj != nil && ipNet.Contains(ipObj) {
-					matches = true
-				}
-			}
-		case "alert_type":
-			matches = p.Target == a.Type
-		}
-
-		if matches {
+		if p.matchesAnomaly(a) {
 			matchedPolicies = append(matchedPolicies, p)
 		}
 	}

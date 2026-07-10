@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/config"
-	"github.com/flowguard/flowguard/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/config"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
 )
 
 type developmentSeedResetter interface {

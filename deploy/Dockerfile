@@ -11,6 +11,7 @@ FROM golang:1.25-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    libpcap-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
@@ -37,6 +38,7 @@ FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    libpcap0.8 \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
 
@@ -58,4 +60,3 @@ VOLUME ["/data"]
 
 ENTRYPOINT ["/usr/local/bin/flowguard"]
 CMD ["-config", "/data/config.yaml"]
-

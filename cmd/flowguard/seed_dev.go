@@ -6,8 +6,8 @@ import (
 	"flag"
 	"log/slog"
 
-	"github.com/flowguard/flowguard/internal/config"
-	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/config"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
 
 var seedFlag = flag.Bool("seed", false, "Reset and seed the database with mock development telemetry and bypass the setup wizard")

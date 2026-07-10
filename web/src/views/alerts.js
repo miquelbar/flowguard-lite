@@ -2,6 +2,7 @@ import { state } from '../state.js';
 import { formatTime } from '../utils/format.js';
 import * as api from '../api.js';
 import { openFirewallModal } from './devices.js';
+import { deviceIPCell } from '../utils/deviceLinks.js';
 
 export function renderAnomalies() {
     const tblAnomalies = document.getElementById("tbl-anomalies").querySelector("tbody");
@@ -37,7 +38,7 @@ export function renderAnomalies() {
         
         return `
             <tr class="anomaly-row ${isSelected ? 'selected' : ''}" data-id="${anom.id}" style="cursor: pointer;">
-                <td class="font-semibold"><a href="#/devices/${anom.ip}" class="ip-link">${anom.ip}</a></td>
+                <td class="font-semibold">${deviceIPCell(anom.ip)}</td>
                 <td><span class="badge ${badgeClass}">${anom.type}</span></td>
                 <td style="text-transform: capitalize;"><span class="sev-dot sev-${anom.severity}"></span>${anom.severity}</td>
                 <td>${formatTime(anom.created_at)}</td>
@@ -67,6 +68,10 @@ export function renderAnomalies() {
 
 export function selectAnomaly(id) {
     state.selectedAnomalyId = id.toString();
+    const nextHash = `#/alerts/${encodeURIComponent(id)}`;
+    if (window.location.hash !== nextHash) {
+        window.location.hash = nextHash;
+    }
     renderAnomalies();
 
     const anomalyDetailsEmpty = document.getElementById("anomaly-details-empty");
@@ -150,6 +155,18 @@ export function renderAlertsView() {
     }
 }
 
+function closeAnomalyDetails() {
+    state.selectedAnomalyId = null;
+    const anomalyDetailsEmpty = document.getElementById("anomaly-details-empty");
+    const anomalyDetailsContent = document.getElementById("anomaly-details-content");
+    if (anomalyDetailsEmpty) anomalyDetailsEmpty.classList.remove("hidden");
+    if (anomalyDetailsContent) anomalyDetailsContent.classList.add("hidden");
+    renderAnomalies();
+    if (window.location.hash !== "#/alerts") {
+        window.location.hash = "#/alerts";
+    }
+}
+
 export function bindAlertsEvents() {
     const searchAnomalies = document.getElementById("search-anomalies");
     if (searchAnomalies) {
@@ -177,8 +194,6 @@ export function bindAlertsEvents() {
 
     const btnCloseDetails = document.getElementById("btn-close-anomaly-details");
     if (btnCloseDetails) {
-        btnCloseDetails.addEventListener("click", () => {
-            window.location.hash = "#/alerts";
-        });
+        btnCloseDetails.addEventListener("click", closeAnomalyDetails);
     }
 }

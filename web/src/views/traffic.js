@@ -1,18 +1,9 @@
 import { state } from '../state.js';
-import { formatBytes, formatNumber, formatTime } from '../utils/format.js';
+import { escapeHtml, formatBytes, formatNumber, formatTime } from '../utils/format.js';
 import { renderTrafficCharts } from '../components/chart.js';
 import * as api from '../api.js';
-
-export function trafficRangeConfig() {
-    const end = new Date();
-    const configs = {
-        "1h": { start: new Date(end.getTime() - 60 * 60 * 1000), bucket: 60 },
-        "6h": { start: new Date(end.getTime() - 6 * 60 * 60 * 1000), bucket: 300 },
-        "24h": { start: new Date(end.getTime() - 24 * 60 * 60 * 1000), bucket: 900 },
-        "7d": { start: new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000), bucket: 3600 }
-    };
-    return { ...configs[state.activeTrafficRange], end };
-}
+import { trafficRangeConfig } from '../utils/timeRanges.js';
+import { deviceIPCell, deviceHref } from '../utils/deviceLinks.js';
 
 export function updateDashboardHeroStats() {
     const valTotalVolume = document.getElementById("val-total-volume");
@@ -81,7 +72,7 @@ function renderTopTalkerSignal() {
             topTalkerSignal.innerHTML = sortedSources.map(item => {
                 const pct = (item.bytes / totalBytes) * 100;
                 return `<div class="signal-row">
-                    <span class="signal-key">${item.key}</span>
+                    <span class="signal-key">${deviceIPCell(item.key)}</span>
                     <span class="signal-value">${pct.toFixed(1)}%</span>
                     <div class="signal-bar"><span style="width:${Math.max(pct, 2)}%"></span></div>
                 </div>`;
@@ -179,28 +170,10 @@ function renderSubnetSummarySignal() {
     }
     subnetSummarySignal.innerHTML = [...summary.entries()].sort().slice(0, 4).map(([subnet, val]) => `
         <div class="subnet-row">
-            <span class="signal-key">${subnet}</span>
+            <a class="signal-key ip-link" href="#/devices/subnet/${encodeURIComponent(subnet)}">${subnet}</a>
             <span class="signal-value">${val.count} devices · ${val.risk} risky</span>
         </div>
     `).join("");
-}
-
-export function renderExporters() {
-    const tblExporters = document.getElementById("tbl-exporters").querySelector("tbody");
-    if (!tblExporters) return;
-
-    if (!state.exportersData || state.exportersData.length === 0) {
-        tblExporters.innerHTML = `<tr><td colspan="3" class="text-center text-muted">No active exporters observed.</td></tr>`;
-        return;
-    }
-
-    tblExporters.innerHTML = state.exportersData.map(exp => `
-        <tr>
-            <td>${exp.ip}</td>
-            <td>${formatTime(exp.last_seen)}</td>
-            <td class="text-right">${formatNumber(exp.packet_count)}</td>
-        </tr>
-    `).join('');
 }
 
 export function renderThreatRisk() {
@@ -244,7 +217,7 @@ export function renderThreatRisk() {
                 <td>
                     <div class="risk-device-cell" style="display: flex; flex-direction: column; gap: 0.15rem;">
                         <div style="display: flex; gap: 0.5rem; align-items: center;">
-                            <span class="risk-device-ip"><a href="#/devices/${dev.ip}" class="ip-link">${dev.ip}</a></span>
+                            <span class="risk-device-ip">${deviceIPCell(dev.ip)}</span>
                             ${dev.label ? `<span class="badge badge-label risk-device-label">${dev.label}</span>` : ''}
                         </div>
                         ${summaryText ? `<span class="text-muted" style="font-size: 0.72rem; line-height: 1.2;">Contributors: ${summaryText}</span>` : ''}
@@ -260,7 +233,8 @@ export function renderThreatRisk() {
         row.addEventListener("click", (e) => {
             if (e.target.tagName === "A") return;
             const ip = row.getAttribute("data-ip");
-            window.location.hash = `#/devices/${ip}`;
+            const href = deviceHref(ip);
+            if (href) window.location.hash = href;
         });
     });
 }
@@ -283,7 +257,7 @@ export function renderTopTalkers() {
     tblTopTalkers.innerHTML = filtered.map(item => {
         const percentage = (item.bytes / maxBytes) * 100;
         const isIP = state.activeTab === "sources" || state.activeTab === "destinations";
-        const keyHtml = isIP ? `<a href="#/devices/${item.key}" class="ip-link">${item.key}</a>` : item.key;
+        const keyHtml = isIP ? deviceIPCell(item.key) : escapeHtml(item.key);
         return `
             <tr>
                 <td class="font-semibold">${keyHtml}</td>
@@ -300,11 +274,75 @@ export function renderTopTalkers() {
     }).join('');
 }
 
+function renderFlowExplorer() {
+    const body = document.querySelector("#tbl-flow-explorer tbody");
+    if (!body) return;
+
+    syncFlowExplorerSortHeaders();
+    const rows = sortFlowExplorerRows(state.trafficRecordsData || []);
+    if (rows.length === 0) {
+        body.innerHTML = `<tr><td colspan="8" class="text-center text-muted">No aggregate records match the active filters.</td></tr>`;
+        return;
+    }
+
+    body.innerHTML = rows.map(row => `
+        <tr>
+            <td class="font-mono text-muted">${formatTime(row.timestamp)}</td>
+            <td>${deviceIPCell(row.src_ip)}</td>
+            <td>${deviceIPCell(row.dst_ip)}</td>
+            <td class="text-right">${formatNumber(row.protocol || 0)}</td>
+            <td class="text-right">${formatNumber(row.dst_port || 0)}</td>
+            <td class="text-right">${formatNumber(row.flows || 0)}</td>
+            <td class="text-right">${formatNumber(row.packets || 0)}</td>
+            <td class="text-right">${formatBytes(row.bytes || 0)}</td>
+        </tr>
+    `).join("");
+}
+
+function sortFlowExplorerRows(rows) {
+    const sort = state.trafficRecordSort || { key: "timestamp", direction: "desc" };
+    const key = sort.key || "timestamp";
+    const multiplier = sort.direction === "asc" ? 1 : -1;
+    const numericKeys = new Set(["protocol", "dst_port", "flows", "packets", "bytes"]);
+    return [...rows].sort((a, b) => {
+        let av = a[key];
+        let bv = b[key];
+        if (key === "timestamp") {
+            av = new Date(av).getTime();
+            bv = new Date(bv).getTime();
+        } else if (numericKeys.has(key)) {
+            av = Number(av || 0);
+            bv = Number(bv || 0);
+        } else {
+            av = String(av || "");
+            bv = String(bv || "");
+            return av.localeCompare(bv, undefined, { numeric: true, sensitivity: "base" }) * multiplier;
+        }
+        if (av < bv) return -1 * multiplier;
+        if (av > bv) return 1 * multiplier;
+        return 0;
+    });
+}
+
+function syncFlowExplorerSortHeaders() {
+    const sort = state.trafficRecordSort || { key: "timestamp", direction: "desc" };
+    document.querySelectorAll("[data-flow-sort]").forEach(btn => {
+        const isActive = btn.getAttribute("data-flow-sort") === sort.key;
+        btn.classList.toggle("active", isActive);
+        const th = btn.closest("th");
+        if (th) th.setAttribute("aria-sort", isActive ? (sort.direction === "asc" ? "ascending" : "descending") : "none");
+        const indicator = btn.querySelector(".sort-indicator");
+        if (indicator) {
+            indicator.textContent = isActive ? (sort.direction === "asc" ? "▲" : "▼") : "";
+        }
+    });
+}
+
 export function renderTrafficView() {
     renderTrafficCharts(renderNetworkSignals);
-    renderExporters();
     renderThreatRisk();
     renderTopTalkers();
+    renderFlowExplorer();
     updateDashboardHeroStats();
 }
 
@@ -328,14 +366,33 @@ export function bindTrafficEvents(onReload) {
     });
 
 
-    // Bind traffic range buttons (1h/6h/24h/7d)
-    const trafficRangeButtons = document.querySelectorAll(".traffic-range-btn");
-    trafficRangeButtons.forEach(btn => {
-        btn.addEventListener("click", (e) => {
-            trafficRangeButtons.forEach(b => b.classList.remove("active"));
-            e.target.classList.add("active");
-            state.activeTrafficRange = e.target.getAttribute("data-range");
-            if (onReload) onReload();
+    const explorerSearch = document.getElementById("flow-explorer-search");
+    const explorerProtocol = document.getElementById("flow-explorer-protocol");
+    const explorerPort = document.getElementById("flow-explorer-port");
+    const explorerButton = document.getElementById("btn-flow-explorer-search");
+    const applyExplorerFilters = () => {
+        state.trafficRecordFilters = {
+            q: explorerSearch ? explorerSearch.value.trim() : "",
+            protocol: explorerProtocol ? explorerProtocol.value.trim() : "",
+            dstPort: explorerPort ? explorerPort.value.trim() : ""
+        };
+        if (onReload) onReload(true);
+    };
+    if (explorerButton) explorerButton.addEventListener("click", applyExplorerFilters);
+    [explorerSearch, explorerProtocol, explorerPort].forEach(input => {
+        if (!input) return;
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") applyExplorerFilters();
+        });
+    });
+
+    document.querySelectorAll("[data-flow-sort]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const key = btn.getAttribute("data-flow-sort");
+            const current = state.trafficRecordSort || { key: "timestamp", direction: "desc" };
+            const nextDirection = current.key === key && current.direction === "desc" ? "asc" : "desc";
+            state.trafficRecordSort = { key, direction: nextDirection };
+            renderFlowExplorer();
         });
     });
 }

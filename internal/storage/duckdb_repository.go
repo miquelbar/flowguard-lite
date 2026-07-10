@@ -14,7 +14,7 @@ import (
 	"time"
 
 	_ "github.com/duckdb/duckdb-go/v2"
-	"github.com/flowguard/flowguard/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
 )
 
 // DuckDBRepository implements the storage.StorageRepository interface using a single DuckDB database.
@@ -64,6 +64,7 @@ func NewDuckDBRepository(dataDir string, logger *slog.Logger) (*DuckDBRepository
 		CREATE TABLE IF NOT EXISTS anomalies (
 			id INTEGER DEFAULT nextval('seq_anomalies_id') PRIMARY KEY,
 			ip VARCHAR NOT NULL,
+			destination_ip VARCHAR NOT NULL DEFAULT '',
 			type VARCHAR NOT NULL,
 			description VARCHAR NOT NULL,
 			severity VARCHAR NOT NULL DEFAULT 'medium',
@@ -137,6 +138,10 @@ func NewDuckDBRepository(dataDir string, logger *slog.Logger) (*DuckDBRepository
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to initialize DuckDB schema: %w", err)
+	}
+	if _, err := db.Exec(`ALTER TABLE anomalies ADD COLUMN destination_ip VARCHAR DEFAULT ''`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") && !strings.Contains(strings.ToLower(err.Error()), "duplicate") {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate DuckDB anomalies destination_ip column: %w", err)
 	}
 
 	return &DuckDBRepository{
@@ -461,6 +466,64 @@ func (r *DuckDBRepository) GetTrafficTimeSeries(ctx context.Context, start, end 
 	return results, nil
 }
 
+// QueryFlowAggregateRecords returns bounded aggregate rows for analyst filtering.
+func (r *DuckDBRepository) QueryFlowAggregateRecords(ctx context.Context, start, end time.Time, q string, protocol, dstPort, limit int) ([]flow.AggregateRecord, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+
+	clauses := []string{"bucket_ts >= ?", "bucket_ts <= ?"}
+	args := []interface{}{start.Unix(), end.Unix()}
+	queryText := strings.TrimSpace(strings.ToLower(q))
+	if queryText != "" {
+		clauses = append(clauses, "(lower(src_ip) LIKE ? OR lower(dst_ip) LIKE ?)")
+		like := "%" + queryText + "%"
+		args = append(args, like, like)
+	}
+	if protocol > 0 {
+		clauses = append(clauses, "protocol = ?")
+		args = append(args, protocol)
+	}
+	if dstPort > 0 {
+		clauses = append(clauses, "dst_port = ?")
+		args = append(args, dstPort)
+	}
+	args = append(args, limit)
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT bucket_ts, src_ip, dst_ip, dst_port, protocol, bytes, packets, flows
+		FROM flow_aggregates
+		WHERE `+strings.Join(clauses, " AND ")+`
+		ORDER BY bucket_ts DESC, bytes DESC
+		LIMIT ?
+	`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed querying DuckDB flow aggregate records: %w", err)
+	}
+	defer rows.Close()
+
+	var out []flow.AggregateRecord
+	for rows.Next() {
+		var rec flow.AggregateRecord
+		var ts int64
+		if err := rows.Scan(&ts, &rec.SrcIP, &rec.DstIP, &rec.DstPort, &rec.Protocol, &rec.Bytes, &rec.Packets, &rec.Flows); err != nil {
+			return nil, fmt.Errorf("failed scanning DuckDB flow aggregate record: %w", err)
+		}
+		rec.Timestamp = time.Unix(ts, 0).UTC()
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed iterating DuckDB flow aggregate records: %w", err)
+	}
+	if out == nil {
+		out = []flow.AggregateRecord{}
+	}
+	return out, nil
+}
+
 // GetDeviceActivityHeatmap returns hour-of-day traffic activity for the top device-like IPs.
 func (r *DuckDBRepository) GetDeviceActivityHeatmap(ctx context.Context, start, end time.Time, limit int) ([]flow.DeviceHeatmapCell, error) {
 	topDevices, err := r.GetTopDevicesByVolume(ctx, start, end, limit)
@@ -678,10 +741,10 @@ func (r *DuckDBRepository) SaveAnomaly(ctx context.Context, a *Anomaly) error {
 
 	var lastId int64
 	err := r.db.QueryRowContext(ctx, `
-		INSERT INTO anomalies (ip, type, description, severity, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO anomalies (ip, destination_ip, type, description, severity, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		RETURNING id
-	`, a.IP, a.Type, a.Description, a.Severity, a.Status, a.CreatedAt, a.UpdatedAt).Scan(&lastId)
+	`, a.IP, a.DestinationIP, a.Type, a.Description, a.Severity, a.Status, a.CreatedAt, a.UpdatedAt).Scan(&lastId)
 	if err != nil {
 		return fmt.Errorf("failed saving anomaly: %w", err)
 	}
@@ -722,7 +785,7 @@ func (r *DuckDBRepository) ListAnomalies(ctx context.Context, limit int) ([]Anom
 	defer r.mu.RUnlock()
 
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, ip, type, description, severity, status, created_at, updated_at
+		SELECT id, ip, COALESCE(destination_ip, ''), type, description, severity, status, created_at, updated_at
 		FROM anomalies ORDER BY created_at DESC LIMIT ?
 	`, limit)
 	if err != nil {
@@ -733,7 +796,7 @@ func (r *DuckDBRepository) ListAnomalies(ctx context.Context, limit int) ([]Anom
 	var list []Anomaly
 	for rows.Next() {
 		var a Anomaly
-		if err := rows.Scan(&a.ID, &a.IP, &a.Type, &a.Description, &a.Severity, &a.Status, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.IP, &a.DestinationIP, &a.Type, &a.Description, &a.Severity, &a.Status, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed scanning anomaly: %w", err)
 		}
 		list = append(list, a)
@@ -750,7 +813,7 @@ func (r *DuckDBRepository) GetActiveAnomalies(ctx context.Context, since time.Ti
 	defer r.mu.RUnlock()
 
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, ip, type, description, severity, status, created_at, updated_at
+		SELECT id, ip, COALESCE(destination_ip, ''), type, description, severity, status, created_at, updated_at
 		FROM anomalies WHERE status = 'active' AND created_at > ?
 	`, since)
 	if err != nil {
@@ -761,7 +824,7 @@ func (r *DuckDBRepository) GetActiveAnomalies(ctx context.Context, since time.Ti
 	var list []Anomaly
 	for rows.Next() {
 		var a Anomaly
-		if err := rows.Scan(&a.ID, &a.IP, &a.Type, &a.Description, &a.Severity, &a.Status, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.IP, &a.DestinationIP, &a.Type, &a.Description, &a.Severity, &a.Status, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed scanning active anomaly: %w", err)
 		}
 		list = append(list, a)
@@ -829,7 +892,7 @@ func (r *DuckDBRepository) GetAnomaliesForIP(ctx context.Context, ip string, lim
 	defer r.mu.RUnlock()
 
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, ip, type, description, severity, status, created_at, updated_at
+		SELECT id, ip, COALESCE(destination_ip, ''), type, description, severity, status, created_at, updated_at
 		FROM anomalies WHERE ip = ? ORDER BY created_at DESC LIMIT ?
 	`, ip, limit)
 	if err != nil {
@@ -840,7 +903,7 @@ func (r *DuckDBRepository) GetAnomaliesForIP(ctx context.Context, ip string, lim
 	var list []Anomaly
 	for rows.Next() {
 		var a Anomaly
-		if err := rows.Scan(&a.ID, &a.IP, &a.Type, &a.Description, &a.Severity, &a.Status, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.IP, &a.DestinationIP, &a.Type, &a.Description, &a.Severity, &a.Status, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed scanning anomaly: %w", err)
 		}
 		list = append(list, a)
@@ -1119,25 +1182,7 @@ func (r *DuckDBRepository) evaluateAnomalyPoliciesLocked(ctx context.Context, a 
 	// 1. Find matching policies
 	var matchedPolicies []Policy
 	for _, p := range policies {
-		matches := false
-		switch p.Scope {
-		case "global":
-			matches = true
-		case "ip":
-			matches = p.Target == a.IP
-		case "subnet":
-			_, ipNet, err := net.ParseCIDR(p.Target)
-			if err == nil {
-				ipObj := net.ParseIP(a.IP)
-				if ipObj != nil && ipNet.Contains(ipObj) {
-					matches = true
-				}
-			}
-		case "alert_type":
-			matches = p.Target == a.Type
-		}
-
-		if matches {
+		if p.matchesAnomaly(a) {
 			matchedPolicies = append(matchedPolicies, p)
 		}
 	}

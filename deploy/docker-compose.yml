@@ -17,6 +17,7 @@ services:
     environment:
       - FLOWGUARD_LOG_LEVEL=info
       - FLOWGUARD_ENV=production
+      - TZ=${TZ:-UTC}
 
 # volumes:
 #   flowguard_data:

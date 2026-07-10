@@ -101,6 +101,7 @@ export function renderNotificationLogs() {
 
 export function selectNotificationRuleId(id) {
     state.selectedNotificationRuleId = id;
+    state.notificationRuleEditorDirty = false;
     const r = state.notificationRulesData.find(x => x.id === id);
     if (r) {
         selectNotificationRule(r);
@@ -155,6 +156,7 @@ function selectNotificationRule(r) {
 
 export function startAddNotificationRule() {
     state.selectedNotificationRuleId = "new";
+    state.notificationRuleEditorDirty = false;
     
     const inputNotificationRuleId = document.getElementById("notification-rule-id");
     const inputNotificationRuleName = document.getElementById("notification-rule-name");
@@ -198,6 +200,7 @@ export function startAddNotificationRule() {
 
 export function resetNotificationRuleDetails() {
     state.selectedNotificationRuleId = null;
+    state.notificationRuleEditorDirty = false;
     const notificationDetailsEmpty = document.getElementById("notification-details-empty");
     const notificationDetailsContent = document.getElementById("notification-details-content");
     if (notificationDetailsEmpty) notificationDetailsEmpty.classList.remove("hidden");
@@ -295,10 +298,22 @@ export function updateNotificationRulePreview() {
 export function renderNotificationsView() {
     renderNotificationRules();
     renderNotificationLogs();
+    const notificationDetailsContent = document.getElementById("notification-details-content");
+    const editorOpen = notificationDetailsContent && !notificationDetailsContent.classList.contains("hidden");
+    if (state.notificationRuleEditorDirty && editorOpen) {
+        updateNotificationTargetFieldVisibility();
+        updateNotificationRulePreview();
+        return;
+    }
     if (state.selectedNotificationRuleId && state.selectedNotificationRuleId !== "new") {
         selectNotificationRuleId(state.selectedNotificationRuleId);
     } else if (state.selectedNotificationRuleId === "new") {
-        startAddNotificationRule();
+        if (editorOpen) {
+            updateNotificationTargetFieldVisibility();
+            updateNotificationRulePreview();
+        } else {
+            startAddNotificationRule();
+        }
     } else {
         resetNotificationRuleDetails();
     }
@@ -356,7 +371,7 @@ export function bindNotificationsEvents(onReload) {
         });
     }
 
-    const btnCloseRuleDetails = document.getElementById("btn-close-notification-rule-details");
+    const btnCloseRuleDetails = document.getElementById("btn-close-notification-details");
     if (btnCloseRuleDetails) {
         btnCloseRuleDetails.addEventListener("click", () => {
             resetNotificationRuleDetails();
@@ -367,6 +382,7 @@ export function bindNotificationsEvents(onReload) {
     const selectRuleScope = document.getElementById("notification-rule-scope");
     if (selectRuleScope) {
         selectRuleScope.addEventListener("change", () => {
+            state.notificationRuleEditorDirty = true;
             updateNotificationTargetFieldVisibility();
             updateNotificationRulePreview();
         });
@@ -435,6 +451,7 @@ export function bindNotificationsEvents(onReload) {
             try {
                 await api.saveNotificationRule(payload);
                 window.showToast(`Notification rule saved successfully`);
+                state.notificationRuleEditorDirty = false;
                 if (onReload) await onReload();
             } catch (err) {
                 window.showToast(err.message, "error");
@@ -459,11 +476,20 @@ export function bindNotificationsEvents(onReload) {
     ];
     formRuleInputs.forEach(input => {
         if (input) {
-            input.addEventListener("input", updateNotificationRulePreview);
-            input.addEventListener("change", updateNotificationRulePreview);
+            input.addEventListener("input", () => {
+                state.notificationRuleEditorDirty = true;
+                updateNotificationRulePreview();
+            });
+            input.addEventListener("change", () => {
+                state.notificationRuleEditorDirty = true;
+                updateNotificationRulePreview();
+            });
         }
     });
     document.querySelectorAll(".rule-channel-checkbox").forEach(cb => {
-        cb.addEventListener("change", updateNotificationRulePreview);
+        cb.addEventListener("change", () => {
+            state.notificationRuleEditorDirty = true;
+            updateNotificationRulePreview();
+        });
     });
 }

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FlowGuard Lite Dashboard</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%233f5f46'/%3E%3Cpath d='M32 10l18 8v13c0 13-8 20-18 25-10-5-18-12-18-25V18l18-8z' fill='none' stroke='white' stroke-width='5' stroke-linejoin='round'/%3E%3Ccircle cx='32' cy='31' r='6' fill='white'/%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -146,30 +147,32 @@
                 <p class="workspace-subtitle">Security posture, active attack signals, and coverage</p>
             </div>
             <div class="controls-area">
-                <button id="btn-refresh" class="btn-primary">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-                    </svg>
-                    Refresh
-                </button>
+                <div class="global-time-control" aria-label="Global time range">
+                    <span class="global-time-label">Global time range</span>
+                    <div class="tab-buttons" id="global-range-tabs">
+                        <button class="tab-btn global-range-btn" data-range="1h">1h</button>
+                        <button class="tab-btn global-range-btn" data-range="6h">6h</button>
+                        <button class="tab-btn global-range-btn active" data-range="24h">24h</button>
+                        <button class="tab-btn global-range-btn" data-range="3d">3d</button>
+                        <button class="tab-btn global-range-btn" data-range="7d">7d</button>
+                    </div>
+                </div>
+                <label class="auto-refresh-control" aria-label="Auto refresh interval">
+                    <span class="global-time-label">Auto refresh</span>
+                    <select id="select-auto-refresh" class="form-control auto-refresh-select">
+                        <option value="0" selected>Off</option>
+                        <option value="5">5s</option>
+                        <option value="10">10s</option>
+                        <option value="30">30s</option>
+                        <option value="60">60s</option>
+                    </select>
+                </label>
             </div>
         </header>
 
         <!-- VIEW 0: Security & Network Overview -->
         <div id="view-overview" class="view-content active">
             <section class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon errors-glow">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                            <path d="M12 9v4M12 17h.01"/>
-                        </svg>
-                    </div>
-                    <div class="stat-content">
-                        <h3>Active Alerts</h3>
-                        <p class="stat-value" id="overview-active-alerts">-</p>
-                    </div>
-                </div>
                 <div class="stat-card">
                     <div class="stat-icon drops-glow">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -196,32 +199,40 @@
                 <div class="stat-card">
                     <div class="stat-icon packets-glow">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z"/>
+                            <path d="M3 12h4l3 8 4-16 3 8h4"/>
                         </svg>
                     </div>
                     <div class="stat-content">
-                        <h3>High/Critical</h3>
-                        <p class="stat-value" id="overview-critical-alerts">-</p>
+                        <h3>Traffic</h3>
+                        <p class="stat-value" id="overview-window-traffic">-</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon queue-glow">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="6" rx="2"/>
+                            <rect x="3" y="14" width="18" height="6" rx="2"/>
+                        </svg>
+                    </div>
+                    <div class="stat-content">
+                        <h3>Packets</h3>
+                        <p class="stat-value" id="overview-window-packets">-</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon drops-glow">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 7h16M4 12h16M4 17h16"/>
+                        </svg>
+                    </div>
+                    <div class="stat-content">
+                        <h3>Flows</h3>
+                        <p class="stat-value" id="overview-window-flows">-</p>
                     </div>
                 </div>
             </section>
 
             <main class="overview-grid">
-                <section class="panel overview-panel overview-panel-wide overview-control-panel">
-                    <div class="panel-header flex-header">
-                        <div>
-                            <h2>Network Stats Window</h2>
-                            <p class="panel-subtitle text-muted">All panels use bounded aggregate queries for the selected range</p>
-                        </div>
-                        <div class="tab-buttons" id="overview-range-tabs">
-                            <button class="tab-btn overview-range-btn" data-range="1h">1h</button>
-                            <button class="tab-btn overview-range-btn" data-range="6h">6h</button>
-                            <button class="tab-btn overview-range-btn active" data-range="24h">24h</button>
-                            <button class="tab-btn overview-range-btn" data-range="7d">7d</button>
-                        </div>
-                    </div>
-                </section>
-
                 <section class="panel overview-panel">
                     <div class="panel-header">
                         <h2>Threat Posture Summary</h2>
@@ -232,12 +243,12 @@
                     </div>
                 </section>
 
-                <section class="panel overview-panel overview-panel-wide">
+                <section class="panel overview-panel overview-panel-wide overview-attack-panel">
                     <div class="panel-header">
                         <h2>Attack Timeline</h2>
-                        <p class="panel-subtitle text-muted">Recent active alert clusters by hour</p>
+                        <p class="panel-subtitle text-muted">Active alert clusters across the selected time range</p>
                     </div>
-                    <div class="panel-body">
+                    <div class="panel-body attack-timeline-body">
                         <div id="overview-attack-timeline"></div>
                     </div>
                 </section>
@@ -431,14 +442,6 @@
                         <h2>Network Activity</h2>
                         <p class="panel-subtitle text-muted">Bytes, packets, and flow count over bounded aggregate windows</p>
                     </div>
-                    <div class="chart-controls">
-                        <div class="tab-buttons" id="traffic-range-tabs">
-                            <button class="tab-btn traffic-range-btn" data-range="1h">1h</button>
-                            <button class="tab-btn traffic-range-btn" data-range="6h">6h</button>
-                            <button class="tab-btn traffic-range-btn active" data-range="24h">24h</button>
-                            <button class="tab-btn traffic-range-btn" data-range="7d">7d</button>
-                        </div>
-                    </div>
                 </div>
                 <div class="panel-body chart-panel-body">
                     <div class="traffic-chart-container">
@@ -478,7 +481,7 @@
 
             <!-- Main Workspace -->
             <main class="dashboard-main">
-                <!-- Left Side: Threat Risk & Exporters -->
+                <!-- Left Side: Threat Risk -->
                 <div class="left-workspace-column">
                     <!-- Threat Risk Ranking -->
                     <section class="panel panel-left compact-panel margin-bottom-panel">
@@ -501,61 +504,6 @@
                                         </tr>
                                     </tbody>
                                 </table>
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- Active Exporters -->
-                    <section class="panel panel-left compact-panel">
-                        <div class="panel-header">
-                            <h2>Active Exporters</h2>
-                        </div>
-                        <div class="panel-body">
-                            <div class="table-container compact-table-container">
-                                <table id="tbl-exporters">
-                                    <thead>
-                                        <tr>
-                                            <th>Exporter IP</th>
-                                            <th>Last Seen</th>
-                                            <th class="text-right">Packets</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr>
-                                            <td colspan="3" class="text-center text-muted">Loading exporters...</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- Collector Health -->
-                    <section class="panel panel-left compact-panel" style="margin-top: 1rem;">
-                        <div class="panel-header" id="header-collector-health" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
-                            <h2>Collector Health</h2>
-                            <svg id="icon-collector-health" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 0.2s ease;">
-                                <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
-                        </div>
-                        <div class="panel-body" id="body-collector-health" style="display: none; padding: 0.75rem 1rem;">
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-                                <div>
-                                    <div style="font-size: 0.75rem; color: var(--text-muted);">Total Packets</div>
-                                    <div id="val-packets" style="font-size: 1.125rem; font-weight: 600;">-</div>
-                                </div>
-                                <div>
-                                    <div style="font-size: 0.75rem; color: var(--text-muted);">Dropped Packets</div>
-                                    <div id="val-drops" class="text-danger" style="font-size: 1.125rem; font-weight: 600;">-</div>
-                                </div>
-                                <div>
-                                    <div style="font-size: 0.75rem; color: var(--text-muted);">Decode Errors</div>
-                                    <div id="val-errors" class="text-warning" style="font-size: 1.125rem; font-weight: 600;">-</div>
-                                </div>
-                                <div>
-                                    <div style="font-size: 0.75rem; color: var(--text-muted);">Queue Depth</div>
-                                    <div id="val-queue" style="font-size: 1.125rem; font-weight: 600;">-</div>
-                                </div>
                             </div>
                         </div>
                     </section>
@@ -596,6 +544,44 @@
                     </div>
                 </section>
             </main>
+
+            <section class="panel flow-explorer-panel">
+                <div class="panel-header flex-header">
+                    <div>
+                        <h2>Flow Explorer</h2>
+                        <p class="panel-subtitle text-muted">Search retained aggregate rows by IP, protocol, destination port, and time window</p>
+                    </div>
+                    <div class="filter-controls flow-explorer-filters">
+                        <input type="text" id="flow-explorer-search" placeholder="Source or destination IP..." class="form-control">
+                        <input type="number" id="flow-explorer-protocol" min="0" max="255" placeholder="Proto" class="form-control small-filter">
+                        <input type="number" id="flow-explorer-port" min="0" max="65535" placeholder="Dst port" class="form-control small-filter">
+                        <button id="btn-flow-explorer-search" class="btn-secondary" type="button">Search</button>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="table-container">
+                        <table id="tbl-flow-explorer">
+                            <thead>
+                                <tr>
+                                    <th><button type="button" class="sortable-th" data-flow-sort="timestamp">Time <span class="sort-indicator"></span></button></th>
+                                    <th><button type="button" class="sortable-th" data-flow-sort="src_ip">Source <span class="sort-indicator"></span></button></th>
+                                    <th><button type="button" class="sortable-th" data-flow-sort="dst_ip">Destination <span class="sort-indicator"></span></button></th>
+                                    <th class="text-right"><button type="button" class="sortable-th align-right" data-flow-sort="protocol">Proto <span class="sort-indicator"></span></button></th>
+                                    <th class="text-right"><button type="button" class="sortable-th align-right" data-flow-sort="dst_port">Dst Port <span class="sort-indicator"></span></button></th>
+                                    <th class="text-right"><button type="button" class="sortable-th align-right" data-flow-sort="flows">Flows <span class="sort-indicator"></span></button></th>
+                                    <th class="text-right"><button type="button" class="sortable-th align-right" data-flow-sort="packets">Packets <span class="sort-indicator"></span></button></th>
+                                    <th class="text-right"><button type="button" class="sortable-th align-right" data-flow-sort="bytes">Bytes <span class="sort-indicator"></span></button></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted">Loading aggregate flow records...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
         </div>
 
         <!-- VIEW 2: Device Inventory & Baselines -->
@@ -609,6 +595,9 @@
                             <p class="panel-subtitle text-muted">Auto-discovered nodes in local networks</p>
                         </div>
                         <div class="filter-controls">
+                            <select id="select-device-subnet" class="form-control">
+                                <option value="">All subnets / VLANs</option>
+                            </select>
                             <input type="text" id="input-device-search" placeholder="Search IP or hostname..." class="form-control">
                         </div>
                     </div>
@@ -635,6 +624,7 @@
 
                 <!-- Right Side: Device Details & Baselines -->
                 <section class="panel panel-right-devices" id="panel-device-details">
+                    <button id="btn-close-device-details-floating" class="btn-secondary mobile-only detail-floating-close" type="button" aria-label="Close device details">Close</button>
                     <div class="panel-header flex-header">
                         <h2>Device Profile & Baseline</h2>
                         <button id="btn-close-device-details" class="btn-secondary mobile-only" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Close</button>
@@ -757,17 +747,17 @@
             <main class="dashboard-main split-layout">
                 <!-- Left Side: Alerts list -->
                 <section class="panel">
-                    <div class="panel-header flex-header" style="flex-wrap: wrap; gap: 1rem;">
+                    <div class="panel-header panel-toolbar">
                         <div>
                             <h2>Alerts</h2>
                             <p class="panel-subtitle text-muted">Network behavior that differs from learned baselines</p>
                         </div>
-                        <div class="filter-controls" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-                            <div class="search-box">
-                                <input type="text" id="search-anomalies" placeholder="Search by IP, type, description..." class="form-control" style="width: 200px; height: 36px; padding: 0 0.75rem; font-size: 0.875rem;">
+                        <div class="filter-controls panel-toolbar-controls alerts-toolbar-controls">
+                            <div class="search-box toolbar-search">
+                                <input type="text" id="search-anomalies" placeholder="Search by IP, type, description..." class="form-control">
                             </div>
                             <div class="select-box">
-                                <select id="filter-anomalies-severity" class="form-control" style="height: 36px; padding: 0 0.5rem; width: 130px; font-size: 0.875rem;">
+                                <select id="filter-anomalies-severity" class="form-control toolbar-select">
                                     <option value="all">All Severities</option>
                                     <option value="high">High Only</option>
                                     <option value="medium">Medium Only</option>
@@ -775,10 +765,10 @@
                                 </select>
                             </div>
                             <div class="tab-buttons">
-                                <button class="triage-filter-btn active" data-status="all">All</button>
-                                <button class="triage-filter-btn" data-status="active">Active</button>
-                                <button class="triage-filter-btn" data-status="acknowledged">Ack</button>
-                                <button class="triage-filter-btn" data-status="silenced">Silenced</button>
+                                <button class="triage-filter-btn active" data-filter="all">All</button>
+                                <button class="triage-filter-btn" data-filter="active">Active</button>
+                                <button class="triage-filter-btn" data-filter="acknowledged">Ack</button>
+                                <button class="triage-filter-btn" data-filter="silenced">Silenced</button>
                             </div>
                         </div>
                     </div>
@@ -809,7 +799,7 @@
                 <section class="panel" id="panel-anomaly-details">
                     <div class="panel-header flex-header">
                         <h2>Alert Details & Triage</h2>
-                        <button id="btn-close-anomaly-details" class="btn-secondary mobile-only" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Close</button>
+                        <button id="btn-close-anomaly-details" class="btn-secondary detail-close-btn" type="button" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Close</button>
                     </div>
                     <div class="panel-body flex-column-body">
                         <div id="anomaly-details-empty" class="text-center text-muted pad-large">
@@ -1237,14 +1227,14 @@
         <div id="view-settings" class="view-content">
             <div class="settings-container">
                 <aside class="settings-nav">
-                    <a href="#settings-access" class="settings-nav-link active" data-section="access">Access Control</a>
-                    <a href="#settings-network" class="settings-nav-link" data-section="network">Network Settings</a>
-                    <a href="#settings-collectors" class="settings-nav-link" data-section="collectors">Collectors Setup</a>
-                    <a href="#settings-storage" class="settings-nav-link" data-section="storage">Storage & Retention</a>
-                    <a href="#settings-thresholds" class="settings-nav-link" data-section="thresholds">Detection Thresholds</a>
-                    <a href="#settings-notifications" class="settings-nav-link" data-section="notifications">Notifications & Routing</a>
-                    <a href="#settings-integrations" class="settings-nav-link" data-section="integrations">Integrations</a>
-                    <a href="#settings-system" class="settings-nav-link" data-section="system">System Settings</a>
+                    <a href="#/settings/access" class="settings-nav-link active" data-section="access">Access Control</a>
+                    <a href="#/settings/network" class="settings-nav-link" data-section="network">Network Settings</a>
+                    <a href="#/settings/collectors" class="settings-nav-link" data-section="collectors">Collectors Setup</a>
+                    <a href="#/settings/storage" class="settings-nav-link" data-section="storage">Storage & Retention</a>
+                    <a href="#/settings/thresholds" class="settings-nav-link" data-section="thresholds">Detection Thresholds</a>
+                    <a href="#/settings/notifications" class="settings-nav-link" data-section="notifications">Notifications & Routing</a>
+                    <a href="#/settings/integrations" class="settings-nav-link" data-section="integrations">Integrations</a>
+                    <a href="#/settings/system" class="settings-nav-link" data-section="system">System Settings</a>
                 </aside>
 
                 <div class="settings-main">
@@ -1296,7 +1286,7 @@
                     <section id="settings-collectors" class="settings-card hidden">
                         <div class="settings-card-header">
                             <h3>Collectors Setup</h3>
-                            <p>Telemetry collector ports and Suricata ingestion settings</p>
+                            <p>Flow exporters, passive interface capture, and Suricata ingestion</p>
                         </div>
                         <form id="form-settings-collectors">
                             <div class="form-row" style="margin-bottom: 1rem;">
@@ -1315,6 +1305,38 @@
                                 <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Suricata eve.json Log Path</label>
                                 <input type="text" id="setting-suricata-path" class="form-control" style="width: 100%;" placeholder="e.g. /var/log/suricata/eve.json">
                                 <p class="text-muted" style="font-size: 0.72rem; margin-top: 0.25rem;">Leave empty if Suricata telemetry is disabled.</p>
+                            </div>
+                            <div class="settings-subsection">
+                                <div class="settings-subsection-header">
+                                    <div>
+                                        <h4>Passive Network Capture</h4>
+                                        <p>Generate flow metadata directly from a local interface. Leave the interface empty to disable capture.</p>
+                                    </div>
+                                    <span class="badge badge-warning">Restart required</span>
+                                </div>
+                                <div class="settings-privilege-warning" role="note">
+                                    <strong>Elevated network permission required.</strong>
+                                    Containers need <code>CAP_NET_RAW</code> and access to the host interface; native deployments generally need root or equivalent packet-capture permission. FlowGuard stores only reduced flow metadata, never payloads or PCAP.
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="setting-capture-interface">Capture Interface</label>
+                                        <input type="text" id="setting-capture-interface" class="form-control" maxlength="128" placeholder="e.g. eth0, en0, br-lan">
+                                        <p class="form-help">Must match an interface visible inside the FlowGuard process or container.</p>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="setting-capture-bpf-filter">BPF Filter</label>
+                                        <input type="text" id="setting-capture-bpf-filter" class="form-control" maxlength="1024" placeholder="ip or ip6">
+                                        <p class="form-help">Keep this restrictive to reduce CPU usage. Required when an interface is configured.</p>
+                                    </div>
+                                </div>
+                                <label class="settings-checkbox-row" for="setting-capture-promiscuous">
+                                    <input type="checkbox" id="setting-capture-promiscuous">
+                                    <span>
+                                        <strong>Promiscuous mode</strong>
+                                        <small>Capture traffic not addressed to this host. Enable only when the network topology requires it.</small>
+                                    </span>
+                                </label>
                             </div>
                             <div class="settings-actions">
                                 <button type="submit" class="btn-primary">Save Collectors</button>
@@ -1480,10 +1502,10 @@
                         <div style="padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.813rem;">
                             <p class="text-muted" style="line-height: 1.45;">Integrate FlowGuard Lite with your edge networking equipment using the linked guides:</p>
                             <ul style="margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.4rem; color: var(--text-primary);">
-                                <li><a href="https://github.com/flowguard/flowguard/blob/main/docs/collectors/unifi.md" target="_blank" style="color: var(--color-primary); text-decoration: underline;">UniFi IPFIX/NetFlow Setup Guide</a></li>
-                                <li><a href="https://github.com/flowguard/flowguard/blob/main/docs/collectors/mikrotik.md" target="_blank" style="color: var(--color-primary); text-decoration: underline;">MikroTik Traffic-Flow Setup Guide</a></li>
-                                <li><a href="https://github.com/flowguard/flowguard/blob/main/docs/collectors/pfsense.md" target="_blank" style="color: var(--color-primary); text-decoration: underline;">OPNsense / pfSense NetFlow Exporter Guide</a></li>
-                                <li><a href="https://github.com/flowguard/flowguard/blob/main/docs/collectors/suricata.md" target="_blank" style="color: var(--color-primary); text-decoration: underline;">Suricata EVE JSON Alert Guide</a></li>
+                                <li><a href="https://github.com/miquelbar/flowguard-lite/blob/main/docs/collectors/unifi.md" target="_blank" style="color: var(--color-primary); text-decoration: underline;">UniFi IPFIX/NetFlow Setup Guide</a></li>
+                                <li><a href="https://github.com/miquelbar/flowguard-lite/blob/main/docs/collectors/mikrotik.md" target="_blank" style="color: var(--color-primary); text-decoration: underline;">MikroTik Traffic-Flow Setup Guide</a></li>
+                                <li><a href="https://github.com/miquelbar/flowguard-lite/blob/main/docs/collectors/pfsense.md" target="_blank" style="color: var(--color-primary); text-decoration: underline;">OPNsense / pfSense NetFlow Exporter Guide</a></li>
+                                <li><a href="https://github.com/miquelbar/flowguard-lite/blob/main/docs/collectors/suricata.md" target="_blank" style="color: var(--color-primary); text-decoration: underline;">Suricata EVE JSON Alert Guide</a></li>
                             </ul>
                         </div>
                     </section>

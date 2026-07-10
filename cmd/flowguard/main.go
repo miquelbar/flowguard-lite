@@ -9,19 +9,19 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/anomaly"
-	"github.com/flowguard/flowguard/internal/api"
-	"github.com/flowguard/flowguard/internal/baseline"
-	"github.com/flowguard/flowguard/internal/collector"
-	"github.com/flowguard/flowguard/internal/config"
-	"github.com/flowguard/flowguard/internal/ddos"
-	"github.com/flowguard/flowguard/internal/device"
-	"github.com/flowguard/flowguard/internal/flow"
-	"github.com/flowguard/flowguard/internal/logger"
-	"github.com/flowguard/flowguard/internal/risk"
-	"github.com/flowguard/flowguard/internal/storage"
-	"github.com/flowguard/flowguard/internal/suricata"
-	"github.com/flowguard/flowguard/internal/webhook"
+	"github.com/miquelbar/flowguard-lite/internal/anomaly"
+	"github.com/miquelbar/flowguard-lite/internal/api"
+	"github.com/miquelbar/flowguard-lite/internal/baseline"
+	"github.com/miquelbar/flowguard-lite/internal/collector"
+	"github.com/miquelbar/flowguard-lite/internal/config"
+	"github.com/miquelbar/flowguard-lite/internal/ddos"
+	"github.com/miquelbar/flowguard-lite/internal/device"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/logger"
+	"github.com/miquelbar/flowguard-lite/internal/risk"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/suricata"
+	"github.com/miquelbar/flowguard-lite/internal/webhook"
 )
 
 func main() {
@@ -115,6 +115,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Passive capture is opt-in because it requires raw-packet privileges.
+	var pcapColl *collector.PcapCollector
+	if cfg.CaptureInterface != "" {
+		pcapColl = collector.NewPcapCollector(
+			cfg.CaptureInterface,
+			cfg.CaptureBPFFilter,
+			cfg.CapturePromiscuous,
+			log,
+			ddosDetector,
+		)
+		if err := pcapColl.Start(); err != nil {
+			log.Error("Failed to start passive packet capture", slog.String("error", err.Error()))
+			coll.Shutdown()
+			ddosDetector.Shutdown()
+			profiler.Shutdown()
+			agg.Shutdown()
+			repo.Close()
+			os.Exit(1)
+		}
+	}
+
 	// 10. Initialize Baseline Engine
 	baselineEngine := baseline.NewBaselineEngine(repo, log)
 	if err := baselineEngine.LoadBaselines(context.Background()); err != nil {
@@ -197,6 +218,9 @@ func main() {
 		if suricataTailer != nil {
 			suricataTailer.Shutdown()
 		}
+		if pcapColl != nil {
+			pcapColl.Shutdown()
+		}
 		coll.Shutdown()
 		ddosDetector.Shutdown()
 		profiler.Shutdown()
@@ -226,6 +250,10 @@ func main() {
 		// Shutdown the Suricata Tailer
 		if suricataTailer != nil {
 			suricataTailer.Shutdown()
+		}
+
+		if pcapColl != nil {
+			pcapColl.Shutdown()
 		}
 
 		// Shutdown the Flow Collector

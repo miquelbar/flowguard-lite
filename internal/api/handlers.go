@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/config"
-	"github.com/flowguard/flowguard/internal/flow"
-	"github.com/flowguard/flowguard/internal/risk"
-	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/config"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/risk"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
 
 // parseQueryParams parses start, end and limit parameters from request query.
@@ -258,6 +259,68 @@ func (s *APIServer) handleTrafficTimeSeries(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(res); err != nil {
 		s.logger.Error("Failed to encode traffic time series response", slog.String("error", err.Error()))
+	}
+}
+
+type flowAggregateRecordRepository interface {
+	QueryFlowAggregateRecords(ctx context.Context, start, end time.Time, q string, protocol, dstPort, limit int) ([]flow.AggregateRecord, error)
+}
+
+func (s *APIServer) handleTrafficRecords(w http.ResponseWriter, r *http.Request) {
+	if s.repo == nil {
+		writeError(w, s.logger, http.StatusInternalServerError, "database repository is not configured")
+		return
+	}
+	recordRepo, ok := s.repo.(flowAggregateRecordRepository)
+	if !ok {
+		writeError(w, s.logger, http.StatusInternalServerError, "flow aggregate explorer is not supported by this storage backend")
+		return
+	}
+
+	start, end, limit, err := parseQueryParams(r)
+	if err != nil {
+		writeError(w, s.logger, http.StatusBadRequest, err.Error())
+		return
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	protocol := 0
+	if raw := r.URL.Query().Get("protocol"); raw != "" {
+		protocol, err = strconv.Atoi(raw)
+		if err != nil || protocol < 0 || protocol > 255 {
+			writeError(w, s.logger, http.StatusBadRequest, "protocol must be an integer between 0 and 255")
+			return
+		}
+	}
+
+	dstPort := 0
+	if raw := r.URL.Query().Get("dst_port"); raw != "" {
+		dstPort, err = strconv.Atoi(raw)
+		if err != nil || dstPort < 0 || dstPort > 65535 {
+			writeError(w, s.logger, http.StatusBadRequest, "dst_port must be an integer between 0 and 65535")
+			return
+		}
+	}
+
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len(q) > 128 {
+		writeError(w, s.logger, http.StatusBadRequest, "q must be 128 characters or fewer")
+		return
+	}
+
+	res, err := recordRepo.QueryFlowAggregateRecords(r.Context(), start, end, q, protocol, dstPort, limit)
+	if err != nil {
+		s.logger.Error("Failed to query flow aggregate records", slog.String("error", err.Error()))
+		writeError(w, s.logger, http.StatusInternalServerError, "internal database query error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(res); err != nil {
+		s.logger.Error("Failed to encode flow aggregate records response", slog.String("error", err.Error()))
 	}
 }
 
@@ -696,7 +759,7 @@ func (s *APIServer) handleSecuritySummary(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	since := time.Now().Add(-24 * time.Hour)
+	since := time.Now().Add(-7 * 24 * time.Hour)
 	active, err := s.deviceRepo.GetActiveAnomalies(r.Context(), since)
 	if err != nil {
 		s.logger.Error("Failed querying active anomalies for security summary", slog.String("error", err.Error()))
@@ -1041,6 +1104,9 @@ type SettingsPayload struct {
 	Port                  string            `json:"port"`
 	NetflowPort           int               `json:"netflow_port"`
 	SflowPort             int               `json:"sflow_port"`
+	CaptureInterface      string            `json:"capture_interface"`
+	CaptureBPFFilter      string            `json:"capture_bpf_filter"`
+	CapturePromiscuous    bool              `json:"capture_promiscuous"`
 	StorageDir            string            `json:"storage_dir"`
 	LogLevel              string            `json:"log_level"`
 	Environment           string            `json:"environment"`
@@ -1095,6 +1161,9 @@ func (s *APIServer) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		Port:                  s.cfg.Port,
 		NetflowPort:           s.cfg.NetflowPort,
 		SflowPort:             s.cfg.SflowPort,
+		CaptureInterface:      s.cfg.CaptureInterface,
+		CaptureBPFFilter:      s.cfg.CaptureBPFFilter,
+		CapturePromiscuous:    s.cfg.CapturePromiscuous,
 		StorageDir:            s.cfg.StorageDir,
 		LogLevel:              s.cfg.LogLevel,
 		Environment:           s.cfg.Environment,
@@ -1150,6 +1219,23 @@ func (s *APIServer) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, s.logger, http.StatusBadRequest, "sFlow port must be between 1 and 65535")
 		return
 	}
+	payload.CaptureInterface = strings.TrimSpace(payload.CaptureInterface)
+	payload.CaptureBPFFilter = strings.TrimSpace(payload.CaptureBPFFilter)
+	if payload.CaptureInterface == "" && payload.CaptureBPFFilter == "" {
+		payload.CaptureBPFFilter = "ip or ip6"
+	}
+	if len(payload.CaptureInterface) > 128 || strings.ContainsAny(payload.CaptureInterface, "\x00\r\n") {
+		writeError(w, s.logger, http.StatusBadRequest, "Capture interface must be at most 128 characters and contain no control line breaks")
+		return
+	}
+	if len(payload.CaptureBPFFilter) > 1024 || strings.ContainsRune(payload.CaptureBPFFilter, '\x00') {
+		writeError(w, s.logger, http.StatusBadRequest, "Capture BPF filter must be at most 1024 characters and contain no null bytes")
+		return
+	}
+	if payload.CaptureInterface != "" && payload.CaptureBPFFilter == "" {
+		writeError(w, s.logger, http.StatusBadRequest, "Capture BPF filter is required when passive capture is enabled")
+		return
+	}
 	if payload.StorageBackend != "sqlite" && payload.StorageBackend != "duckdb" {
 		writeError(w, s.logger, http.StatusBadRequest, "Storage backend must be 'sqlite' or 'duckdb'")
 		return
@@ -1187,8 +1273,16 @@ func (s *APIServer) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Identify changes for audit logs
 	var categories []string
-	if s.cfg.Port != payload.Port || s.cfg.NetflowPort != payload.NetflowPort || s.cfg.SflowPort != payload.SflowPort || !equalStringSlices(s.cfg.LocalSubnets, payload.LocalSubnets) {
+	if s.cfg.Port != payload.Port || !equalStringSlices(s.cfg.LocalSubnets, payload.LocalSubnets) {
 		categories = append(categories, "network")
+	}
+	if s.cfg.NetflowPort != payload.NetflowPort ||
+		s.cfg.SflowPort != payload.SflowPort ||
+		s.cfg.SuricataEvePath != payload.SuricataEvePath ||
+		s.cfg.CaptureInterface != payload.CaptureInterface ||
+		s.cfg.CaptureBPFFilter != payload.CaptureBPFFilter ||
+		s.cfg.CapturePromiscuous != payload.CapturePromiscuous {
+		categories = append(categories, "collectors")
 	}
 	if s.cfg.StorageBackend != payload.StorageBackend || s.cfg.StorageDir != payload.StorageDir || s.cfg.RetentionDays != payload.RetentionDays {
 		categories = append(categories, "storage")
@@ -1231,7 +1325,7 @@ func (s *APIServer) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.WebhookURL != payload.WebhookURL || s.cfg.WebhookFormat != payload.WebhookFormat || s.cfg.TelegramEnabled != payload.TelegramEnabled || s.cfg.TelegramChatID != payload.TelegramChatID || telegramTokenChanged || headersChanged {
 		categories = append(categories, "notifications")
 	}
-	if s.cfg.LogLevel != payload.LogLevel || s.cfg.Environment != payload.Environment || s.cfg.SuricataEvePath != payload.SuricataEvePath {
+	if s.cfg.LogLevel != payload.LogLevel || s.cfg.Environment != payload.Environment {
 		categories = append(categories, "system")
 	}
 
@@ -1239,6 +1333,9 @@ func (s *APIServer) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 	s.cfg.Port = payload.Port
 	s.cfg.NetflowPort = payload.NetflowPort
 	s.cfg.SflowPort = payload.SflowPort
+	s.cfg.CaptureInterface = payload.CaptureInterface
+	s.cfg.CaptureBPFFilter = payload.CaptureBPFFilter
+	s.cfg.CapturePromiscuous = payload.CapturePromiscuous
 	s.cfg.StorageDir = payload.StorageDir
 	s.cfg.LogLevel = payload.LogLevel
 	s.cfg.Environment = payload.Environment

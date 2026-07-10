@@ -37,6 +37,20 @@ type TrafficTimeBucket struct {
 	Flows     uint64    `json:"flows"`
 }
 
+// AggregateRecord represents one persisted aggregate row used by the bounded
+// Flow Explorer. It is not a raw packet or raw flow record; it is the retained
+// rollup keyed by bucket/source/destination/service/protocol.
+type AggregateRecord struct {
+	Timestamp time.Time `json:"timestamp"`
+	SrcIP     string    `json:"src_ip"`
+	DstIP     string    `json:"dst_ip"`
+	DstPort   int       `json:"dst_port"`
+	Protocol  int       `json:"protocol"`
+	Bytes     uint64    `json:"bytes"`
+	Packets   uint64    `json:"packets"`
+	Flows     uint64    `json:"flows"`
+}
+
 // DeviceHeatmapCell represents aggregate traffic volume for one device in one hour of day.
 type DeviceHeatmapCell struct {
 	IP      string `json:"ip"`

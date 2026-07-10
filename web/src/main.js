@@ -9,8 +9,19 @@ import { renderPoliciesView, bindPoliciesEvents } from './views/policies.js';
 import { renderNotificationsView, bindNotificationsEvents } from './views/notifications.js';
 import { renderAuditView, bindAuditEvents } from './views/audit.js';
 import { renderSettingsView, bindSettingsEvents } from './views/settings.js';
+import { enhanceSortableTables } from './utils/tableSort.js';
+import { availableTrafficRanges, setNormalizedTrafficRange, trafficRangeConfig } from './utils/timeRanges.js';
 
 let authMode = "login";
+
+async function settleOverview(label, promise, fallback) {
+    try {
+        return { value: await promise, error: null };
+    } catch (err) {
+        console.error(`Overview ${label} load failed: `, err);
+        return { value: fallback, error: err.message || "query failed" };
+    }
+}
 
 // Global toast notifier helper
 window.showToast = function(message, type = "success") {
@@ -59,21 +70,27 @@ function hideAuthOverlay() {
 }
 
 async function loadData(isManualRefresh = false) {
-    const btnRefresh = document.getElementById("btn-refresh");
-    const refreshIcon = btnRefresh ? btnRefresh.querySelector("svg") : null;
-    if (btnRefresh) {
-        btnRefresh.disabled = true;
-        if (refreshIcon) refreshIcon.classList.add("icon-spin");
-    }
-
     try {
+        if ((state.activeView === "overview" || state.activeView === "dashboard") && !state.settingsData) {
+            state.settingsData = await api.fetchSettings().catch(() => null);
+        }
+        setNormalizedTrafficRange();
+        syncGlobalRangeButtons();
+
         // Fetch health & risk status
+        let healthError = null;
         const [health, threatRisk] = await Promise.all([
-            api.fetchHealth(),
-            api.fetchThreatRisk()
+            api.fetchHealth().catch(err => {
+                healthError = err.message || "API health check failed";
+                throw err;
+            }),
+            api.fetchThreatRisk().catch(err => {
+                console.error("Risk check failed: ", err);
+                return [];
+            })
         ]).catch(err => {
-            console.error("Health/Risk check failed: ", err);
-            return [{}, []];
+            console.error("Health check failed: ", err);
+            return [{ healthy: false, error_message: healthError || "API Offline" }, []];
         });
 
         // Set status indicator
@@ -81,12 +98,12 @@ async function loadData(isManualRefresh = false) {
         const statusLabel = document.querySelector(".status-label");
         if (statusIndicator && statusLabel) {
             statusIndicator.className = "status-indicator";
-            if (health.healthy) {
-                statusIndicator.classList.add("healthy");
+            if (health.healthy || health.status === "OK" || health.status === "healthy") {
+                statusIndicator.classList.add("online");
                 statusLabel.textContent = "System Healthy";
             } else {
-                statusIndicator.classList.add("warning");
-                statusLabel.textContent = health.error_message || "Collector Error";
+                statusIndicator.classList.add("offline");
+                statusLabel.textContent = health.error_message || "API Offline";
             }
         }
 
@@ -96,46 +113,53 @@ async function loadData(isManualRefresh = false) {
         // View-specific data fetching
         if (state.activeView === "overview") {
             const range = trafficRangeConfig();
-            const [summary, timeline, protocols, topDevices, heatmap, collectorHealth, trafficSeries] = await Promise.all([
-                api.fetchSecuritySummary(),
-                api.fetchSecurityTimeline(range),
-                api.fetchStatsProtocols(range),
-                api.fetchStatsTopDevices(range),
-                api.fetchStatsHeatmap(range),
-                api.fetchStatsCollectorHealth(),
-                api.fetchTrafficTimeSeries(range)
-            ]).catch(err => {
-                console.error("Overview data load failed: ", err);
-                return [null, [], [], [], [], [], []];
-            });
-            state.securitySummaryData = summary || null;
-            state.securityTimelineData = timeline || [];
-            state.overviewProtocolsData = protocols || [];
-            state.overviewTopDevicesData = topDevices || [];
-            state.overviewHeatmapData = heatmap || [];
-            state.overviewCollectorHealthData = collectorHealth || [];
-            state.trafficSeriesData = trafficSeries || [];
-            state.riskDevicesData = summary?.top_risk_devices || state.riskDevicesData || [];
-            state.anomaliesData = summary?.recent_high_alerts || [];
+            const overviewRequests = {
+                summary: settleOverview("security summary", api.fetchSecuritySummary(), null),
+                timeline: settleOverview("security timeline", api.fetchSecurityTimeline(range), []),
+                protocols: settleOverview("protocol stats", api.fetchStatsProtocols(range), []),
+                topDevices: settleOverview("top devices stats", api.fetchStatsTopDevices(range), []),
+                heatmap: settleOverview("device heatmap", api.fetchStatsHeatmap(range), []),
+                collectorHealth: settleOverview("collector health", api.fetchStatsCollectorHealth(), []),
+                trafficSeries: settleOverview("traffic time-series", api.fetchTrafficTimeSeries(range), [])
+            };
+            const results = Object.fromEntries(
+                await Promise.all(Object.entries(overviewRequests).map(async ([key, promise]) => [key, await promise]))
+            );
+            const overviewErrors = {};
+            for (const [key, result] of Object.entries(results)) {
+                if (result.error) overviewErrors[key] = result.error;
+            }
+            state.overviewErrors = overviewErrors;
+            state.securitySummaryData = results.summary.value || null;
+            state.securityTimelineData = results.timeline.value || [];
+            state.overviewProtocolsData = results.protocols.value || [];
+            state.overviewTopDevicesData = results.topDevices.value || [];
+            state.overviewHeatmapData = results.heatmap.value || [];
+            state.overviewCollectorHealthData = results.collectorHealth.value || [];
+            state.trafficSeriesData = results.trafficSeries.value || [];
+            state.riskDevicesData = results.summary.value?.top_risk_devices || state.riskDevicesData || [];
+            state.anomaliesData = results.summary.value?.recent_high_alerts || [];
             renderOverviewView();
         } else if (state.activeView === "dashboard") {
             const range = trafficRangeConfig();
-            const [exporters, topTalkers, devices, anomalies, trafficSeries] = await Promise.all([
-                api.fetchExporters(),
+            const [topTalkers, devices, anomalies, trafficSeries] = await Promise.all([
                 api.fetchTopTalkers(state.activeTab, range),
                 api.fetchDevices(),
                 api.fetchAnomalies(),
                 api.fetchTrafficTimeSeries(range)
             ]).catch(err => {
                 console.error("Dashboard data load failed: ", err);
-                return [[], [], [], [], []];
+                return [[], [], [], []];
             });
 
-            state.exportersData = exporters || [];
             state.talkersData = topTalkers || [];
             state.devicesData = devices || [];
             state.anomaliesData = anomalies || [];
             state.trafficSeriesData = trafficSeries || [];
+            state.trafficRecordsData = await api.fetchTrafficRecords(range, state.trafficRecordFilters).catch(err => {
+                console.error("Flow explorer data load failed: ", err);
+                return [];
+            });
 
             renderTrafficView();
         } else if (state.activeView === "devices") {
@@ -161,36 +185,75 @@ async function loadData(isManualRefresh = false) {
         } else if (state.activeView === "settings") {
             // Settings are configuration data, not live telemetry.
             // Only load once when first entering the view (triggered by the router),
-            // or explicitly via the manual refresh button. Never auto-refresh,
+            // or when forced by routing/setup. Never auto-refresh,
             // because it would clobber in-progress form edits.
             if (!state.settingsData || isManualRefresh) {
                 state.settingsData = await api.fetchSettings().catch(() => null);
                 renderSettingsView();
             }
         }
-    } finally {
-        if (btnRefresh) {
-            btnRefresh.disabled = false;
-            if (refreshIcon) refreshIcon.classList.remove("icon-spin");
-        }
+        enhanceSortableTables();
+    } catch (err) {
+        console.error("Data load failed: ", err);
     }
 }
 
-// Help resolve circular imports for trafficRangeConfig
-function trafficRangeConfig() {
-    const end = new Date();
-    const configs = {
-        "1h": { start: new Date(end.getTime() - 60 * 60 * 1000), bucket: 60 },
-        "6h": { start: new Date(end.getTime() - 6 * 60 * 60 * 1000), bucket: 300 },
-        "24h": { start: new Date(end.getTime() - 24 * 60 * 60 * 1000), bucket: 900 },
-        "7d": { start: new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000), bucket: 3600 }
-    };
-    return { ...configs[state.activeTrafficRange], end };
+function syncGlobalRangeButtons() {
+    setNormalizedTrafficRange();
+    const container = document.getElementById("global-range-tabs");
+    if (!container) return;
+    const markup = availableTrafficRanges().map(range => `
+        <button class="tab-btn global-range-btn${range.id === state.activeTrafficRange ? " active" : ""}" data-range="${range.id}">${range.label}</button>
+    `).join("");
+    if (container.dataset.renderedRanges !== markup) {
+        container.innerHTML = markup;
+        container.dataset.renderedRanges = markup;
+        bindGlobalRangeButtons();
+        return;
+    }
+    container.querySelectorAll(".global-range-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.getAttribute("data-range") === state.activeTrafficRange);
+    });
+}
+
+function bindGlobalRangeButtons() {
+    document.querySelectorAll(".global-range-btn").forEach(btn => {
+        if (btn.dataset.bound === "true") return;
+        btn.dataset.bound = "true";
+        btn.addEventListener("click", (e) => {
+            state.activeTrafficRange = e.currentTarget.getAttribute("data-range");
+            setNormalizedTrafficRange();
+            syncGlobalRangeButtons();
+            loadData(true);
+        });
+    });
+}
+
+function syncGlobalRangeVisibility(viewName) {
+    const globalTimeControl = document.querySelector(".global-time-control");
+    const autoRefreshControl = document.querySelector(".auto-refresh-control");
+    const show = viewName === "overview" || viewName === "dashboard";
+    if (globalTimeControl) globalTimeControl.classList.toggle("hidden", !show);
+    if (autoRefreshControl) autoRefreshControl.classList.toggle("hidden", !show);
+}
+
+function scheduleAutoRefresh(viewName = state.activeView) {
+    if (window.autoRefreshTimer) {
+        clearInterval(window.autoRefreshTimer);
+        window.autoRefreshTimer = null;
+    }
+    const supportsAutoRefresh = viewName === "overview" || viewName === "dashboard";
+    const seconds = Number(state.autoRefreshSeconds || 0);
+    if (!supportsAutoRefresh || seconds <= 0) return;
+    window.autoRefreshTimer = setInterval(() => {
+        loadData(false);
+    }, seconds * 1000);
 }
 
 // Shell view titles updates on route change
 window.addEventListener("viewchange", (e) => {
-    const { viewName } = e.detail;
+    const { viewName, param } = e.detail;
+    const previousView = state.lastRoutedView;
     const workspaceTitle = document.getElementById("workspace-title");
     const workspaceSubtitle = document.querySelector(".workspace-subtitle");
 
@@ -208,12 +271,24 @@ window.addEventListener("viewchange", (e) => {
     const title = titles[viewName] || titles.dashboard;
     if (workspaceTitle) workspaceTitle.textContent = title[0];
     if (workspaceSubtitle) workspaceSubtitle.textContent = title[1];
+    if (viewName === "settings") {
+        state.activeSettingsSection = param || "access";
+    }
+    syncGlobalRangeButtons();
+    syncGlobalRangeVisibility(viewName);
+    scheduleAutoRefresh(viewName);
 
     // When leaving settings, clear cached data so next visit always fetches fresh config.
     // When entering settings via navigation, treat it as a manual (forced) load.
     const isEnteringSettings = viewName === "settings";
     if (!isEnteringSettings && state.settingsData) {
         state.settingsData = null;
+    }
+
+    state.lastRoutedView = viewName;
+    if (isEnteringSettings && previousView === "settings") {
+        renderSettingsView();
+        return;
     }
 
     loadData(isEnteringSettings);
@@ -261,10 +336,7 @@ async function initAuthenticatedApp() {
     const viewWizard = document.getElementById("view-wizard");
     if (state.settingsData && !state.settingsData.first_run_completed) {
         if (viewWizard) viewWizard.classList.remove("hidden");
-        if (window.autoRefreshTimer) {
-            clearInterval(window.autoRefreshTimer);
-            window.autoRefreshTimer = null;
-        }
+        scheduleAutoRefresh("off");
         return;
     }
     if (viewWizard) viewWizard.classList.add("hidden");
@@ -285,8 +357,6 @@ async function initAuthenticatedApp() {
         };
         const router = new Router(routes, "overview");
         router.init();
-
-        window.autoRefreshTimer = setInterval(loadData, 5000);
     }
 }
 
@@ -338,25 +408,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (navPolicies) navPolicies.addEventListener("click", () => { window.location.hash = "#/policies"; });
     if (navNotifications) navNotifications.addEventListener("click", () => { window.location.hash = "#/notifications"; });
     if (navAudit) navAudit.addEventListener("click", () => { window.location.hash = "#/audit"; });
-    if (navSettings) navSettings.addEventListener("click", () => { window.location.hash = "#/settings"; });
+    if (navSettings) navSettings.addEventListener("click", () => { window.location.hash = "#/settings/access"; });
 
-    // Bind manual refresh trigger
-    const btnRefresh = document.getElementById("btn-refresh");
-    if (btnRefresh) {
-        btnRefresh.addEventListener("click", () => {
-            loadData(true);
-        });
-    }
+    bindGlobalRangeButtons();
 
-    // Bind Collector health accordion collapse
-    const headerCollectorHealth = document.getElementById("header-collector-health");
-    const bodyCollectorHealth = document.getElementById("body-collector-health");
-    const iconCollectorHealth = document.getElementById("icon-collector-health");
-    if (headerCollectorHealth && bodyCollectorHealth && iconCollectorHealth) {
-        headerCollectorHealth.addEventListener("click", () => {
-            const isHidden = bodyCollectorHealth.style.display === "none";
-            bodyCollectorHealth.style.display = isHidden ? "block" : "none";
-            iconCollectorHealth.style.transform = isHidden ? "rotate(180deg)" : "rotate(0deg)";
+    const selectAutoRefresh = document.getElementById("select-auto-refresh");
+    if (selectAutoRefresh) {
+        selectAutoRefresh.value = String(state.autoRefreshSeconds);
+        selectAutoRefresh.addEventListener("change", (e) => {
+            state.autoRefreshSeconds = Number(e.target.value || 0);
+            scheduleAutoRefresh(state.activeView);
         });
     }
 
@@ -392,8 +453,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 await api.submitLogout();
             } finally {
                 if (window.autoRefreshTimer) {
-                    clearInterval(window.autoRefreshTimer);
-                    window.autoRefreshTimer = null;
+                    scheduleAutoRefresh("off");
                 }
                 window.showAuthOverlay("login", "Signed out.");
             }

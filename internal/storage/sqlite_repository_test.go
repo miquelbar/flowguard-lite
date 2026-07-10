@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"io"
 	"log/slog"
 	"os"
@@ -10,9 +11,66 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/config"
-	"github.com/flowguard/flowguard/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/config"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
 )
+
+func TestSQLiteRepository_MigratesLegacyAnomaliesDestinationIP(t *testing.T) {
+	tmpDir := t.TempDir()
+	metaPath := filepath.Join(tmpDir, "metadata.sqlite")
+	legacyDB, err := sql.Open("sqlite", metaPath)
+	if err != nil {
+		t.Fatalf("failed to open legacy metadata db: %v", err)
+	}
+	_, err = legacyDB.Exec(`
+		CREATE TABLE anomalies (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			ip TEXT NOT NULL,
+			type TEXT NOT NULL,
+			description TEXT NOT NULL,
+			severity TEXT NOT NULL DEFAULT 'medium',
+			status TEXT NOT NULL DEFAULT 'active',
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL
+		);
+		CREATE INDEX idx_anomalies_created ON anomalies (created_at DESC);
+		CREATE INDEX idx_anomalies_ip ON anomalies (ip);
+	`)
+	if closeErr := legacyDB.Close(); closeErr != nil {
+		t.Fatalf("failed to close legacy metadata db: %v", closeErr)
+	}
+	if err != nil {
+		t.Fatalf("failed to create legacy anomalies schema: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo, err := NewSQLiteRepository(tmpDir, logger)
+	if err != nil {
+		t.Fatalf("expected legacy schema migration to succeed, got: %v", err)
+	}
+	defer repo.Close()
+
+	anomaly := &Anomaly{
+		IP:            "192.168.1.10",
+		DestinationIP: "203.0.113.10",
+		Type:          "NEW_DESTINATION",
+		Description:   "legacy migration regression",
+		Severity:      "medium",
+		Status:        "active",
+		CreatedAt:     time.Now().UTC(),
+		UpdatedAt:     time.Now().UTC(),
+	}
+	if err := repo.SaveAnomaly(context.Background(), anomaly); err != nil {
+		t.Fatalf("failed to save anomaly after legacy migration: %v", err)
+	}
+	list, err := repo.ListAnomalies(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("failed to list anomalies after legacy migration: %v", err)
+	}
+	if len(list) != 1 || list[0].DestinationIP != "203.0.113.10" {
+		t.Fatalf("destination_ip was not migrated/read correctly: %+v", list)
+	}
+}
 
 func TestSQLiteRepository_SaveAndQuery(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "sqlite_test")

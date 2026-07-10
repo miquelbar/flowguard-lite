@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
 
 // MockRepository implements StorageRepository for testing routing rules.

@@ -1,9 +1,10 @@
-module github.com/flowguard/flowguard
+module github.com/miquelbar/flowguard-lite
 
 go 1.25.0
 
 require (
 	github.com/duckdb/duckdb-go/v2 v2.10504.0
+	github.com/google/gopacket v1.1.19
 	github.com/netsampler/goflow2 v1.3.7
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.53.0

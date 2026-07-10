@@ -327,6 +327,37 @@
     align-items: center;
 }
 
+.panel-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.panel-toolbar-controls {
+    justify-content: flex-end;
+    flex: 1 1 520px;
+}
+
+.toolbar-search {
+    flex: 1 1 280px;
+    min-width: 240px;
+}
+
+.toolbar-search .form-control {
+    width: 100%;
+}
+
+.toolbar-select {
+    min-width: 150px;
+}
+
+.alerts-toolbar-controls {
+    max-width: 780px;
+    margin-left: auto;
+}
+
 .form-control {
     background-color: rgba(255,255,255,0.02);
     border: 1px solid var(--border-color);
@@ -389,6 +420,20 @@
     border: 1px solid rgba(63, 95, 70, 0.25);
 }
 
+@media (max-width: 900px) {
+    .panel-toolbar-controls,
+    .alerts-toolbar-controls {
+        flex-basis: 100%;
+        max-width: none;
+        margin-left: 0;
+        justify-content: flex-start;
+    }
+
+    .toolbar-search {
+        flex-basis: 100%;
+    }
+}
+
 
 /* Modern Minimalist Tables */
 .table-container {
@@ -411,6 +456,40 @@ th, td {
     padding: 0.75rem 0.875rem;
     text-align: left;
     vertical-align: middle;
+}
+
+.sortable-th {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: 100%;
+    padding: 0;
+    font: inherit;
+    font-weight: inherit;
+    text-align: left;
+}
+
+.sortable-th.align-right {
+    justify-content: flex-end;
+    text-align: right;
+}
+
+.sortable-th:hover,
+.sortable-th.active {
+    color: var(--text-primary);
+}
+
+.sort-indicator {
+    display: inline-block;
+    min-width: 0.75rem;
+    color: var(--primary-color);
+    font-size: 0.68rem;
+    line-height: 1;
 }
 
 .compact-table-container th, .compact-table-container td {
@@ -457,6 +536,16 @@ td.font-semibold {
 
 .mobile-only {
     display: none !important;
+}
+
+@media (max-width: 1040px) {
+    .mobile-only {
+        display: inline-block !important;
+    }
+
+    .detail-floating-close {
+        display: inline-flex !important;
+    }
 }
 
 .font-semibold {
@@ -963,3 +1052,62 @@ tr.selected td {
     box-shadow: none;
 }
 
+.settings-subsection {
+    margin: 1.25rem 0;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-color);
+}
+
+.settings-subsection-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.85rem;
+}
+
+.settings-subsection-header h4 {
+    margin: 0 0 0.2rem;
+}
+
+.settings-subsection-header p,
+.form-help {
+    margin: 0.25rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.settings-privilege-warning {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border-left: 3px solid var(--warning-color);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--warning-color) 10%, transparent);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+
+.settings-checkbox-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.settings-checkbox-row input {
+    width: auto;
+    margin-top: 0.2rem;
+}
+
+.settings-checkbox-row span {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.settings-checkbox-row small {
+    color: var(--text-muted);
+}

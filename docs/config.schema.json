@@ -6,6 +6,15 @@
     "admin_password_hash": {
       "type": "string"
     },
+    "capture_bpf_filter": {
+      "type": "string"
+    },
+    "capture_interface": {
+      "type": "string"
+    },
+    "capture_promiscuous": {
+      "type": "boolean"
+    },
     "ddos_threshold_bps": {
       "type": "integer"
     },
@@ -92,6 +101,9 @@
     "port",
     "netflow_port",
     "sflow_port",
+    "capture_interface",
+    "capture_bpf_filter",
+    "capture_promiscuous",
     "storage_dir",
     "log_level",
     "environment",

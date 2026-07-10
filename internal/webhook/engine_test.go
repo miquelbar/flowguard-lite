@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
 
 type roundTripperFunc func(req *http.Request) (*http.Response, error)

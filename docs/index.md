@@ -10,6 +10,7 @@ It acts as a lightweight flow collector and correlates router/firewall telemetry
 
 ### Getting Started
 *   [**Installation Guide**](installation.md) - Learn how to deploy FlowGuard Lite using Docker Compose or host-native binaries.
+*   [**Passive Network Capture**](features/passive-capture.md) - Opt-in libpcap deployment, minimum Linux capabilities, filters, and verification.
 *   [**Configuration Reference**](configuration.md) - Complete schema details for `config.yaml` and environment variables.
 
 ### Exporter Setup Guides

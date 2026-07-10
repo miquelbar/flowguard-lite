@@ -43,6 +43,9 @@ sflow_port: 4000
 storage_dir: "/tmp/data"
 log_level: "debug"
 environment: "development"
+capture_interface: "en0"
+capture_bpf_filter: "tcp or udp"
+capture_promiscuous: true
 `
 	configPath := filepath.Join(tmpDir, "config.yaml")
 	if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
@@ -72,6 +75,9 @@ environment: "development"
 	if cfg.Environment != "development" {
 		t.Errorf("expected Environment 'development', got %s", cfg.Environment)
 	}
+	if cfg.CaptureInterface != "en0" || cfg.CaptureBPFFilter != "tcp or udp" || !cfg.CapturePromiscuous {
+		t.Errorf("unexpected capture config: interface=%q filter=%q promiscuous=%t", cfg.CaptureInterface, cfg.CaptureBPFFilter, cfg.CapturePromiscuous)
+	}
 }
 
 func TestLoadConfig_EnvOverride(t *testing.T) {
@@ -83,6 +89,9 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 	os.Setenv("FLOWGUARD_ENV", "staging")
 	os.Setenv("FLOWGUARD_ADMIN_PASSWORD_HASH", "pbkdf2-sha256$1$salt$hash")
 	os.Setenv("FLOWGUARD_SESSION_SECRET", "session-secret")
+	os.Setenv("FLOWGUARD_CAPTURE_INTERFACE", "eth0")
+	os.Setenv("FLOWGUARD_CAPTURE_BPF_FILTER", "udp")
+	os.Setenv("FLOWGUARD_CAPTURE_PROMISCUOUS", "true")
 
 	defer func() {
 		os.Unsetenv("FLOWGUARD_PORT")
@@ -93,6 +102,9 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 		os.Unsetenv("FLOWGUARD_ENV")
 		os.Unsetenv("FLOWGUARD_ADMIN_PASSWORD_HASH")
 		os.Unsetenv("FLOWGUARD_SESSION_SECRET")
+		os.Unsetenv("FLOWGUARD_CAPTURE_INTERFACE")
+		os.Unsetenv("FLOWGUARD_CAPTURE_BPF_FILTER")
+		os.Unsetenv("FLOWGUARD_CAPTURE_PROMISCUOUS")
 	}()
 
 	cfg, err := LoadConfig("non-existent-config.yaml")
@@ -123,6 +135,9 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 	}
 	if cfg.SessionSecret != "session-secret" {
 		t.Errorf("expected session secret override, got %q", cfg.SessionSecret)
+	}
+	if cfg.CaptureInterface != "eth0" || cfg.CaptureBPFFilter != "udp" || !cfg.CapturePromiscuous {
+		t.Errorf("unexpected capture env overrides: interface=%q filter=%q promiscuous=%t", cfg.CaptureInterface, cfg.CaptureBPFFilter, cfg.CapturePromiscuous)
 	}
 }
 

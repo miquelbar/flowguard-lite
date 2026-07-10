@@ -6,7 +6,12 @@ import (
 	"sort"
 	"time"
 
-	"github.com/flowguard/flowguard/internal/storage"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
+)
+
+const (
+	activeRiskWindow     = 7 * 24 * time.Hour
+	activeRiskDecayFloor = 0.15
 )
 
 // EvidenceRef represents an individual security event contributing to the device's threat level.
@@ -64,7 +69,8 @@ func NewRiskEngine(repo storage.DeviceRepository) *RiskEngine {
 	return &RiskEngine{repo: repo}
 }
 
-// CalculateDeviceRisks queries active anomalies over the past 24 hours, correlates multiple sources, and compiles the ranking list.
+// CalculateDeviceRisks queries active anomalies over the retained dashboard window,
+// correlates multiple sources, and compiles the ranking list.
 func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, error) {
 	devices, err := e.repo.ListDevices(ctx)
 	if err != nil {
@@ -72,7 +78,7 @@ func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, er
 	}
 
 	now := time.Now()
-	since := now.Add(-24 * time.Hour)
+	since := now.Add(-activeRiskWindow)
 
 	activeAnomalies, err := e.repo.GetActiveAnomalies(ctx, since)
 	if err != nil {
@@ -113,11 +119,14 @@ func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, er
 				weight = 20.0
 			}
 
-			// Linear decay over 24 hours
+			// Linear decay over 24 hours with a floor for unresolved active alerts.
+			// Active alerts should become less prominent over time, but should not
+			// disappear from the threat ranking while still unresolved and within
+			// the bounded dashboard retention window.
 			age := now.Sub(a.CreatedAt).Hours()
 			decay := 1.0 - (age / 24.0)
-			if decay < 0.0 {
-				decay = 0.0
+			if decay < activeRiskDecayFloor {
+				decay = activeRiskDecayFloor
 			}
 
 			decayedWeight := weight * decay

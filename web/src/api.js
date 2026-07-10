@@ -80,6 +80,20 @@ export async function fetchTrafficTimeSeries(range) {
     return await resp.json();
 }
 
+export async function fetchTrafficRecords(range, filters = {}) {
+    const params = new URLSearchParams({
+        limit: "200",
+        start: range.start.toISOString(),
+        end: range.end.toISOString()
+    });
+    if (filters.q) params.set("q", filters.q);
+    if (filters.protocol) params.set("protocol", filters.protocol);
+    if (filters.dstPort) params.set("dst_port", filters.dstPort);
+    const resp = await apiFetch(`/api/traffic/records?${params.toString()}`);
+    if (!resp.ok) throw new Error("Flow explorer query failed");
+    return await resp.json();
+}
+
 export async function fetchSecuritySummary() {
     const resp = await apiFetch("/api/security/summary");
     if (!resp.ok) throw new Error("Security summary query failed");
