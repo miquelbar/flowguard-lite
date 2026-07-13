@@ -344,3 +344,47 @@ func TestSaveConfigRejectsInvalidWithoutReplacingExistingFile(t *testing.T) {
 		t.Fatalf("expected retained config port 1234, got %s", loaded.Port)
 	}
 }
+
+func TestLoadConfigNormalization(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "config_normalize_test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	// Save a config with empty strings for fields that have default values
+	rawYaml := `
+port: ""
+storage_backend: ""
+log_level: ""
+environment: ""
+webhook_format: ""
+storage_dir: "/tmp/data"
+`
+	if err := os.WriteFile(configPath, []byte(rawYaml), 0644); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed to normalize empty strings: %v", err)
+	}
+
+	if cfg.Port != "8080" {
+		t.Errorf("expected normalized Port '8080', got %q", cfg.Port)
+	}
+	if cfg.StorageBackend != StorageBackendSQLite {
+		t.Errorf("expected normalized StorageBackend 'sqlite', got %q", cfg.StorageBackend)
+	}
+	if cfg.LogLevel != "info" {
+		t.Errorf("expected normalized LogLevel 'info', got %q", cfg.LogLevel)
+	}
+	if cfg.Environment != "production" {
+		t.Errorf("expected normalized Environment 'production', got %q", cfg.Environment)
+	}
+	if cfg.WebhookFormat != WebhookFormatGeneric {
+		t.Errorf("expected normalized WebhookFormat 'generic', got %q", cfg.WebhookFormat)
+	}
+}
+

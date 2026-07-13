@@ -265,6 +265,23 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.RetentionDays = r
 	}
 
+	// Normalize empty fields to their default values
+	if cfg.Port == "" {
+		cfg.Port = "8080"
+	}
+	if cfg.StorageBackend == "" {
+		cfg.StorageBackend = StorageBackendSQLite
+	}
+	if cfg.LogLevel == "" {
+		cfg.LogLevel = "info"
+	}
+	if cfg.Environment == "" {
+		cfg.Environment = "production"
+	}
+	if cfg.WebhookFormat == "" {
+		cfg.WebhookFormat = WebhookFormatGeneric
+	}
+
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
