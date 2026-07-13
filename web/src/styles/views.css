@@ -4,6 +4,15 @@
     gap: 1.25rem;
 }
 
+@media (min-width: 1024px) {
+    .overview-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .overview-panel-wide {
+        grid-column: span 2;
+    }
+}
+
 .overview-panel {
     min-height: 280px;
 }

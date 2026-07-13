@@ -27,12 +27,6 @@
     .dashboard-main {
         grid-template-columns: 360px 1fr;
     }
-    .overview-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-    .overview-panel-wide {
-        grid-column: span 2;
-    }
     .view-content {
         grid-column: 1 / -1;
     }
