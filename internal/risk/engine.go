@@ -113,9 +113,9 @@ func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, er
 			// Determine base severity weight
 			weight := 10.0 // low
 			switch a.Severity {
-			case "high":
+			case storage.SeverityHigh:
 				weight = 40.0
-			case "medium":
+			case storage.SeverityMedium:
 				weight = 20.0
 			}
 
@@ -206,11 +206,11 @@ func (e *RiskEngine) CalculateDeviceRisks(ctx context.Context) ([]DeviceRisk, er
 			continue
 		}
 
-		level := "low"
+		level := storage.SeverityLow
 		if score >= 70 {
-			level = "high"
+			level = storage.SeverityHigh
 		} else if score >= 30 {
-			level = "medium"
+			level = storage.SeverityMedium
 		}
 
 		breakdown := RiskBreakdown{

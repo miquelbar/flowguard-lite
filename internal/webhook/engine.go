@@ -1,7 +1,6 @@
 package webhook
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -27,6 +26,11 @@ type WebhookEngine struct {
 	tgChatID       string
 	client         *http.Client
 	logger         *slog.Logger
+
+	dispatchQueue chan webhookDispatchRequest
+	dispatchWG    sync.WaitGroup
+	queueMu       sync.Mutex
+	queueClosed   bool
 }
 
 // NewWebhookEngine creates and configures a WebhookEngine instance.
@@ -34,7 +38,7 @@ func NewWebhookEngine(repo storage.StorageRepository, url string, format string,
 	if format == "" {
 		format = "generic"
 	}
-	return &WebhookEngine{
+	engine := &WebhookEngine{
 		repo:           repo,
 		url:            url,
 		format:         format,
@@ -44,7 +48,13 @@ func NewWebhookEngine(repo storage.StorageRepository, url string, format string,
 		tgChatID:       tgChatID,
 		client:         &http.Client{Timeout: 5 * time.Second},
 		logger:         logger,
+		dispatchQueue:  make(chan webhookDispatchRequest, webhookDispatchQueueSize),
 	}
+	for i := 0; i < webhookDispatchWorkers; i++ {
+		engine.dispatchWG.Add(1)
+		go engine.dispatchWorker()
+	}
+	return engine
 }
 
 // UpdateConfig dynamically updates the notification endpoints at runtime thread-safely.
@@ -152,7 +162,7 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 			if err != nil {
 				w.logger.Error("Failed to marshal webhook payload", slog.String("error", err.Error()))
 			} else {
-				go w.dispatchHTTP(context.Background(), anomaly.ID, nil, "webhook", url, bodyBytes, headers)
+				w.enqueueDispatch(context.Background(), anomaly.ID, nil, "webhook", url, bodyBytes, headers)
 			}
 		}
 
@@ -167,7 +177,7 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 			if err != nil {
 				w.logger.Error("Failed to marshal Telegram payload", slog.String("error", err.Error()))
 			} else {
-				go w.dispatchHTTP(context.Background(), anomaly.ID, nil, "telegram", tgURL, bodyBytes, nil)
+				w.enqueueDispatch(context.Background(), anomaly.ID, nil, "telegram", tgURL, bodyBytes, nil)
 			}
 		}
 		return
@@ -262,7 +272,7 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 				if err != nil {
 					w.logger.Error("Failed to marshal webhook payload", slog.String("error", err.Error()))
 				} else {
-					go w.dispatchHTTP(context.Background(), anomaly.ID, &ruleIDCopy, ch, url, bodyBytes, headers)
+					w.enqueueDispatch(context.Background(), anomaly.ID, &ruleIDCopy, ch, url, bodyBytes, headers)
 				}
 
 			case "telegram":
@@ -290,82 +300,10 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 				if err != nil {
 					w.logger.Error("Failed to marshal Telegram payload", slog.String("error", err.Error()))
 				} else {
-					go w.dispatchHTTP(context.Background(), anomaly.ID, &ruleIDCopy, ch, tgURL, bodyBytes, nil)
+					w.enqueueDispatch(context.Background(), anomaly.ID, &ruleIDCopy, ch, tgURL, bodyBytes, nil)
 				}
 			}
 		}
-	}
-}
-
-func (w *WebhookEngine) dispatchHTTP(ctx context.Context, anomalyID int64, ruleID *int64, channel string, url string, body []byte, headers map[string]string) {
-	reqCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		w.logger.Error("Failed to build HTTP request for "+channel, slog.String("error", err.Error()))
-		if w.repo != nil {
-			_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
-				AnomalyID:    anomalyID,
-				RuleID:       ruleID,
-				Channel:      channel,
-				Status:       "failed",
-				ErrorMessage: "Failed to build HTTP request: " + err.Error(),
-				DispatchedAt: time.Now(),
-			})
-		}
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	// Apply custom headers if present
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
-	w.logger.Debug("Dispatching alert...", slog.String("target", channel))
-	resp, err := w.client.Do(req)
-	if err != nil {
-		w.logger.Error(channel+" HTTP dispatch failed", slog.String("error", err.Error()))
-		if w.repo != nil {
-			_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
-				AnomalyID:    anomalyID,
-				RuleID:       ruleID,
-				Channel:      channel,
-				Status:       "failed",
-				ErrorMessage: err.Error(),
-				DispatchedAt: time.Now(),
-			})
-		}
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		errMsg := fmt.Sprintf("endpoint returned failure status code: %d", resp.StatusCode)
-		w.logger.Error(channel + " " + errMsg)
-		if w.repo != nil {
-			_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
-				AnomalyID:    anomalyID,
-				RuleID:       ruleID,
-				Channel:      channel,
-				Status:       "failed",
-				ErrorMessage: errMsg,
-				DispatchedAt: time.Now(),
-			})
-		}
-		return
-	}
-
-	w.logger.Info(channel + " alert dispatched successfully")
-	if w.repo != nil {
-		_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
-			AnomalyID:    anomalyID,
-			RuleID:       ruleID,
-			Channel:      channel,
-			Status:       "sent",
-			DispatchedAt: time.Now(),
-		})
 	}
 }
 
@@ -430,7 +368,7 @@ func (w *WebhookEngine) SendTestAlert(ctx context.Context, rule *storage.Notific
 			if err != nil {
 				w.logger.Error("Failed to marshal webhook payload", slog.String("error", err.Error()))
 			} else {
-				go w.dispatchHTTP(context.Background(), anomaly.ID, &ruleIDCopy, ch, url, bodyBytes, headers)
+				w.enqueueDispatch(context.Background(), anomaly.ID, &ruleIDCopy, ch, url, bodyBytes, headers)
 			}
 
 		case "telegram":
@@ -458,7 +396,7 @@ func (w *WebhookEngine) SendTestAlert(ctx context.Context, rule *storage.Notific
 			if err != nil {
 				w.logger.Error("Failed to marshal Telegram payload", slog.String("error", err.Error()))
 			} else {
-				go w.dispatchHTTP(context.Background(), anomaly.ID, &ruleIDCopy, ch, tgURL, bodyBytes, nil)
+				w.enqueueDispatch(context.Background(), anomaly.ID, &ruleIDCopy, ch, tgURL, bodyBytes, nil)
 			}
 		}
 	}

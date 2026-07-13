@@ -11,6 +11,8 @@ import (
 
 	"github.com/miquelbar/flowguard-lite/internal/flow"
 	"github.com/miquelbar/flowguard-lite/internal/storage"
+	duckdbstore "github.com/miquelbar/flowguard-lite/internal/storage/duckdb"
+	sqlitestore "github.com/miquelbar/flowguard-lite/internal/storage/sqlite"
 )
 
 type MockDeviceRepository struct {
@@ -142,7 +144,7 @@ func TestBaselineEngine_CalculateBaselines(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	sqliteRepo, err := storage.NewSQLiteRepository(tmpDir, logger)
+	sqliteRepo, err := sqlitestore.NewRepository(tmpDir, logger)
 	if err != nil {
 		t.Fatalf("failed to create repository: %v", err)
 	}
@@ -194,5 +196,50 @@ func TestBaselineEngine_CalculateBaselines(t *testing.T) {
 	// Expected mean bytes: (1000 + 1100 + 1200 + 1300 + 1400 + 1500) / 6 = 1250
 	if baseline.MeanBytes != 1250 {
 		t.Errorf("expected MeanBytes 1250, got %f", baseline.MeanBytes)
+	}
+}
+
+func TestBaselineEngine_CalculateBaselinesUsesFlowRepositoryContract(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	duckRepo, err := duckdbstore.NewRepository(t.TempDir(), logger)
+	if err != nil {
+		t.Fatalf("failed to create DuckDB repository: %v", err)
+	}
+	defer duckRepo.Close()
+
+	ctx := context.Background()
+	now := time.Now()
+	const ip = "192.168.1.51"
+	if err := duckRepo.UpsertDevice(ctx, ip, "printer-duck.local", now); err != nil {
+		t.Fatalf("failed to upsert DuckDB device: %v", err)
+	}
+
+	for i := 0; i < 6; i++ {
+		ts := now.Add(time.Duration(-i) * time.Minute)
+		if err := duckRepo.SaveAggregates(ctx, ts, []flow.FlowEvent{{
+			Timestamp:  ts,
+			SrcIP:      ip,
+			DstIP:      "8.8.4.4",
+			DstPort:    53,
+			Protocol:   17,
+			Bytes:      2000 + uint64(i*100),
+			Packets:    20,
+			ExporterIP: "192.168.1.1",
+		}}); err != nil {
+			t.Fatalf("failed saving DuckDB flow data: %v", err)
+		}
+	}
+
+	engine := NewBaselineEngine(duckRepo, logger)
+	if err := engine.CalculateBaselines(ctx, duckRepo); err != nil {
+		t.Fatalf("DuckDB baseline calculation failed: %v", err)
+	}
+
+	baseline := engine.GetCachedBaseline(ip)
+	if baseline == nil {
+		t.Fatal("expected DuckDB-backed baseline to be calculated and cached, got nil")
+	}
+	if baseline.MeanBytes != 2250 {
+		t.Errorf("expected DuckDB MeanBytes 2250, got %f", baseline.MeanBytes)
 	}
 }

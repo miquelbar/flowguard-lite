@@ -20,6 +20,7 @@ import (
 type DeviceRates struct {
 	PacketsIn     uint64
 	BytesIn       uint64
+	FlowsIn       uint64
 	SYNPacketsIn  uint64
 	UDPPacketsIn  uint64
 	ICMPPacketsIn uint64
@@ -149,6 +150,7 @@ func (d *DDoSDetector) accumulateRates(ip string, event *flow.FlowEvent) {
 	// Atomic additions for high speed concurrent safety
 	atomic.AddUint64(&r.PacketsIn, event.Packets)
 	atomic.AddUint64(&r.BytesIn, event.Bytes)
+	atomic.AddUint64(&r.FlowsIn, 1)
 
 	// TCP SYN Flag check (SYN=0x02, SYN-ACK=0x12)
 	// Let's check if protocol is TCP (6) and flags contain SYN (0x02) and not ACK (0x10) to count SYN packets
@@ -192,6 +194,7 @@ func (d *DDoSDetector) evaluateRates() {
 		ratesSnapshot[ip] = DeviceRates{
 			PacketsIn:     atomic.SwapUint64(&r.PacketsIn, 0),
 			BytesIn:       atomic.SwapUint64(&r.BytesIn, 0),
+			FlowsIn:       atomic.SwapUint64(&r.FlowsIn, 0),
 			SYNPacketsIn:  atomic.SwapUint64(&r.SYNPacketsIn, 0),
 			UDPPacketsIn:  atomic.SwapUint64(&r.UDPPacketsIn, 0),
 			ICMPPacketsIn: atomic.SwapUint64(&r.ICMPPacketsIn, 0),
@@ -203,6 +206,7 @@ func (d *DDoSDetector) evaluateRates() {
 		// Calculate rates per second over the 5-second interval
 		pps := r.PacketsIn / 5
 		bps := r.BytesIn / 5
+		fps := r.FlowsIn / 5
 		synPps := r.SYNPacketsIn / 5
 		udpPps := r.UDPPacketsIn / 5
 		icmpPps := r.ICMPPacketsIn / 5
@@ -217,6 +221,12 @@ func (d *DDoSDetector) evaluateRates() {
 		if bps > uint64(d.cfg.DDoSThresholdBPS) {
 			reason := fmt.Sprintf("Victim receiving high bandwidth rate of %d B/s, exceeding threshold limit of %d B/s", bps, d.cfg.DDoSThresholdBPS)
 			d.triggerAlert(ip, "DDOS_ATTACK", reason, "high")
+		}
+
+		// Check global flow-rate pressure
+		if fps > uint64(d.cfg.DDoSThresholdFPS) {
+			reason := fmt.Sprintf("Victim receiving high flow rate of %d flows/s, exceeding threshold limit of %d flows/s", fps, d.cfg.DDoSThresholdFPS)
+			d.triggerAlert(ip, "DDOS_FLOW_FLOOD", reason, "high")
 		}
 
 		// Check TCP SYN Flood
@@ -270,14 +280,11 @@ func (d *DDoSDetector) triggerAlert(ip string, alertType string, reason string, 
 		UpdatedAt:   now,
 	}
 
-	// Write to database asynchronously
-	go func() {
-		dbCtx, dbCancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer dbCancel()
-		if err := d.repo.SaveAnomaly(dbCtx, anom); err != nil {
-			d.logger.Error("Failed saving triggered DDoS anomaly into database", slog.String("error", err.Error()))
-		}
-	}()
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer dbCancel()
+	if err := d.repo.SaveAnomaly(dbCtx, anom); err != nil {
+		d.logger.Error("Failed saving triggered DDoS anomaly into database", slog.String("error", err.Error()))
+	}
 }
 
 // UpdateLocalSubnets dynamically re-configures the local subnets list at runtime.

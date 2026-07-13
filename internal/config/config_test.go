@@ -18,6 +18,12 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.SflowPort != 6343 {
 		t.Errorf("expected default SflowPort 6343, got %d", cfg.SflowPort)
 	}
+	if cfg.UniFiSyslogEnabled {
+		t.Error("expected UniFi syslog collector disabled by default")
+	}
+	if cfg.UniFiSyslogPort != 5514 {
+		t.Errorf("expected default UniFiSyslogPort 5514, got %d", cfg.UniFiSyslogPort)
+	}
 	if cfg.StorageDir != "/data" {
 		t.Errorf("expected default StorageDir '/data', got %s", cfg.StorageDir)
 	}
@@ -46,6 +52,11 @@ environment: "development"
 capture_interface: "en0"
 capture_bpf_filter: "tcp or udp"
 capture_promiscuous: true
+unifi_syslog_enabled: true
+unifi_syslog_port: 5514
+unifi_syslog_allowed_ips:
+  - "192.168.1.1"
+  - "192.168.1.0/24"
 `
 	configPath := filepath.Join(tmpDir, "config.yaml")
 	if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
@@ -78,6 +89,9 @@ capture_promiscuous: true
 	if cfg.CaptureInterface != "en0" || cfg.CaptureBPFFilter != "tcp or udp" || !cfg.CapturePromiscuous {
 		t.Errorf("unexpected capture config: interface=%q filter=%q promiscuous=%t", cfg.CaptureInterface, cfg.CaptureBPFFilter, cfg.CapturePromiscuous)
 	}
+	if !cfg.UniFiSyslogEnabled || cfg.UniFiSyslogPort != 5514 || len(cfg.UniFiSyslogAllowedIPs) != 2 {
+		t.Errorf("unexpected UniFi syslog config: %+v", cfg)
+	}
 }
 
 func TestLoadConfig_EnvOverride(t *testing.T) {
@@ -92,6 +106,15 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 	os.Setenv("FLOWGUARD_CAPTURE_INTERFACE", "eth0")
 	os.Setenv("FLOWGUARD_CAPTURE_BPF_FILTER", "udp")
 	os.Setenv("FLOWGUARD_CAPTURE_PROMISCUOUS", "true")
+	os.Setenv("FLOWGUARD_UNIFI_SYSLOG_ENABLED", "true")
+	os.Setenv("FLOWGUARD_UNIFI_SYSLOG_PORT", "5514")
+	os.Setenv("FLOWGUARD_UNIFI_SYSLOG_ALLOWED_IPS", "192.168.1.1,192.168.1.0/24")
+	os.Setenv("FLOWGUARD_DDOS_THRESHOLD_PPS", "6000")
+	os.Setenv("FLOWGUARD_DDOS_THRESHOLD_BPS", "12582912")
+	os.Setenv("FLOWGUARD_DDOS_THRESHOLD_FPS", "1200")
+	os.Setenv("FLOWGUARD_SYN_FLOOD_THRESHOLD_PPS", "1100")
+	os.Setenv("FLOWGUARD_UDP_FLOOD_THRESHOLD_PPS", "3100")
+	os.Setenv("FLOWGUARD_ICMP_FLOOD_THRESHOLD_PPS", "600")
 
 	defer func() {
 		os.Unsetenv("FLOWGUARD_PORT")
@@ -105,6 +128,15 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 		os.Unsetenv("FLOWGUARD_CAPTURE_INTERFACE")
 		os.Unsetenv("FLOWGUARD_CAPTURE_BPF_FILTER")
 		os.Unsetenv("FLOWGUARD_CAPTURE_PROMISCUOUS")
+		os.Unsetenv("FLOWGUARD_UNIFI_SYSLOG_ENABLED")
+		os.Unsetenv("FLOWGUARD_UNIFI_SYSLOG_PORT")
+		os.Unsetenv("FLOWGUARD_UNIFI_SYSLOG_ALLOWED_IPS")
+		os.Unsetenv("FLOWGUARD_DDOS_THRESHOLD_PPS")
+		os.Unsetenv("FLOWGUARD_DDOS_THRESHOLD_BPS")
+		os.Unsetenv("FLOWGUARD_DDOS_THRESHOLD_FPS")
+		os.Unsetenv("FLOWGUARD_SYN_FLOOD_THRESHOLD_PPS")
+		os.Unsetenv("FLOWGUARD_UDP_FLOOD_THRESHOLD_PPS")
+		os.Unsetenv("FLOWGUARD_ICMP_FLOOD_THRESHOLD_PPS")
 	}()
 
 	cfg, err := LoadConfig("non-existent-config.yaml")
@@ -139,6 +171,13 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 	if cfg.CaptureInterface != "eth0" || cfg.CaptureBPFFilter != "udp" || !cfg.CapturePromiscuous {
 		t.Errorf("unexpected capture env overrides: interface=%q filter=%q promiscuous=%t", cfg.CaptureInterface, cfg.CaptureBPFFilter, cfg.CapturePromiscuous)
 	}
+	if !cfg.UniFiSyslogEnabled || cfg.UniFiSyslogPort != 5514 || len(cfg.UniFiSyslogAllowedIPs) != 2 {
+		t.Errorf("unexpected UniFi syslog env overrides: %+v", cfg)
+	}
+	if cfg.DDoSThresholdPPS != 6000 || cfg.DDoSThresholdBPS != 12582912 || cfg.DDoSThresholdFPS != 1200 ||
+		cfg.SYNFloodThresholdPPS != 1100 || cfg.UDPFloodThresholdPPS != 3100 || cfg.ICMPFloodThresholdPPS != 600 {
+		t.Errorf("unexpected DDoS threshold env overrides: %+v", cfg)
+	}
 }
 
 func TestLoadConfig_WebhookHeadersEnvOverride(t *testing.T) {
@@ -154,6 +193,97 @@ func TestLoadConfig_WebhookHeadersEnvOverride(t *testing.T) {
 	}
 	if cfg.WebhookHeaders["X-FlowGuard"] != "dev" {
 		t.Errorf("expected X-FlowGuard header override, got %q", cfg.WebhookHeaders["X-FlowGuard"])
+	}
+}
+
+func TestLoadConfigRejectsInvalidEnvironmentOverrides(t *testing.T) {
+	t.Setenv("FLOWGUARD_NETFLOW_PORT", "not-a-port")
+
+	if _, err := LoadConfig("non-existent-config.yaml"); err == nil {
+		t.Fatal("expected invalid integer environment override to fail")
+	}
+}
+
+func TestLoadConfigRejectsInvalidWebhookHeaders(t *testing.T) {
+	t.Setenv("FLOWGUARD_WEBHOOK_HEADERS", `{not-json}`)
+
+	if _, err := LoadConfig("non-existent-config.yaml"); err == nil {
+		t.Fatal("expected invalid webhook headers JSON to fail")
+	}
+}
+
+func TestConfigValidateRejectsUnsafeValues(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Config)
+	}{
+		{
+			name:   "invalid local subnet",
+			mutate: func(cfg *Config) { cfg.LocalSubnets = []string{"192.168.1.0/24", "bad-cidr"} },
+		},
+		{
+			name:   "retention too high",
+			mutate: func(cfg *Config) { cfg.RetentionDays = MaxRetentionDays + 1 },
+		},
+		{
+			name:   "invalid backend",
+			mutate: func(cfg *Config) { cfg.StorageBackend = "postgres" },
+		},
+		{
+			name:   "telegram enabled without target",
+			mutate: func(cfg *Config) { cfg.TelegramEnabled = true },
+		},
+		{
+			name:   "enabled unifi syslog with zero port",
+			mutate: func(cfg *Config) { cfg.UniFiSyslogEnabled = true; cfg.UniFiSyslogPort = 0 },
+		},
+		{
+			name:   "collector UDP port conflict",
+			mutate: func(cfg *Config) { cfg.UniFiSyslogEnabled = true; cfg.UniFiSyslogPort = cfg.NetflowPort },
+		},
+		{
+			name:   "invalid unifi syslog allowlist",
+			mutate: func(cfg *Config) { cfg.UniFiSyslogAllowedIPs = []string{"not-an-ip"} },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			tt.mutate(cfg)
+			if err := cfg.Validate(); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+}
+
+func TestLoadConfigRejectsInvalidYamlValues(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "config_invalid_yaml")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(`
+port: "8080"
+storage_backend: "postgres"
+local_subnets:
+  - "192.168.1.0/24"
+retention_days: 7
+`), 0644); err != nil {
+		t.Fatalf("failed to write temp config: %v", err)
+	}
+
+	if _, err := LoadConfig(configPath); err == nil {
+		t.Fatal("expected invalid YAML config value to fail")
+	}
+}
+
+func TestDefaultConfigIsValid(t *testing.T) {
+	if err := DefaultConfig().Validate(); err != nil {
+		t.Fatalf("default config should validate: %v", err)
 	}
 }
 
@@ -183,5 +313,34 @@ func TestSaveConfig(t *testing.T) {
 	}
 	if !loaded.FirstRunCompleted {
 		t.Errorf("expected saved FirstRunCompleted to be true")
+	}
+}
+
+func TestSaveConfigRejectsInvalidWithoutReplacingExistingFile(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "config_save_atomic_test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	initial := DefaultConfig()
+	initial.Port = "1234"
+	if err := SaveConfig(configPath, initial); err != nil {
+		t.Fatalf("failed to save initial config: %v", err)
+	}
+
+	invalid := DefaultConfig()
+	invalid.Port = "not-a-port"
+	if err := SaveConfig(configPath, invalid); err == nil {
+		t.Fatal("expected invalid config save to fail")
+	}
+
+	loaded, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("failed to load retained config: %v", err)
+	}
+	if loaded.Port != "1234" {
+		t.Fatalf("expected retained config port 1234, got %s", loaded.Port)
 	}
 }

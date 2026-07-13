@@ -83,6 +83,7 @@ func TestWebhookEngine_Dispatch(t *testing.T) {
 
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 			engine := NewWebhookEngine(nil, server.URL, tt.format, nil, false, "", "", logger)
+			defer shutdownWebhookEngine(t, engine)
 
 			anomaly := &storage.Anomaly{
 				IP:          "192.168.1.10",
@@ -120,6 +121,7 @@ func TestWebhookEngine_TelegramDirect(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	engine := NewWebhookEngine(nil, "", "generic", nil, true, "token123", "chat456", logger)
+	defer shutdownWebhookEngine(t, engine)
 	engine.client.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 		expectedURL := "https://api.telegram.org/bottoken123/sendMessage"
 		if req.URL.String() != expectedURL {
@@ -161,6 +163,7 @@ func TestWebhookEngine_TelegramDirect(t *testing.T) {
 func TestWebhookEngine_UpdateConfig(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	engine := NewWebhookEngine(nil, "http://old-url", "generic", map[string]string{"X-Auth": "old"}, false, "old-token", "old-chat", logger)
+	defer shutdownWebhookEngine(t, engine)
 
 	engine.UpdateConfig("http://new-url", "slack", map[string]string{"X-Auth": "new"}, true, "new-token", "new-chat")
 
@@ -188,6 +191,7 @@ func TestWebhookEngine_Headers(t *testing.T) {
 		"X-Custom-Header": "custom-val",
 	}
 	engine := NewWebhookEngine(nil, server.URL, "generic", customHeaders, false, "", "", logger)
+	defer shutdownWebhookEngine(t, engine)
 
 	anomaly := &storage.Anomaly{
 		IP:        "192.168.1.1",
@@ -212,5 +216,94 @@ func TestWebhookEngine_Headers(t *testing.T) {
 		}
 	case <-time.After(1 * time.Second):
 		t.Fatal("timeout waiting for webhook dispatch")
+	}
+}
+
+func TestWebhookEngine_DispatchQueueDropsWhenSaturated(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo := &MockRepository{}
+	engine := NewWebhookEngine(repo, "http://example.test", "generic", nil, false, "", "", logger)
+
+	block := make(chan struct{})
+	started := make(chan struct{}, webhookDispatchWorkers+webhookDispatchQueueSize)
+	engine.client.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		started <- struct{}{}
+		<-block
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       http.NoBody,
+		}, nil
+	})
+
+	for i := 0; i < webhookDispatchWorkers; i++ {
+		if !engine.enqueueDispatch(context.Background(), int64(i+1), nil, "webhook", "http://example.test", []byte(`{}`), nil) {
+			t.Fatalf("expected worker dispatch %d to be accepted", i+1)
+		}
+	}
+	for i := 0; i < webhookDispatchWorkers; i++ {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for dispatch workers to block")
+		}
+	}
+	for i := 0; i < webhookDispatchQueueSize; i++ {
+		if !engine.enqueueDispatch(context.Background(), int64(webhookDispatchWorkers+i+1), nil, "webhook", "http://example.test", []byte(`{}`), nil) {
+			t.Fatalf("expected queued dispatch %d to be accepted", i+1)
+		}
+	}
+	if engine.enqueueDispatch(context.Background(), 999, nil, "webhook", "http://example.test", []byte(`{}`), nil) {
+		t.Fatal("expected saturated dispatch queue to reject the next dispatch")
+	}
+
+	repo.mu.Lock()
+	logs := append([]storage.NotificationLog(nil), repo.logs...)
+	repo.mu.Unlock()
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 failed notification log for dropped dispatch, got %d", len(logs))
+	}
+	if logs[0].Status != "failed" || logs[0].ErrorMessage != "webhook dispatch queue is full" {
+		t.Fatalf("unexpected dropped dispatch log: %+v", logs[0])
+	}
+
+	close(block)
+	shutdownWebhookEngine(t, engine)
+}
+
+func TestWebhookEngine_ShutdownWaitsForQueuedDispatch(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	engine := NewWebhookEngine(nil, "http://example.test", "generic", nil, false, "", "", logger)
+
+	finished := make(chan struct{})
+	engine.client.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		time.Sleep(25 * time.Millisecond)
+		close(finished)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       http.NoBody,
+		}, nil
+	})
+
+	if !engine.enqueueDispatch(context.Background(), 1, nil, "webhook", "http://example.test", []byte(`{}`), nil) {
+		t.Fatal("expected dispatch to be queued")
+	}
+
+	shutdownWebhookEngine(t, engine)
+
+	select {
+	case <-finished:
+	default:
+		t.Fatal("shutdown returned before queued dispatch finished")
+	}
+}
+
+func shutdownWebhookEngine(t *testing.T, engine *WebhookEngine) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := engine.Shutdown(ctx); err != nil {
+		t.Fatalf("failed to shut down webhook engine: %v", err)
 	}
 }

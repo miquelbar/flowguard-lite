@@ -1,0 +1,316 @@
+.traffic-chart-panel {
+    min-height: 0;
+    flex: 1;
+}
+
+.chart-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.chart-panel-body {
+    padding: 1rem !important;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 1rem;
+    align-items: stretch;
+    flex: 1;
+    overflow: hidden;
+}
+
+.traffic-chart-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    gap: 0.75rem;
+    overflow: hidden;
+}
+
+.traffic-chart-frame {
+    position: relative;
+    flex: 1;
+    min-height: 180px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: #f8fafc;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.chart-frame-label {
+    font-size: 0.688rem;
+    font-weight: 600;
+    padding: 0.35rem 0.6rem;
+    background: var(--border-highlight);
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.chart-frame-label-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.chart-legend-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.7rem;
+    font-weight: 400;
+    text-transform: none;
+}
+
+.chart-legend-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.chart-legend-dot-packets {
+    background: #38bdf8;
+}
+
+.chart-legend-dot-flows {
+    background: #f59e0b;
+}
+
+.traffic-chart {
+    width: 100%;
+    flex: 1;
+    min-height: 150px;
+    color: var(--primary-color);
+    display: block;
+}
+
+.chart-grid {
+    stroke: var(--border-color);
+    stroke-width: 1;
+}
+
+.chart-axis,
+.chart-muted {
+    fill: var(--text-muted);
+    font-size: 11px;
+    font-family: var(--font-stack);
+}
+
+.chart-line {
+    fill: none;
+    stroke: var(--primary-color);
+    stroke-width: 2.5;
+}
+
+.chart-area {
+    fill: url(#trafficAreaFill);
+    color: var(--primary-color);
+}
+
+.chart-point {
+    fill: var(--panel-bg);
+    stroke: var(--primary-color);
+    stroke-width: 2;
+}
+
+.chart-sample-guide {
+    stroke: var(--primary-color);
+    stroke-width: 1;
+    stroke-dasharray: 3 5;
+    opacity: 0.42;
+}
+
+.chart-marker {
+    stroke-width: 1.5;
+    stroke-dasharray: 4 4;
+    opacity: 0.9;
+}
+
+.chart-marker-high {
+    stroke: var(--danger-color);
+}
+
+.chart-marker-medium {
+    stroke: var(--warning-color);
+}
+
+.chart-tooltip {
+    position: fixed;
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    font-size: 0.75rem;
+    font-family: var(--font-stack);
+    color: var(--text-primary);
+    pointer-events: none;
+    z-index: 9999;
+    display: none;
+}
+
+.chart-tooltip-title {
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+}
+
+.chart-tooltip-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.2rem;
+}
+
+.chart-tooltip-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.chart-crosshair {
+    stroke: var(--text-muted);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+    pointer-events: none;
+}
+
+.chart-hover-dot {
+    fill: var(--primary-color);
+    stroke: var(--panel-bg);
+    stroke-width: 2;
+    pointer-events: none;
+}
+
+.chart-empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+}
+
+.chart-empty-inline {
+    display: grid;
+    min-height: 100%;
+    place-items: center;
+    font-size: 0.813rem;
+}
+
+.device-traffic-chart {
+    overflow: visible;
+}
+
+.network-signal-grid {
+    display: grid;
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.network-signal-card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 0.8rem;
+    min-height: 0;
+}
+
+.network-signal-card h3 {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0;
+    margin-bottom: 0.65rem;
+}
+
+.signal-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    font-size: 0.8rem;
+}
+
+.signal-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.3rem 0.6rem;
+    align-items: center;
+}
+
+.signal-key {
+    color: var(--text-primary);
+    font-family: var(--mono-font);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.signal-value {
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    white-space: nowrap;
+}
+
+.signal-bar {
+    grid-column: 1 / -1;
+    height: 5px;
+    background: #e7edf3;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.signal-bar span {
+    display: block;
+    height: 100%;
+    background: var(--primary-color);
+}
+
+.signal-bar-protocol span {
+    background: var(--warning-color);
+}
+
+.signal-section-label {
+    margin-top: 0.15rem;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.subnet-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+    min-width: 0;
+}
+
+.flex-column-body {
+    display: flex;
+    flex-direction: column;
+    padding: 1.25rem !important;
+    overflow-y: auto !important;
+}
+
+.pad-large {
+    padding: 5rem 2rem;
+}
+
+.pad-small {
+    padding: 0.75rem;
+}
+
+.hidden {
+    display: none !important;
+}

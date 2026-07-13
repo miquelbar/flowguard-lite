@@ -1,16 +1,22 @@
-package storage
+package storage_test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 
 	"github.com/miquelbar/flowguard-lite/internal/flow"
+	duckdbstore "github.com/miquelbar/flowguard-lite/internal/storage/duckdb"
+	sqlitestore "github.com/miquelbar/flowguard-lite/internal/storage/sqlite"
+
+	_ "modernc.org/sqlite"
 )
 
 func TestStressProfile(t *testing.T) {
@@ -34,13 +40,13 @@ func TestStressProfile(t *testing.T) {
 	now := time.Now()
 
 	// 2. Initialize repositories
-	sqliteRepo, err := NewSQLiteRepository(tmpSQLite, logger)
+	sqliteRepo, err := sqlitestore.NewRepository(tmpSQLite, logger)
 	if err != nil {
 		t.Fatalf("sqlite init: %v", err)
 	}
 	defer sqliteRepo.Close()
 
-	duckRepo, err := NewDuckDBRepository(tmpDuckDB, logger)
+	duckRepo, err := duckdbstore.NewRepository(tmpDuckDB, logger)
 	if err != nil {
 		t.Fatalf("duckdb init: %v", err)
 	}
@@ -114,15 +120,15 @@ func TestStressProfile(t *testing.T) {
 
 	// 8. Verify no raw packet payload fields (like payload bytes, headers, PCAPs) are stored
 	// We check the schema and ensure columns do not contain names like "payload", "pcap", "raw_data".
-	checkRawPayloadTable(t, sqliteRepo)
+	checkRawPayloadTable(t, tmpSQLite, now)
 }
 
-func checkRawPayloadTable(t *testing.T, r *SQLiteRepository) {
-	// Query meta database schema for flow_aggregates table
-	db, err := r.getOrCreateShard(time.Now().Format("2006-01-02"))
+func checkRawPayloadTable(t *testing.T, dataDir string, timestamp time.Time) {
+	db, err := sql.Open("sqlite", filepath.Join(dataDir, timestamp.Format("2006-01-02")+".sqlite"))
 	if err != nil {
-		t.Fatalf("failed shard connection: %v", err)
+		t.Fatalf("failed to open SQLite shard: %v", err)
 	}
+	defer db.Close()
 
 	rows, err := db.Query("PRAGMA table_info(flow_aggregates)")
 	if err != nil {

@@ -1,0 +1,353 @@
+/* Form Styling */
+.filter-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.panel-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.panel-toolbar-controls {
+    justify-content: flex-end;
+    flex: 1 1 520px;
+}
+
+.toolbar-search {
+    flex: 1 1 280px;
+    min-width: 240px;
+}
+
+.toolbar-search .form-control {
+    width: 100%;
+}
+
+.toolbar-select {
+    min-width: 150px;
+}
+
+.alerts-toolbar-controls {
+    max-width: 780px;
+    margin-left: auto;
+}
+
+.form-control {
+    background-color: rgba(255,255,255,0.02);
+    border: 1px solid var(--border-color);
+    color: #fff;
+    padding: 0.45rem 0.75rem;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.813rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-control:focus {
+    border-color: var(--primary-color);
+    background-color: rgba(255,255,255,0.04);
+    box-shadow: 0 0 0 3px rgba(63, 95, 70, 0.12);
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.form-group label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.form-group-spaced {
+    margin-bottom: 1rem;
+}
+
+.form-group-tight {
+    margin-bottom: 0;
+}
+
+.form-group-shallow {
+    margin-bottom: 0.25rem;
+}
+
+.form-label-block {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.form-control-full {
+    width: 100%;
+}
+
+.form-control-compact {
+    width: auto;
+    height: auto;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+}
+
+.form-control-readonly {
+    background: var(--border-highlight);
+    color: var(--text-muted);
+    cursor: default;
+    font-size: 0.8rem;
+}
+
+.form-help-tiny {
+    margin-top: 0.25rem;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+.form-help-warning {
+    color: var(--warning-color) !important;
+}
+
+.form-grid-two,
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.form-row-spaced {
+    margin-bottom: 1rem;
+}
+
+.flex-column-form,
+.content-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 100%;
+}
+
+.content-stack-loose {
+    gap: 1rem;
+}
+
+.checkbox-label,
+.checkbox-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-label-small {
+    gap: 0.35rem;
+    font-size: 0.875rem;
+}
+
+.checkbox-label-plain {
+    margin-bottom: 0;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.checkbox-input {
+    width: auto;
+    cursor: pointer;
+}
+
+.checkbox-group {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.25rem;
+}
+
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.form-action-button {
+    flex: 1 1 80px;
+    justify-content: center;
+    min-width: 80px;
+}
+
+.form-action-button-wide {
+    min-width: 100px;
+}
+
+.settings-actions-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.settings-action-button {
+    flex: 1 1 120px;
+}
+
+.btn-danger-soft {
+    background-color: rgba(244, 63, 94, 0.1);
+    border-color: rgba(244, 63, 94, 0.2);
+    color: #f43f5e;
+}
+
+.btn-danger-solid {
+    background-color: var(--danger-color, #ef4444);
+    border: none;
+    color: #fff;
+}
+
+.btn-full-center {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-compact {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+}
+
+.btn-small {
+    height: auto;
+    width: auto;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+.inline-muted {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.inline-secondary {
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+
+.form-subsection {
+    margin-bottom: 1rem;
+}
+
+.form-subsection-title {
+    margin-bottom: 0.25rem;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.form-list-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.btn-table-page {
+    height: 36px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+.control-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.filter-controls-wide {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.audit-search {
+    width: 250px;
+    height: 36px;
+    padding: 0 0.75rem;
+    font-size: 0.875rem;
+}
+
+.audit-limit-select {
+    width: 75px;
+    height: 36px;
+    padding: 0 0.5rem;
+    font-size: 0.875rem;
+}
+
+.text-small {
+    font-size: 0.875rem;
+}
+
+.text-tiny {
+    font-size: 0.75rem;
+}
+
+.text-micro {
+    font-size: 0.7rem;
+}
+
+.external-link {
+    color: var(--primary-color);
+    text-decoration: underline;
+}
+
+.tab-buttons {
+    display: flex;
+    background-color: rgba(255, 255, 255, 0.015);
+    border-radius: 8px;
+    padding: 2px;
+    border: 1px solid var(--border-color);
+}
+
+.tab-btn, .triage-filter-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tab-btn:hover, .triage-filter-btn:hover {
+    color: #fff;
+}
+
+.tab-btn.active, .triage-filter-btn.active {
+    background-color: rgba(63, 95, 70, 0.12);
+    color: #52624f;
+    border: 1px solid rgba(63, 95, 70, 0.25);
+}
+
+@media (max-width: 900px) {
+    .panel-toolbar-controls,
+    .alerts-toolbar-controls {
+        flex-basis: 100%;
+        max-width: none;
+        margin-left: 0;
+        justify-content: flex-start;
+    }
+
+    .toolbar-search {
+        flex-basis: 100%;
+    }
+}

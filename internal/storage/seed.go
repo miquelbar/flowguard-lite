@@ -185,6 +185,26 @@ func SeedMockData(repo StorageRepository, log *slog.Logger, cfg *config.Config, 
 			Packets:   4,
 		})
 
+		flows = append(flows, flow.FlowEvent{
+			Timestamp:     t,
+			SrcIP:         "192.168.40.80",
+			DstIP:         "192.168.1.50",
+			DstPort:       2049,
+			Protocol:      6,
+			Bytes:         42000,
+			Packets:       38,
+			CollectorKind: flow.CollectorKindPCAP,
+			CollectorID:   "pcap:br0",
+			ExporterIP:    "pcap:br0",
+		})
+		for i := range flows {
+			if flows[i].CollectorKind == "" {
+				flows[i].CollectorKind = flow.CollectorKindNetFlow
+				flows[i].CollectorID = "unifi-gateway"
+				flows[i].ExporterIP = "192.168.1.1"
+			}
+		}
+
 		if err := repo.SaveAggregates(ctx, t, flows); err != nil {
 			return fmt.Errorf("failed saving aggregates for hour index %d: %w", hourIdx, err)
 		}
@@ -347,17 +367,72 @@ func SeedMockData(repo StorageRepository, log *slog.Logger, cfg *config.Config, 
 		{now.Add(-2 * 24 * time.Hour), "alert_acknowledged", "Acknowledged Smart-TV scanner anomaly."},
 		{now.Add(-1 * 24 * time.Hour), "test_alert_sent", "Triggered test alert dispatch to Slack channel."},
 	}
-
 	for _, al := range auditLogs {
 		if err := repo.SaveAuditLog(ctx, al.action, al.details); err != nil {
 			return fmt.Errorf("save audit log: %w", err)
 		}
 	}
 
+	log.Info("Seeding UniFi SIEM events...")
+	if uRepo, ok := repo.(UniFiEventRepository); ok {
+		unifiEvents := []*UniFiEvent{
+			{
+				Timestamp:     now.Add(-2 * time.Hour),
+				SourceGateway: "192.168.1.1",
+				Category:      "Security Detections",
+				Severity:      "high",
+				ClientIP:      "192.168.30.160",
+				Summary:       "Threat Detection Alert: ET MALWARE Trojan Activity - Command and Control communication detected",
+				Attributes:    map[string]string{"signature_id": "2018402", "app": "ips"},
+			},
+			{
+				Timestamp:     now.Add(-4 * time.Hour),
+				SourceGateway: "192.168.1.1",
+				Category:      "Admin Activity",
+				Severity:      "medium",
+				ClientIP:      "192.168.30.150",
+				Summary:       "Admin Activity login from 192.168.30.150 to controller",
+				Attributes:    map[string]string{"user": "admin", "app": "web"},
+			},
+			{
+				Timestamp:     now.Add(-1 * time.Hour),
+				SourceGateway: "192.168.1.1",
+				Category:      "VPN",
+				Severity:      "low",
+				ClientIP:      "192.168.30.210",
+				Summary:       "VPN Client connected: user 'miquel' via L2TP from 192.0.2.1",
+				Attributes:    map[string]string{"user": "miquel", "proto": "l2tp"},
+			},
+			{
+				Timestamp:     now.Add(-12 * time.Hour),
+				SourceGateway: "192.168.1.1",
+				Category:      "Updates",
+				Severity:      "low",
+				ClientIP:      "192.168.1.1",
+				Summary:       "Firmware update check completed successfully",
+				Attributes:    map[string]string{"status": "up-to-date"},
+			},
+			{
+				Timestamp:     now.Add(-20 * time.Hour),
+				SourceGateway: "192.168.1.1",
+				Category:      "Critical",
+				Severity:      "critical",
+				ClientIP:      "192.168.30.200",
+				Summary:       "Device ubnt-camera disconnected from network",
+				Attributes:    map[string]string{"device": "ubnt-camera"},
+			},
+		}
+		for _, e := range unifiEvents {
+			if err := uRepo.SaveUniFiEvent(ctx, e); err != nil {
+				return fmt.Errorf("save seeded UniFi event: %w", err)
+			}
+		}
+	}
+
 	// Bypass the onboarding setup wizard
 	cfg.FirstRunCompleted = true
 	if err := config.SaveConfig(configPath, cfg); err != nil {
-		log.Warn("Failed to save config during seeding bypass", slog.String("error", err.Error()))
+		return fmt.Errorf("development seed populated repository but failed to persist setup bypass config: %w", err)
 	}
 
 	log.Info("Development database successfully seeded with 30 days of mock data!")

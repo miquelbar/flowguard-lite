@@ -15,7 +15,22 @@
     "capture_promiscuous": {
       "type": "boolean"
     },
+    "unifi_syslog_enabled": {
+      "type": "boolean"
+    },
+    "unifi_syslog_port": {
+      "type": "integer"
+    },
+    "unifi_syslog_allowed_ips": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "ddos_threshold_bps": {
+      "type": "integer"
+    },
+    "ddos_threshold_fps": {
       "type": "integer"
     },
     "ddos_threshold_pps": {
@@ -104,12 +119,16 @@
     "capture_interface",
     "capture_bpf_filter",
     "capture_promiscuous",
+    "unifi_syslog_enabled",
+    "unifi_syslog_port",
+    "unifi_syslog_allowed_ips",
     "storage_dir",
     "log_level",
     "environment",
     "local_subnets",
     "ddos_threshold_pps",
     "ddos_threshold_bps",
+    "ddos_threshold_fps",
     "syn_flood_threshold_pps",
     "udp_flood_threshold_pps",
     "icmp_flood_threshold_pps",

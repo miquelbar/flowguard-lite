@@ -10,6 +10,30 @@ import (
 	"github.com/miquelbar/flowguard-lite/internal/flow"
 )
 
+const (
+	SeverityCritical = "critical"
+	SeverityHigh     = "high"
+	SeverityMedium   = "medium"
+	SeverityLow      = "low"
+
+	AnomalyStatusActive       = "active"
+	AnomalyStatusAcknowledged = "acknowledged"
+	AnomalyStatusSilenced     = "silenced"
+
+	PolicyScopeGlobal    = "global"
+	PolicyScopeIP        = "ip"
+	PolicyScopeSubnet    = "subnet"
+	PolicyScopeAlertType = "alert_type"
+
+	NotificationScopeGlobal = "global"
+	NotificationScopeIP     = "ip"
+	NotificationScopeSubnet = "subnet"
+
+	NotificationChannelWebhook  = "webhook"
+	NotificationChannelSlack    = "slack"
+	NotificationChannelTelegram = "telegram"
+)
+
 // Validate checks policy properties against safety rules to prevent unbounded queries or destructive loops.
 func (p *Policy) Validate() error {
 	if p.Name == "" {
@@ -19,20 +43,20 @@ func (p *Policy) Validate() error {
 		return fmt.Errorf("policy name exceeds maximum length of 100 characters")
 	}
 	switch p.Scope {
-	case "global":
+	case PolicyScopeGlobal:
 		if p.Target != "" {
 			return fmt.Errorf("global policy target must be empty")
 		}
-	case "ip":
+	case PolicyScopeIP:
 		if net.ParseIP(p.Target) == nil {
 			return fmt.Errorf("invalid target IP address: %s", p.Target)
 		}
-	case "subnet":
+	case PolicyScopeSubnet:
 		_, _, err := net.ParseCIDR(p.Target)
 		if err != nil {
 			return fmt.Errorf("invalid target CIDR subnet: %s, error: %w", p.Target, err)
 		}
-	case "alert_type":
+	case PolicyScopeAlertType:
 		if p.Target == "" {
 			return fmt.Errorf("alert_type policy target cannot be empty")
 		}
@@ -44,7 +68,7 @@ func (p *Policy) Validate() error {
 	}
 
 	switch p.SeverityThreshold {
-	case "", "low", "medium", "high":
+	case "", SeverityLow, SeverityMedium, SeverityHigh:
 		// OK
 	default:
 		return fmt.Errorf("invalid severity threshold: %s", p.SeverityThreshold)
@@ -119,27 +143,27 @@ type Policy struct {
 	UpdatedAt            time.Time `json:"updated_at"`
 }
 
-// matchesAnomaly reports whether a policy applies to an anomaly. IP policies
+// MatchesAnomaly reports whether a policy applies to an anomaly. IP policies
 // compare parsed addresses so equivalent IPv6 spellings cannot bypass a rule.
-func (p Policy) matchesAnomaly(a *Anomaly) bool {
+func (p Policy) MatchesAnomaly(a *Anomaly) bool {
 	switch p.Scope {
-	case "global":
+	case PolicyScopeGlobal:
 		return true
-	case "ip":
+	case PolicyScopeIP:
 		targetIP := net.ParseIP(p.Target)
 		anomalyIP := net.ParseIP(a.IP)
 		destinationIP := net.ParseIP(a.DestinationIP)
 		return targetIP != nil &&
 			((anomalyIP != nil && targetIP.Equal(anomalyIP)) ||
 				(destinationIP != nil && targetIP.Equal(destinationIP)))
-	case "subnet":
+	case PolicyScopeSubnet:
 		_, ipNet, err := net.ParseCIDR(p.Target)
 		anomalyIP := net.ParseIP(a.IP)
 		destinationIP := net.ParseIP(a.DestinationIP)
 		return err == nil &&
 			((anomalyIP != nil && ipNet.Contains(anomalyIP)) ||
 				(destinationIP != nil && ipNet.Contains(destinationIP)))
-	case "alert_type":
+	case PolicyScopeAlertType:
 		return p.Target == a.Type
 	default:
 		return false
@@ -180,6 +204,20 @@ type NotificationLog struct {
 	DispatchedAt time.Time `json:"dispatched_at"`
 }
 
+// DeviceBaselineSample is one bounded aggregate bucket used to compute a device baseline.
+type DeviceBaselineSample struct {
+	Bytes   float64
+	Packets float64
+	Peers   float64
+}
+
+// FlowHistoryResult reports whether a retained aggregate history query was possible
+// and whether the specific source/destination or source/port tuple was observed.
+type FlowHistoryResult struct {
+	Observed         bool
+	HistoryAvailable bool
+}
+
 // FlowRepository defines the interface for reading and writing flow aggregates.
 type FlowRepository interface {
 	// SaveAggregates writes a slice of aggregated flow records to the shard matching the bucket timestamp.
@@ -214,6 +252,21 @@ type FlowRepository interface {
 
 	// GetDeviceTopPorts returns the top destination/service ports for a device sorted by byte volume.
 	GetDeviceTopPorts(ctx context.Context, ip string, start, end time.Time, limit int) ([]flow.TopResult, error)
+}
+
+// BaselineSampleRepository defines bounded aggregate-history reads required by baseline calculation.
+type BaselineSampleRepository interface {
+	// GetDeviceBaselineSamples returns per-bucket baseline samples for a source device in a bounded time range.
+	GetDeviceBaselineSamples(ctx context.Context, ip string, start, end time.Time) ([]DeviceBaselineSample, error)
+}
+
+// FlowHistoryRepository defines bounded aggregate-history existence checks required by anomaly detection.
+type FlowHistoryRepository interface {
+	// HasObservedDestination reports whether a source/destination pair exists in retained aggregate history.
+	HasObservedDestination(ctx context.Context, sourceIP, destinationIP string, start, end time.Time) (FlowHistoryResult, error)
+
+	// HasObservedDestinationPort reports whether a source/destination-port pair exists in retained aggregate history.
+	HasObservedDestinationPort(ctx context.Context, sourceIP string, destinationPort int, start, end time.Time) (FlowHistoryResult, error)
 }
 
 // DeviceRepository defines the operations on local device metadata, baselines, and anomalies.
@@ -306,10 +359,37 @@ type Manager interface {
 	CleanupRetention(retentionDays int) error
 }
 
+// UniFiEvent represents a reduced UniFi SIEM event.
+type UniFiEvent struct {
+	ID            int64             `json:"id"`
+	Timestamp     time.Time         `json:"timestamp"`
+	SourceGateway string            `json:"source_gateway"`
+	Category      string            `json:"category"`
+	Severity      string            `json:"severity"`
+	ClientIP      string            `json:"client_ip,omitempty"`
+	Summary       string            `json:"summary"`
+	Attributes    map[string]string `json:"attributes,omitempty"`
+}
+
+// UniFiEventRepository defines storage operations for reduced UniFi SIEM events.
+type UniFiEventRepository interface {
+	// SaveUniFiEvent persists a reduced UniFi SIEM event to the database.
+	SaveUniFiEvent(ctx context.Context, e *UniFiEvent) error
+
+	// ListUniFiEvents queries recent UniFi SIEM events.
+	ListUniFiEvents(ctx context.Context, limit int) ([]UniFiEvent, error)
+
+	// GetUniFiEventsForIP queries recent UniFi SIEM events associated with a specific client IP.
+	GetUniFiEventsForIP(ctx context.Context, ip string, limit int) ([]UniFiEvent, error)
+}
+
 // StorageRepository combines all storage operations under a single unified interface.
 type StorageRepository interface {
 	FlowRepository
+	BaselineSampleRepository
+	FlowHistoryRepository
 	DeviceRepository
+	UniFiEventRepository
 	Manager
 	RegisterAnomalyCallback(cb func(a *Anomaly))
 }

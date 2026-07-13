@@ -2,7 +2,7 @@
 
 🛡️ Welcome to the FlowGuard Lite documentation site. FlowGuard Lite is a lightweight, low-footprint network visibility, anomaly detection, and DDoS detection product designed for homelabs, prosumer networks, small offices, and technical teams.
 
-It acts as a lightweight flow collector and correlates router/firewall telemetry (NetFlow, sFlow) with optional Suricata IDS events to build device-centric behavioral baselines and explain security anomalies.
+It acts as a lightweight flow collector and correlates router/firewall telemetry (NetFlow, IPFIX, sFlow, or passive capture) with optional Suricata IDS events to build device-centric behavioral baselines and explain security anomalies. UniFi gateways may expose IPFIX, SIEM/syslog, SNMP, or only internal Traffic Flows depending on model and firmware; those paths are documented separately.
 
 ---
 
@@ -14,8 +14,8 @@ It acts as a lightweight flow collector and correlates router/firewall telemetry
 *   [**Configuration Reference**](configuration.md) - Complete schema details for `config.yaml` and environment variables.
 
 ### Exporter Setup Guides
-Configure your routers and firewalls to export flow telemetry:
-*   [**Ubiquiti UniFi Gateways**](setup/unifi.md)
+Configure your routers and firewalls to export supported telemetry:
+*   [**Ubiquiti UniFi Gateways**](setup/unifi.md) - IPFIX when available, SIEM/syslog planned, passive capture fallback.
 *   [**MikroTik RouterOS**](setup/mikrotik.md)
 *   [**OPNsense & pfSense Firewalls**](setup/opnsense.md)
 
@@ -27,4 +27,7 @@ Configure your routers and firewalls to export flow telemetry:
 
 ### Reference & Development
 *   [**System Architecture**](architecture.md) - Internal design, collector worker pools, memory aggregation, and sharded storage engines.
+*   [**Frontend Architecture**](frontend-architecture.md) - Vite module boundaries, feature-first structure, and UI refactor rules.
 *   [**REST API Reference**](api.md) - Endpoints, request/response models, and example payloads.
+*   [**Performance Baselines**](performance-baselines.md) - Standard metrics, publishable profiles, N100 hardware targets, and pass/fail thresholds.
+*   [**Capacity & Performance Guide**](capacity-guide.md) - Ingestion limits, tested hardware profiles, overload mechanics, and router-specific tradeoffs.

@@ -22,10 +22,32 @@ Retrieves daemon health status, collector statistics, and queue depth indicators
     "packets_received": 145028,
     "packets_dropped": 0,
     "decode_errors": 0,
-    "queue_depth": 14
+    "queue_depth": 14,
+    "sources": [
+      {
+        "kind": "netflow",
+        "id": "netflow",
+        "enabled": true,
+        "status": "listening",
+        "port": 2055,
+        "packets": 120000
+      },
+      {
+        "kind": "unifi_syslog",
+        "id": "unifi_syslog",
+        "enabled": true,
+        "status": "listening",
+        "port": 5514,
+        "packets": 420,
+        "drops": 1,
+        "decode_errors": 2
+      }
+    ]
   }
 }
 ```
+
+Collector source health uses bounded labels (`kind`, `id`) rather than per-client, per-exporter, or sender-provided labels. UniFi syslog source counters report parsed packet intake, drops, and parse errors; retained UniFi event evidence is added by later M30 storage work. Exporter IPs remain available through `/api/exporters`.
 
 ### GET `/api/auth/status`
 Returns local access-control state.
@@ -192,7 +214,7 @@ Returns bounded aggregate traffic counters for network charts.
 ```
 
 ### GET `/api/traffic/records`
-Returns retained aggregate rows for analyst search/filter workflows. Each row is a bounded rollup from `flow_aggregates`, not a raw packet or indefinite raw flow record.
+Returns retained aggregate rows for analyst search/filter workflows. Each row is a bounded rollup from `flow_aggregates`, not a raw packet or indefinite raw flow record. Collector identity is reported separately from `exporter_ip` so NetFlow/sFlow, passive capture, and future SIEM sources can coexist without ambiguity.
 
 *   **Query Parameters:**
     *   `start` (Optional, RFC3339): Defaults to one hour before `end`.
@@ -207,6 +229,8 @@ Returns retained aggregate rows for analyst search/filter workflows. Each row is
 [
   {
     "timestamp": "2026-07-04T14:00:00Z",
+    "collector_kind": "netflow",
+    "collector_id": "unifi-gateway",
     "src_ip": "192.168.30.150",
     "dst_ip": "8.8.8.8",
     "dst_port": 53,
@@ -315,6 +339,11 @@ Returns the active configuration schema.
   "capture_interface": "",
   "capture_bpf_filter": "ip or ip6",
   "capture_promiscuous": false,
+  "unifi_syslog_enabled": false,
+  "unifi_syslog_port": 5514,
+  "unifi_syslog_allowed_ips": [
+    "192.168.1.1"
+  ],
   "storage_backend": "sqlite",
   "local_subnets": [
     "192.168.1.0/24"
@@ -328,6 +357,7 @@ Returns the active configuration schema.
   "retention_days": 7,
   "ddos_threshold_pps": 5000,
   "ddos_threshold_bps": 10485760,
+  "ddos_threshold_fps": 1000,
   "syn_flood_threshold_pps": 1000,
   "udp_flood_threshold_pps": 3000,
   "icmp_flood_threshold_pps": 500,
@@ -341,6 +371,7 @@ Updates the configuration keys and saves them to `config.yaml` on disk.
 
 *   **Request Body JSON Schema:** (Same as GET response)
 *   **Response Status:** `200 OK` (Returns the updated config)
+*   **Collector validation:** `netflow_port` and `sflow_port` accept `0` to disable those listeners. Enabled UDP collector ports must not conflict. UniFi SIEM/syslog uses `unifi_syslog_enabled`, `unifi_syslog_port`, and optional `unifi_syslog_allowed_ips`; it is distinct from NetFlow/IPFIX, uses bounded datagram/queue handling, and changes require a daemon restart.
 *   **Passive capture validation:** `capture_interface` is optional and enables capture when non-empty. An enabled interface requires a non-empty `capture_bpf_filter`; interface and filter values are length-bounded and reject null/control line breaks. Capture changes require a daemon restart.
 
 ---

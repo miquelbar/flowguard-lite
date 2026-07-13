@@ -2,7 +2,6 @@ package baseline
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -70,8 +69,8 @@ func (e *BaselineEngine) GetCachedBaseline(ip string) *storage.DeviceBaseline {
 	return e.cachedBaselines[ip]
 }
 
-// CalculateBaselines scans SQLite daily shards and recalculates statistical metrics for all devices.
-func (e *BaselineEngine) CalculateBaselines(ctx context.Context, flowRepo storage.FlowRepository) error {
+// CalculateBaselines scans retained flow aggregate history and recalculates statistical metrics for all devices.
+func (e *BaselineEngine) CalculateBaselines(ctx context.Context, flowRepo storage.BaselineSampleRepository) error {
 	devices, err := e.repo.ListDevices(ctx)
 	if err != nil {
 		return err
@@ -156,69 +155,34 @@ func (e *BaselineEngine) IsAnomaly(ip string, bytesVal uint64, packetsVal uint64
 	return false, ""
 }
 
-// computeDeviceBaseline queries SQLite daily shards and computes Mean and StdDev.
+// computeDeviceBaseline queries retained aggregate history and computes Mean and StdDev.
 func (e *BaselineEngine) computeDeviceBaseline(
 	ctx context.Context,
-	flowRepo storage.FlowRepository,
+	flowRepo storage.BaselineSampleRepository,
 	ip string,
 	start, end time.Time,
 ) (*storage.DeviceBaseline, error) {
-	// Cast repository to get access to daily shards.
-	sqliteRepo, ok := flowRepo.(*storage.SQLiteRepository)
-	if !ok {
-		return nil, errors.New("unsupported repository format; must be SQLiteRepository")
+	if flowRepo == nil {
+		return nil, fmt.Errorf("flow repository is not configured")
 	}
 
-	// We must get the DB handles for the days in range
-	// Wait, to query them easily without lock issues, we can run queries on each database individually.
-	// Since we are running in-memory or WAL mode sqlite shards, we query the `flow_aggregates` table.
-	// We want to query:
-	// SELECT bucket_ts, SUM(bytes) as total_bytes, SUM(packets) as total_packets, COUNT(DISTINCT dst_ip) as total_peers
-	// FROM flow_aggregates
-	// WHERE src_ip = ?
-	// GROUP BY bucket_ts
-	// If the device is internal, `src_ip` represents outbound flows.
-
-	dbs, err := sqliteRepo.GetShardsInRange(start, end)
+	samples, err := flowRepo.GetDeviceBaselineSamples(ctx, ip, start, end)
 	if err != nil {
 		return nil, err
 	}
 
-	var bytesSamples []float64
-	var packetsSamples []float64
-	var peersSamples []float64
-
-	startUnix := start.Unix()
-	endUnix := end.Unix()
-
-	for _, db := range dbs {
-		rows, err := db.QueryContext(ctx, `
-			SELECT SUM(bytes), SUM(packets), COUNT(DISTINCT dst_ip)
-			FROM flow_aggregates
-			WHERE src_ip = ? AND bucket_ts >= ? AND bucket_ts <= ?
-			GROUP BY bucket_ts
-		`, ip, startUnix, endUnix)
-		if err != nil {
-			return nil, err
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var bVal, pVal float64
-			var peersVal float64
-			if err := rows.Scan(&bVal, &pVal, &peersVal); err != nil {
-				continue
-			}
-			bytesSamples = append(bytesSamples, bVal)
-			packetsSamples = append(packetsSamples, pVal)
-			peersSamples = append(peersSamples, peersVal)
-		}
-	}
-
-	n := len(bytesSamples)
-	if n < 5 {
+	if len(samples) < 5 {
 		// Not enough traffic samples to construct a reliable baseline profile
 		return nil, nil
+	}
+
+	bytesSamples := make([]float64, 0, len(samples))
+	packetsSamples := make([]float64, 0, len(samples))
+	peersSamples := make([]float64, 0, len(samples))
+	for _, sample := range samples {
+		bytesSamples = append(bytesSamples, sample.Bytes)
+		packetsSamples = append(packetsSamples, sample.Packets)
+		peersSamples = append(peersSamples, sample.Peers)
 	}
 
 	// Calculate Means

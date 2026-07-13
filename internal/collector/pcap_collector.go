@@ -282,6 +282,7 @@ func capturedFlow(packet gopacket.Packet, now time.Time, exporter string) (captu
 	return key, flow.FlowEvent{
 		Timestamp: now, SrcIP: key.srcIP, DstIP: key.dstIP,
 		SrcPort: int(key.srcPort), DstPort: int(key.dstPort), Protocol: int(key.protocol),
-		Bytes: uint64(length), Packets: 1, ExporterIP: exporter, TCPFlags: flags,
+		Bytes: uint64(length), Packets: 1, CollectorKind: flow.CollectorKindPCAP,
+		CollectorID: exporter, ExporterIP: exporter, TCPFlags: flags,
 	}, true
 }

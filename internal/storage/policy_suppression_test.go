@@ -1,4 +1,4 @@
-package storage
+package storage_test
 
 import (
 	"context"
@@ -6,11 +6,15 @@ import (
 	"log/slog"
 	"testing"
 	"time"
+
+	"github.com/miquelbar/flowguard-lite/internal/storage"
+	duckdbstore "github.com/miquelbar/flowguard-lite/internal/storage/duckdb"
+	sqlitestore "github.com/miquelbar/flowguard-lite/internal/storage/sqlite"
 )
 
 type policyAnomalyRepository interface {
-	SavePolicy(context.Context, *Policy) error
-	SaveAnomaly(context.Context, *Anomaly) error
+	SavePolicy(context.Context, *storage.Policy) error
+	SaveAnomaly(context.Context, *storage.Anomaly) error
 }
 
 func TestKnownNoisyDeviceSuppression(t *testing.T) {
@@ -22,7 +26,7 @@ func TestKnownNoisyDeviceSuppression(t *testing.T) {
 		{
 			name: "sqlite",
 			open: func(t *testing.T) policyAnomalyRepository {
-				repo, err := NewSQLiteRepository(t.TempDir(), logger)
+				repo, err := sqlitestore.NewRepository(t.TempDir(), logger)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -33,7 +37,7 @@ func TestKnownNoisyDeviceSuppression(t *testing.T) {
 		{
 			name: "duckdb",
 			open: func(t *testing.T) policyAnomalyRepository {
-				repo, err := NewDuckDBRepository(t.TempDir(), logger)
+				repo, err := duckdbstore.NewRepository(t.TempDir(), logger)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -47,7 +51,7 @@ func TestKnownNoisyDeviceSuppression(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			repo := test.open(t)
 			ctx := context.Background()
-			if err := repo.SavePolicy(ctx, &Policy{
+			if err := repo.SavePolicy(ctx, &storage.Policy{
 				Name:       "Known noisy infrastructure monitor",
 				Scope:      "ip",
 				Target:     "2001:db8:0:0:0:0:0:10",
@@ -56,7 +60,7 @@ func TestKnownNoisyDeviceSuppression(t *testing.T) {
 				t.Fatal(err)
 			}
 			// A lower-precedence alert-type policy must not re-enable the noisy IP.
-			if err := repo.SavePolicy(ctx, &Policy{
+			if err := repo.SavePolicy(ctx, &storage.Policy{
 				Name:  "Keep beacon alerts active",
 				Scope: "alert_type", Target: "BEACONING",
 			}); err != nil {
@@ -83,7 +87,7 @@ func TestKnownNoisyDeviceSuppression(t *testing.T) {
 			}
 
 			// The newest rule at the same scope can explicitly re-enable the device.
-			if err := repo.SavePolicy(ctx, &Policy{
+			if err := repo.SavePolicy(ctx, &storage.Policy{
 				Name:   "Monitor repaired infrastructure device",
 				Scope:  "ip",
 				Target: "2001:db8::10",
@@ -98,7 +102,7 @@ func TestKnownNoisyDeviceSuppression(t *testing.T) {
 				t.Fatalf("newest exact-IP rule did not re-enable device: %s", reEnabled.Status)
 			}
 
-			if err := repo.SavePolicy(ctx, &Policy{
+			if err := repo.SavePolicy(ctx, &storage.Policy{
 				Name:       "Ignore approved backup destination",
 				Scope:      "ip",
 				Target:     "203.0.113.250",
@@ -127,8 +131,8 @@ func TestKnownNoisyDeviceSuppression(t *testing.T) {
 	}
 }
 
-func newPolicyTestAnomaly(ip, anomalyType string, timestamp time.Time) *Anomaly {
-	return &Anomaly{
+func newPolicyTestAnomaly(ip, anomalyType string, timestamp time.Time) *storage.Anomaly {
+	return &storage.Anomaly{
 		IP: ip, Type: anomalyType, Description: "policy regression",
 		Severity: "high", Status: "active",
 		CreatedAt: timestamp, UpdatedAt: timestamp,

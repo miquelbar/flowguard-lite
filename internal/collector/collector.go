@@ -12,6 +12,7 @@ import (
 
 	"github.com/miquelbar/flowguard-lite/internal/config"
 	"github.com/miquelbar/flowguard-lite/internal/flow"
+	"github.com/miquelbar/flowguard-lite/internal/storage"
 	"github.com/netsampler/goflow2/decoders/netflow"
 	"github.com/netsampler/goflow2/decoders/sflow"
 	"github.com/netsampler/goflow2/pb"
@@ -27,12 +28,26 @@ type ExporterMetadata struct {
 
 // Collector stats reporting structure.
 type Stats struct {
-	PacketsReceived uint64 `json:"packets_received"`
-	PacketsDropped  uint64 `json:"packets_dropped"`
-	DecodeErrors    uint64 `json:"decode_errors"`
-	QueueDepth      int    `json:"queue_depth"`
-	PacketsNetflow  uint64 `json:"packets_netflow,omitempty"`
-	PacketsSflow    uint64 `json:"packets_sflow,omitempty"`
+	PacketsReceived uint64        `json:"packets_received"`
+	PacketsDropped  uint64        `json:"packets_dropped"`
+	DecodeErrors    uint64        `json:"decode_errors"`
+	QueueDepth      int           `json:"queue_depth"`
+	PacketsNetflow  uint64        `json:"packets_netflow,omitempty"`
+	PacketsSflow    uint64        `json:"packets_sflow,omitempty"`
+	PacketsUniFi    uint64        `json:"packets_unifi_syslog,omitempty"`
+	Sources         []SourceStats `json:"sources,omitempty"`
+}
+
+// SourceStats reports bounded collector-source health without per-client label cardinality.
+type SourceStats struct {
+	Kind         string `json:"kind"`
+	ID           string `json:"id"`
+	Enabled      bool   `json:"enabled"`
+	Status       string `json:"status"`
+	Port         int    `json:"port,omitempty"`
+	Packets      uint64 `json:"packets,omitempty"`
+	Drops        uint64 `json:"drops,omitempty"`
+	DecodeErrors uint64 `json:"decode_errors,omitempty"`
 }
 
 // FlowCollector manages the UDP listeners and decoding workers.
@@ -40,13 +55,16 @@ type FlowCollector struct {
 	cfg       *config.Config
 	logger    *slog.Logger
 	processor flow.FlowProcessor
+	repo      storage.StorageRepository
 
 	// UDP Listeners
 	nfConn *net.UDPConn
 	sfConn *net.UDPConn
+	usConn *net.UDPConn
 
 	// Concurrency & Queues
 	rawPacketsChan chan *rawPacket
+	syslogChan     chan *syslogDatagram
 	wg             sync.WaitGroup
 	ctx            context.Context
 	cancel         context.CancelFunc
@@ -59,8 +77,11 @@ type FlowCollector struct {
 	receivedCount        uint64
 	receivedNetflowCount uint64
 	receivedSflowCount   uint64
+	receivedUniFiCount   uint64
 	droppedCount         uint64
+	droppedUniFiCount    uint64
 	decodeErrCount       uint64
+	decodeErrUniFiCount  uint64
 }
 
 // Type of raw packets buffered for processing
@@ -71,7 +92,7 @@ type rawPacket struct {
 }
 
 // NewFlowCollector instantiates a new FlowCollector daemon.
-func NewFlowCollector(cfg *config.Config, logger *slog.Logger, processor flow.FlowProcessor) *FlowCollector {
+func NewFlowCollector(cfg *config.Config, logger *slog.Logger, processor flow.FlowProcessor, repo storage.StorageRepository) *FlowCollector {
 	ctx, cancel := context.WithCancel(context.Background())
 	exporters := make(map[string]*ExporterMetadata)
 	if cfg != nil && cfg.Environment == "development" {
@@ -92,7 +113,10 @@ func NewFlowCollector(cfg *config.Config, logger *slog.Logger, processor flow.Fl
 		cfg:            cfg,
 		logger:         logger,
 		processor:      processor,
+		repo:           repo,
+
 		rawPacketsChan: make(chan *rawPacket, 5000), // Buffer to handle bursts without blocking UDP stack
+		syslogChan:     make(chan *syslogDatagram, defaultUniFiSyslogQueueSize),
 		exporters:      exporters,
 		ctx:            ctx,
 		cancel:         cancel,
@@ -103,31 +127,55 @@ func NewFlowCollector(cfg *config.Config, logger *slog.Logger, processor flow.Fl
 func (c *FlowCollector) Start() error {
 	c.logger.Info("Starting Flow Collector daemon...")
 
-	// 1. Resolve and open NetFlow / IPFIX UDP Listener
-	nfAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", c.cfg.NetflowPort))
-	if err != nil {
-		return fmt.Errorf("failed to resolve NetFlow UDP address: %w", err)
+	var unifiAllowlist uniFiSyslogAllowlist
+	if c.cfg.UniFiSyslogEnabled {
+		allowlist, err := parseUniFiSyslogAllowlist(c.cfg.UniFiSyslogAllowedIPs)
+		if err != nil {
+			return fmt.Errorf("failed to parse UniFi syslog allowlist: %w", err)
+		}
+		unifiAllowlist = allowlist
 	}
-	nfConn, err := net.ListenUDP("udp", nfAddr)
-	if err != nil {
-		return fmt.Errorf("failed to bind NetFlow UDP port: %w", err)
-	}
-	c.nfConn = nfConn
 
-	// 2. Resolve and open sFlow UDP Listener
-	sfAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", c.cfg.SflowPort))
-	if err != nil {
-		nfConn.Close()
-		return fmt.Errorf("failed to resolve sFlow UDP address: %w", err)
+	if c.cfg.NetflowPort > 0 {
+		nfAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", c.cfg.NetflowPort))
+		if err != nil {
+			return fmt.Errorf("failed to resolve NetFlow UDP address: %w", err)
+		}
+		nfConn, err := net.ListenUDP("udp", nfAddr)
+		if err != nil {
+			return fmt.Errorf("failed to bind NetFlow UDP port: %w", err)
+		}
+		c.nfConn = nfConn
 	}
-	sfConn, err := net.ListenUDP("udp", sfAddr)
-	if err != nil {
-		nfConn.Close()
-		return fmt.Errorf("failed to bind sFlow UDP port: %w", err)
-	}
-	c.sfConn = sfConn
 
-	// 3. Start worker pool for concurrent decoding (e.g. 4 workers)
+	if c.cfg.SflowPort > 0 {
+		sfAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", c.cfg.SflowPort))
+		if err != nil {
+			c.closeListeners()
+			return fmt.Errorf("failed to resolve sFlow UDP address: %w", err)
+		}
+		sfConn, err := net.ListenUDP("udp", sfAddr)
+		if err != nil {
+			c.closeListeners()
+			return fmt.Errorf("failed to bind sFlow UDP port: %w", err)
+		}
+		c.sfConn = sfConn
+	}
+
+	if c.cfg.UniFiSyslogEnabled {
+		usAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", c.cfg.UniFiSyslogPort))
+		if err != nil {
+			c.closeListeners()
+			return fmt.Errorf("failed to resolve UniFi syslog UDP address: %w", err)
+		}
+		usConn, err := net.ListenUDP("udp", usAddr)
+		if err != nil {
+			c.closeListeners()
+			return fmt.Errorf("failed to bind UniFi syslog UDP port: %w", err)
+		}
+		c.usConn = usConn
+	}
+
 	numWorkers := 4
 	c.wg.Add(numWorkers)
 	templates := netflow.CreateTemplateSystem()
@@ -135,14 +183,25 @@ func (c *FlowCollector) Start() error {
 		go c.workerLoop(templates)
 	}
 
-	// 4. Start listener loops
-	c.wg.Add(2)
-	go c.listenLoop(c.nfConn, "netflow")
-	go c.listenLoop(c.sfConn, "sflow")
+	if c.nfConn != nil {
+		c.wg.Add(1)
+		go c.listenLoop(c.nfConn, "netflow")
+	}
+	if c.sfConn != nil {
+		c.wg.Add(1)
+		go c.listenLoop(c.sfConn, "sflow")
+	}
+	if c.usConn != nil {
+		c.wg.Add(2)
+		go c.listenUniFiSyslogLoop(c.usConn, unifiAllowlist)
+		go c.unifiSyslogWorkerLoop()
+	}
 
 	c.logger.Info("Flow Collector started successfully",
 		slog.Int("netflow_port", c.cfg.NetflowPort),
 		slog.Int("sflow_port", c.cfg.SflowPort),
+		slog.Bool("unifi_syslog_enabled", c.cfg.UniFiSyslogEnabled),
+		slog.Int("unifi_syslog_port", c.cfg.UniFiSyslogPort),
 		slog.Int("workers", numWorkers))
 
 	return nil
@@ -153,13 +212,7 @@ func (c *FlowCollector) Shutdown() {
 	c.logger.Info("Shutting down Flow Collector...")
 	c.cancel()
 
-	// Close connections to break read loops
-	if c.nfConn != nil {
-		c.nfConn.Close()
-	}
-	if c.sfConn != nil {
-		c.sfConn.Close()
-	}
+	c.closeListeners()
 
 	// Close worker channel
 	close(c.rawPacketsChan)
@@ -177,10 +230,84 @@ func (c *FlowCollector) GetStats() Stats {
 		PacketsReceived: c.receivedCount,
 		PacketsDropped:  c.droppedCount,
 		DecodeErrors:    c.decodeErrCount,
-		QueueDepth:      len(c.rawPacketsChan),
+		QueueDepth:      len(c.rawPacketsChan) + len(c.syslogChan),
 		PacketsNetflow:  c.receivedNetflowCount,
 		PacketsSflow:    c.receivedSflowCount,
+		PacketsUniFi:    c.receivedUniFiCount,
+		Sources:         c.sourceStatsLocked(),
 	}
+}
+
+func (c *FlowCollector) closeListeners() {
+	if c.nfConn != nil {
+		c.nfConn.Close()
+	}
+	if c.sfConn != nil {
+		c.sfConn.Close()
+	}
+	if c.usConn != nil {
+		c.usConn.Close()
+	}
+}
+
+func (c *FlowCollector) sourceStatsLocked() []SourceStats {
+	return []SourceStats{
+		{
+			Kind:    flow.CollectorKindNetFlow,
+			ID:      "netflow",
+			Enabled: c.cfg.NetflowPort > 0,
+			Status:  collectorStatus(c.cfg.NetflowPort > 0, c.nfConn != nil),
+			Port:    c.cfg.NetflowPort,
+			Packets: c.receivedNetflowCount,
+		},
+		{
+			Kind:    flow.CollectorKindSFlow,
+			ID:      "sflow",
+			Enabled: c.cfg.SflowPort > 0,
+			Status:  collectorStatus(c.cfg.SflowPort > 0, c.sfConn != nil),
+			Port:    c.cfg.SflowPort,
+			Packets: c.receivedSflowCount,
+		},
+		{
+			Kind:    flow.CollectorKindPCAP,
+			ID:      "pcap",
+			Enabled: c.cfg.CaptureInterface != "",
+			Status:  configuredSourceStatus(c.cfg.CaptureInterface != ""),
+		},
+		{
+			Kind:    flow.CollectorKindSuricata,
+			ID:      "suricata",
+			Enabled: c.cfg.SuricataEvePath != "",
+			Status:  configuredSourceStatus(c.cfg.SuricataEvePath != ""),
+		},
+		{
+			Kind:         flow.CollectorKindUniFiSyslog,
+			ID:           "unifi_syslog",
+			Enabled:      c.cfg.UniFiSyslogEnabled,
+			Status:       collectorStatus(c.cfg.UniFiSyslogEnabled, c.usConn != nil),
+			Port:         c.cfg.UniFiSyslogPort,
+			Packets:      c.receivedUniFiCount,
+			Drops:        c.droppedUniFiCount,
+			DecodeErrors: c.decodeErrUniFiCount,
+		},
+	}
+}
+
+func collectorStatus(enabled, listening bool) string {
+	if !enabled {
+		return "disabled"
+	}
+	if listening {
+		return "listening"
+	}
+	return "configured"
+}
+
+func configuredSourceStatus(enabled bool) string {
+	if enabled {
+		return "configured"
+	}
+	return "disabled"
 }
 
 // GetExporters returns a slice of active exporters.
@@ -269,7 +396,7 @@ func (c *FlowCollector) workerLoop(templates netflow.NetFlowTemplateSystem) {
 
 		// Normalize decoded FlowMessages and forward to the processor
 		for _, msg := range flowMsgs {
-			event := c.normalizeFlowMessage(msg, packet.exporterIP)
+			event := c.normalizeFlowMessage(msg, packet.exporterIP, packet.packetType)
 			if event != nil && c.processor != nil {
 				c.processor.Process(event)
 			}
@@ -309,7 +436,7 @@ func (c *FlowCollector) decodeSFlow(data []byte) ([]*flowpb.FlowMessage, error) 
 }
 
 // normalizeFlowMessage converts goflow2 proto FlowMessage into our local normalized FlowEvent struct.
-func (c *FlowCollector) normalizeFlowMessage(msg *flowpb.FlowMessage, exporterIP string) *flow.FlowEvent {
+func (c *FlowCollector) normalizeFlowMessage(msg *flowpb.FlowMessage, exporterIP, packetType string) *flow.FlowEvent {
 	// Parse IPv4/IPv6 addresses
 	srcIP := net.IP(msg.GetSrcAddr()).String()
 	dstIP := net.IP(msg.GetDstAddr()).String()
@@ -325,17 +452,24 @@ func (c *FlowCollector) normalizeFlowMessage(msg *flowpb.FlowMessage, exporterIP
 		ts = time.Unix(int64(msg.GetTimeFlowStart()), 0)
 	}
 
+	collectorKind := flow.CollectorKindNetFlow
+	if packetType == "sflow" {
+		collectorKind = flow.CollectorKindSFlow
+	}
+
 	return &flow.FlowEvent{
-		Timestamp:  ts,
-		SrcIP:      srcIP,
-		DstIP:      dstIP,
-		SrcPort:    int(msg.GetSrcPort()),
-		DstPort:    int(msg.GetDstPort()),
-		Protocol:   int(msg.GetProto()),
-		Bytes:      msg.GetBytes(),
-		Packets:    msg.GetPackets(),
-		ExporterIP: exporterIP,
-		TCPFlags:   uint8(msg.GetTcpFlags()),
+		Timestamp:     ts,
+		SrcIP:         srcIP,
+		DstIP:         dstIP,
+		SrcPort:       int(msg.GetSrcPort()),
+		DstPort:       int(msg.GetDstPort()),
+		Protocol:      int(msg.GetProto()),
+		Bytes:         msg.GetBytes(),
+		Packets:       msg.GetPackets(),
+		CollectorKind: collectorKind,
+		CollectorID:   exporterIP,
+		ExporterIP:    exporterIP,
+		TCPFlags:      uint8(msg.GetTcpFlags()),
 	}
 }
 

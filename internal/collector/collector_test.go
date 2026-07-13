@@ -43,7 +43,7 @@ func TestFlowCollector_StartStop(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	proc := &MockProcessor{}
 
-	c := NewFlowCollector(cfg, logger, proc)
+	c := NewFlowCollector(cfg, logger, proc, nil)
 
 	if err := c.Start(); err != nil {
 		t.Fatalf("failed to start collector: %v", err)
@@ -59,10 +59,49 @@ func TestFlowCollector_StartStop(t *testing.T) {
 	c.Shutdown()
 }
 
+func TestFlowCollector_CanDisableFlowListeners(t *testing.T) {
+	cfg := &config.Config{
+		NetflowPort:           0,
+		SflowPort:             0,
+		UniFiSyslogPort:       5514,
+		StorageDir:            "/tmp",
+		LogLevel:              "info",
+		Environment:           "test",
+		StorageBackend:        config.StorageBackendSQLite,
+		RetentionDays:         7,
+		DDoSThresholdPPS:      1,
+		DDoSThresholdBPS:      1,
+		DDoSThresholdFPS:      1,
+		SYNFloodThresholdPPS:  1,
+		UDPFloodThresholdPPS:  1,
+		ICMPFloodThresholdPPS: 1,
+		LocalSubnets:          []string{"192.168.0.0/16"},
+		WebhookFormat:         config.WebhookFormatGeneric,
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	c := NewFlowCollector(cfg, logger, nil, nil)
+	if err := c.Start(); err != nil {
+		t.Fatalf("failed to start collector with disabled flow listeners: %v", err)
+	}
+	defer c.Shutdown()
+	if c.nfConn != nil || c.sfConn != nil {
+		t.Fatalf("expected no NetFlow/sFlow sockets when ports are 0")
+	}
+	stats := c.GetStats()
+	if len(stats.Sources) != 5 {
+		t.Fatalf("expected bounded source stats for 5 collector kinds, got %+v", stats.Sources)
+	}
+	for _, src := range stats.Sources {
+		if (src.Kind == flow.CollectorKindNetFlow || src.Kind == flow.CollectorKindSFlow) && src.Enabled {
+			t.Fatalf("expected disabled flow source for zero port, got %+v", src)
+		}
+	}
+}
+
 func TestFlowCollector_NormalizeFlowMessage(t *testing.T) {
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	c := NewFlowCollector(cfg, logger, nil)
+	c := NewFlowCollector(cfg, logger, nil, nil)
 
 	// Create a dummy FlowMessage
 	msg := &flowpb.FlowMessage{
@@ -79,7 +118,7 @@ func TestFlowCollector_NormalizeFlowMessage(t *testing.T) {
 		SamplerAddress: []byte{192, 168, 1, 1},
 	}
 
-	event := c.normalizeFlowMessage(msg, "192.168.1.1")
+	event := c.normalizeFlowMessage(msg, "192.168.1.1", "netflow")
 	if event == nil {
 		t.Fatal("expected normalized event, got nil")
 	}
@@ -108,12 +147,15 @@ func TestFlowCollector_NormalizeFlowMessage(t *testing.T) {
 	if event.ExporterIP != "192.168.1.1" {
 		t.Errorf("expected ExporterIP 192.168.1.1, got %s", event.ExporterIP)
 	}
+	if event.CollectorKind != flow.CollectorKindNetFlow || event.CollectorID != "192.168.1.1" {
+		t.Errorf("expected netflow collector identity, got kind=%s id=%s", event.CollectorKind, event.CollectorID)
+	}
 }
 
 func TestFlowCollector_NormalizeIPv6FlowMessage(t *testing.T) {
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	c := NewFlowCollector(cfg, logger, nil)
+	c := NewFlowCollector(cfg, logger, nil, nil)
 	start := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
 
 	msg := &flowpb.FlowMessage{
@@ -129,7 +171,7 @@ func TestFlowCollector_NormalizeIPv6FlowMessage(t *testing.T) {
 		TcpFlags:      0x12,
 	}
 
-	event := c.normalizeFlowMessage(msg, "2001:db8::1")
+	event := c.normalizeFlowMessage(msg, "2001:db8::1", "netflow")
 	if event == nil {
 		t.Fatal("expected normalized IPv6 event, got nil")
 	}
@@ -148,7 +190,7 @@ func TestFlowCollector_NormalizeIPv6FlowMessage(t *testing.T) {
 func TestFlowCollector_ExporterRegistry(t *testing.T) {
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	c := NewFlowCollector(cfg, logger, nil)
+	c := NewFlowCollector(cfg, logger, nil, nil)
 
 	before := time.Now()
 	c.updateExporterStats("10.0.0.1")
@@ -195,7 +237,7 @@ func TestFlowCollector_ListenReceive(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	proc := &MockProcessor{}
 
-	c := NewFlowCollector(cfg, logger, proc)
+	c := NewFlowCollector(cfg, logger, proc, nil)
 	if err := c.Start(); err != nil {
 		t.Fatalf("failed to start: %v", err)
 	}
@@ -236,7 +278,7 @@ func TestFlowCollector_QueueOverflow(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	c := NewFlowCollector(cfg, logger, nil)
+	c := NewFlowCollector(cfg, logger, nil, nil)
 
 	// Close rawPacketsChan and replace it with a 1-capacity channel to simulate overflow
 	c.rawPacketsChan = make(chan *rawPacket, 1)

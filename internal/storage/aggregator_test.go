@@ -12,8 +12,13 @@ import (
 )
 
 type MockFlowRepository struct {
-	mu      sync.Mutex
-	Batches map[string][]flow.FlowEvent
+	mu              sync.Mutex
+	Batches         map[string][]flow.FlowEvent
+	saveDelay       time.Duration
+	activeSaves     int
+	maxActiveSaves  int
+	saveOrder       []string
+	saveStartedHook func()
 }
 
 func NewMockFlowRepository() *MockFlowRepository {
@@ -24,9 +29,29 @@ func NewMockFlowRepository() *MockFlowRepository {
 
 func (m *MockFlowRepository) SaveAggregates(ctx context.Context, ts time.Time, aggregates []flow.FlowEvent) error {
 	m.mu.Lock()
+	m.activeSaves++
+	if m.activeSaves > m.maxActiveSaves {
+		m.maxActiveSaves = m.activeSaves
+	}
+	if m.saveStartedHook != nil {
+		m.saveStartedHook()
+	}
+	m.mu.Unlock()
+
+	if m.saveDelay > 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(m.saveDelay):
+		}
+	}
+
+	m.mu.Lock()
 	defer m.mu.Unlock()
 	key := ts.Format("2006-01-02 15:04")
 	m.Batches[key] = append(m.Batches[key], aggregates...)
+	m.saveOrder = append(m.saveOrder, key)
+	m.activeSaves--
 	return nil
 }
 
@@ -74,6 +99,7 @@ func TestFlowAggregator_Aggregation(t *testing.T) {
 	repo := NewMockFlowRepository()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	agg := NewFlowAggregator(repo, logger, 10*time.Second)
+	defer agg.Shutdown()
 
 	now := time.Date(2026, 7, 3, 21, 0, 10, 0, time.UTC)
 
@@ -143,10 +169,56 @@ func TestFlowAggregator_Aggregation(t *testing.T) {
 	}
 }
 
+func TestFlowAggregator_SeparatesCollectorSources(t *testing.T) {
+	repo := NewMockFlowRepository()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	agg := NewFlowAggregator(repo, logger, 10*time.Second)
+	defer agg.Shutdown()
+
+	now := time.Date(2026, 7, 3, 21, 0, 10, 0, time.UTC)
+	base := flow.FlowEvent{
+		Timestamp: now,
+		SrcIP:     "192.168.1.10",
+		DstIP:     "8.8.8.8",
+		DstPort:   53,
+		Protocol:  17,
+		Bytes:     100,
+		Packets:   1,
+	}
+	netflowEvent := base
+	netflowEvent.CollectorKind = flow.CollectorKindNetFlow
+	netflowEvent.CollectorID = "unifi-gateway"
+	netflowEvent.ExporterIP = "192.168.1.1"
+	pcapEvent := base
+	pcapEvent.CollectorKind = flow.CollectorKindPCAP
+	pcapEvent.CollectorID = "pcap:br0"
+	pcapEvent.ExporterIP = "pcap:br0"
+
+	agg.Process(&netflowEvent)
+	agg.Process(&pcapEvent)
+	agg.Flush()
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+
+	batch := repo.Batches["2026-07-03 21:00"]
+	if len(batch) != 2 {
+		t.Fatalf("expected identical traffic from two collectors to remain separate, got %d records: %+v", len(batch), batch)
+	}
+	seen := map[string]bool{}
+	for _, ev := range batch {
+		seen[ev.CollectorKind+"|"+ev.CollectorID] = true
+	}
+	if !seen["netflow|unifi-gateway"] || !seen["pcap|pcap:br0"] {
+		t.Fatalf("missing collector identities in aggregate batch: %+v", batch)
+	}
+}
+
 func TestFlowAggregator_ProactiveFlush(t *testing.T) {
 	repo := NewMockFlowRepository()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	agg := NewFlowAggregator(repo, logger, 10*time.Second)
+	defer agg.Shutdown()
 
 	now := time.Date(2026, 7, 3, 21, 0, 10, 0, time.UTC)
 
@@ -223,6 +295,7 @@ func TestFlowAggregator_Concurrency(t *testing.T) {
 	repo := NewMockFlowRepository()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	agg := NewFlowAggregator(repo, logger, 10*time.Second)
+	defer agg.Shutdown()
 
 	now := time.Date(2026, 7, 3, 21, 0, 10, 0, time.UTC)
 	var wg sync.WaitGroup
@@ -263,5 +336,78 @@ func TestFlowAggregator_Concurrency(t *testing.T) {
 	expectedBytes := uint64(numGoroutines * numEvents * 10)
 	if batch[0].Bytes != expectedBytes {
 		t.Errorf("expected aggregated bytes %d, got %d", expectedBytes, batch[0].Bytes)
+	}
+}
+
+func TestFlowAggregator_ProactiveFlushesAreSerialized(t *testing.T) {
+	repo := NewMockFlowRepository()
+	repo.saveDelay = 10 * time.Millisecond
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	agg := NewFlowAggregator(repo, logger, 10*time.Second)
+	defer agg.Shutdown()
+
+	now := time.Date(2026, 7, 3, 21, 0, 10, 0, time.UTC)
+	for i := 0; i < 4; i++ {
+		agg.Process(&flow.FlowEvent{
+			Timestamp: now.Add(time.Duration(i) * time.Minute),
+			SrcIP:     "192.168.1.10",
+			DstIP:     "8.8.8.8",
+			DstPort:   53,
+			Protocol:  17,
+			Bytes:     100,
+			Packets:   1,
+		})
+	}
+	agg.Shutdown()
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	if repo.maxActiveSaves != 1 {
+		t.Fatalf("expected serialized saves with max concurrency 1, got %d", repo.maxActiveSaves)
+	}
+	expectedOrder := []string{
+		"2026-07-03 21:00",
+		"2026-07-03 21:01",
+		"2026-07-03 21:02",
+		"2026-07-03 21:03",
+	}
+	if len(repo.saveOrder) != len(expectedOrder) {
+		t.Fatalf("expected %d saved buckets, got order %v", len(expectedOrder), repo.saveOrder)
+	}
+	for i, want := range expectedOrder {
+		if repo.saveOrder[i] != want {
+			t.Fatalf("expected save order %v, got %v", expectedOrder, repo.saveOrder)
+		}
+	}
+}
+
+func TestFlowAggregator_ShutdownWaitsForFlushCallbacks(t *testing.T) {
+	repo := NewMockFlowRepository()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	agg := NewFlowAggregator(repo, logger, 10*time.Second)
+
+	callbackDone := make(chan struct{})
+	agg.RegisterFlushCallback(func(ctx context.Context, batch []flow.FlowEvent) {
+		time.Sleep(25 * time.Millisecond)
+		close(callbackDone)
+	})
+
+	now := time.Date(2026, 7, 3, 21, 0, 10, 0, time.UTC)
+	agg.Process(&flow.FlowEvent{
+		Timestamp: now,
+		SrcIP:     "192.168.1.10",
+		DstIP:     "8.8.8.8",
+		DstPort:   53,
+		Protocol:  17,
+		Bytes:     100,
+		Packets:   1,
+	})
+
+	agg.Shutdown()
+
+	select {
+	case <-callbackDone:
+	default:
+		t.Fatal("expected shutdown to wait for flush callback completion")
 	}
 }

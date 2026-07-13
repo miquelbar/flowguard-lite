@@ -36,3 +36,6 @@
 /internal/ui/assets/dist/styles.css
 /internal/ui/assets/dist/index.html
 /internal/ui/assets/dist/assets/
+
+# Benchmark results
+/benchmark-results/

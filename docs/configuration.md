@@ -39,6 +39,12 @@ capture_bpf_filter: "ip or ip6"
 # Enable only when traffic visibility requires promiscuous interface capture
 capture_promiscuous: false
 
+# Optional UniFi CyberSecure Activity Logging/SIEM syslog collector.
+# Disabled by default. Use host port mapping if UniFi must send to 514/udp.
+unifi_syslog_enabled: false
+unifi_syslog_port: 5514
+unifi_syslog_allowed_ips: []
+
 # Directory where database shards, evidence, and logs will be written
 storage_dir: "/data"
 
@@ -79,6 +85,7 @@ retention_days: 7
 # Global Volumetric DDoS triggers
 ddos_threshold_pps: 5000
 ddos_threshold_bps: 10485760
+ddos_threshold_fps: 1000
 syn_flood_threshold_pps: 1000
 udp_flood_threshold_pps: 3000
 icmp_flood_threshold_pps: 500
@@ -105,6 +112,21 @@ suricata_eve_path: ""
 *   **Type:** Integer
 *   **Default:** `6343`
 *   **Description:** UDP port where the sFlow worker pool listens. Set to `0` to disable the sFlow collector.
+
+### `unifi_syslog_enabled`
+*   **Type:** Boolean
+*   **Default:** `false`
+*   **Description:** Enables the dedicated UniFi CyberSecure Activity Logging/SIEM syslog collector. This is a separate protocol from NetFlow/IPFIX and must not use the NetFlow port. The collector parses and counts bounded syslog messages; retained UniFi event evidence is handled by later M30 storage work.
+
+### `unifi_syslog_port`
+*   **Type:** Integer
+*   **Default:** `5514`
+*   **Description:** UDP app port reserved for UniFi SIEM/syslog ingest. Use an unprivileged app port by default; if UniFi requires destination port `514`, map host `514/udp` to the app port in Docker or with host firewall/NAT rules. Set to `0` only when `unifi_syslog_enabled` is false.
+
+### `unifi_syslog_allowed_ips`
+*   **Type:** Array of strings
+*   **Default:** `[]`
+*   **Description:** Optional allowlist of UniFi gateway sender IPs or CIDR ranges. Values are bounded and validated as IP addresses or CIDRs. Empty means any sender can reach the configured UDP port, so production deployments should prefer a gateway IP/CIDR allowlist and firewall rules.
 
 ### `capture_interface`
 *   **Type:** String
@@ -169,7 +191,8 @@ These values are also available in **Settings → Collectors Setup → Passive N
 ### `retention_days`
 *   **Type:** Integer
 *   **Default:** `7`
-*   **Description:** Number of days to retain database flow events, aggregates, and evidence records before pruning them.
+*   **Allowed Range:** `1` to `60`
+*   **Description:** Number of days to retain database flow events, aggregates, and evidence records before pruning them. Values above 60 are rejected to preserve bounded storage on small hardware.
 
 ### `ddos_threshold_pps`
 *   **Type:** Integer
@@ -180,6 +203,11 @@ These values are also available in **Settings → Collectors Setup → Passive N
 *   **Type:** Integer
 *   **Default:** `10485760` (10 MB/s)
 *   **Description:** Volumetric bytes-per-second threshold for triggering global DDoS alert signals.
+
+### `ddos_threshold_fps`
+*   **Type:** Integer
+*   **Default:** `1000`
+*   **Description:** Volumetric flow-records-per-second threshold for triggering global DDoS alert signals against a local victim.
 
 ### `syn_flood_threshold_pps`
 *   **Type:** Integer
@@ -213,6 +241,9 @@ Any parameter can be overridden using environment variables prefixed with `FLOWG
 *   `FLOWGUARD_CAPTURE_INTERFACE` overrides `capture_interface`
 *   `FLOWGUARD_CAPTURE_BPF_FILTER` overrides `capture_bpf_filter`
 *   `FLOWGUARD_CAPTURE_PROMISCUOUS` overrides `capture_promiscuous`
+*   `FLOWGUARD_UNIFI_SYSLOG_ENABLED` overrides `unifi_syslog_enabled`
+*   `FLOWGUARD_UNIFI_SYSLOG_PORT` overrides `unifi_syslog_port`
+*   `FLOWGUARD_UNIFI_SYSLOG_ALLOWED_IPS` overrides `unifi_syslog_allowed_ips` using comma-separated IPs/CIDRs
 *   `FLOWGUARD_STORAGE_DIR` overrides `storage_dir`
 *   `FLOWGUARD_STORAGE_BACKEND` overrides `storage_backend`
 *   `FLOWGUARD_LOG_LEVEL` overrides `log_level`
@@ -224,6 +255,7 @@ Any parameter can be overridden using environment variables prefixed with `FLOWG
 *   `FLOWGUARD_RETENTION_DAYS` overrides `retention_days`
 *   `FLOWGUARD_DDOS_THRESHOLD_PPS` overrides `ddos_threshold_pps`
 *   `FLOWGUARD_DDOS_THRESHOLD_BPS` overrides `ddos_threshold_bps`
+*   `FLOWGUARD_DDOS_THRESHOLD_FPS` overrides `ddos_threshold_fps`
 *   `FLOWGUARD_SYN_FLOOD_THRESHOLD_PPS` overrides `syn_flood_threshold_pps`
 *   `FLOWGUARD_UDP_FLOOD_THRESHOLD_PPS` overrides `udp_flood_threshold_pps`
 *   `FLOWGUARD_ICMP_FLOOD_THRESHOLD_PPS` overrides `icmp_flood_threshold_pps`

@@ -1,7 +1,7 @@
 # Makefile for FlowGuard Lite
 # Supports both native local execution and Dockerized workflows.
 
-.PHONY: all setup generate build test lint dev clean docker-build docker-up docker-test docker-ui-test docker-ui-smoke docker-capture-config docker-export
+.PHONY: all setup generate build test lint dev clean product-test frontend-gate pre-release-gate docker-build docker-up docker-test docker-ui-test docker-ui-smoke docker-capture-config docker-export ui-dev ui-build ui-lint ui-check ui-cypress-open benchmark-run docker-benchmark-run benchmark-matrix benchmark-smoke
 
 -include .env
 export
@@ -34,13 +34,13 @@ build:
 	go build -tags production -o bin/flowguard ./cmd/flowguard
 
 test:
-	@echo "Running native Go tests..."
-	go test -v -race ./...
+	@echo "Running native Go product tests..."
+	go test -v -race ./cmd/... ./internal/...
 
 lint:
 	@echo "Running native code formatting and validation check..."
-	go fmt ./...
-	go vet ./...
+	go fmt ./cmd/... ./internal/...
+	go vet ./cmd/... ./internal/...
 
 dev:
 	@echo "Running Go backend natively in development mode..."
@@ -50,6 +50,18 @@ clean:
 	@echo "Cleaning native build artifacts..."
 	rm -rf bin/
 	rm -rf dist/
+
+product-test:
+	@echo "Running product Go package tests..."
+	go test ./cmd/... ./internal/...
+
+frontend-gate: docker-ui-test docker-ui-smoke
+
+pre-release-gate: product-test frontend-gate benchmark-smoke
+	@echo "Running repository whitespace check..."
+	git diff --check
+	@echo "Verifying private mission/agent files stay locally excluded..."
+	git check-ignore -v missions/flowguard-lite/STARTUP.md AGENTS.md TREE.md
 
 # 3. Docker workflow targets
 docker-build:
@@ -81,7 +93,7 @@ docker-ui-smoke:
 		-lc '\
 			set -eu; \
 			npm install; \
-			npm run dev -- --host 0.0.0.0 > /tmp/flowguard-vite.log 2>&1 & \
+			npm run dev -- --host 0.0.0.0 --force > /tmp/flowguard-vite.log 2>&1 & \
 			vite_pid=$$!; \
 			trap "kill $$vite_pid 2>/dev/null || true" EXIT; \
 			if ! node -e '"'"' \
@@ -105,7 +117,7 @@ docker-ui-smoke:
 				tail -80 /tmp/flowguard-vite.log || true; \
 				exit 1; \
 			fi; \
-			cypress run --browser "$(CYPRESS_BROWSER)" --headless; \
+			cypress run --browser "$(CYPRESS_BROWSER)" --headless || { echo "Cypress failed. Vite logs:"; cat /tmp/flowguard-vite.log; exit 1; }; \
 		'
 
 docker-capture-config:
@@ -118,7 +130,26 @@ docker-export:
 	docker save -o dist/flowguard-image.tar flowguard:latest
 	@echo "Image successfully exported to dist/flowguard-image.tar"
 
-# 4. Vite Frontend Development Targets
+# 4. Performance & Benchmark Targets
+benchmark-run:
+	@echo "Running local performance benchmarks and generating reports..."
+	go run cmd/benchrunner/main.go
+
+docker-benchmark-run:
+	@echo "Running containerized benchmarks via Docker Compose..."
+	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-2g
+
+benchmark-matrix:
+	@echo "Running performance benchmarks across 2GB, 4GB, and 8GB RAM profiles..."
+	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-2g
+	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-4g
+	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-8g
+
+benchmark-smoke:
+	@echo "Running lightweight performance smoke test..."
+	go test -v -run=TestPerformanceRegressionSmoke ./internal/benchmark
+
+# 5. Vite Frontend Development Targets
 ui-dev:
 	@echo "Starting Vite development server..."
 	cd web && npm install && npm run dev
@@ -126,3 +157,13 @@ ui-dev:
 ui-build:
 	@echo "Building Vite production assets..."
 	cd web && npm install && npm run build
+
+ui-lint:
+	@echo "Running frontend lint natively..."
+	cd web && npm install && npm run lint
+
+ui-check: ui-build ui-lint
+
+ui-cypress-open:
+	@echo "Opening Cypress interactively against an already running Vite app..."
+	cd web && npm install && CYPRESS_BASE_URL="$(CYPRESS_BASE_URL)" npx cypress open

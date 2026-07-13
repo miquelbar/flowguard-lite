@@ -20,6 +20,8 @@ import (
 	"github.com/miquelbar/flowguard-lite/internal/logger"
 	"github.com/miquelbar/flowguard-lite/internal/risk"
 	"github.com/miquelbar/flowguard-lite/internal/storage"
+	duckdbstore "github.com/miquelbar/flowguard-lite/internal/storage/duckdb"
+	sqlitestore "github.com/miquelbar/flowguard-lite/internal/storage/sqlite"
 	"github.com/miquelbar/flowguard-lite/internal/suricata"
 	"github.com/miquelbar/flowguard-lite/internal/webhook"
 )
@@ -43,14 +45,14 @@ func main() {
 	// 4. Initialize storage repository based on choice
 	var repo storage.StorageRepository
 	if cfg.StorageBackend == "duckdb" {
-		repo, err = storage.NewDuckDBRepository(cfg.StorageDir, log)
+		repo, err = duckdbstore.NewRepository(cfg.StorageDir, log)
 		if err != nil {
 			log.Error("Failed to initialize DuckDB repository", slog.String("error", err.Error()))
 			os.Exit(1)
 		}
 		log.Info("Initialized DuckDB storage backend")
 	} else {
-		repo, err = storage.NewSQLiteRepository(cfg.StorageDir, log)
+		repo, err = sqlitestore.NewRepository(cfg.StorageDir, log)
 		if err != nil {
 			log.Error("Failed to initialize SQLite repository", slog.String("error", err.Error()))
 			os.Exit(1)
@@ -97,7 +99,8 @@ func main() {
 	ddosDetector.Start()
 
 	// 8. Initialize Flow Collector, using the DDoS Detector as the flow entrypoint processor
-	coll := collector.NewFlowCollector(cfg, log, ddosDetector)
+	coll := collector.NewFlowCollector(cfg, log, ddosDetector, repo)
+
 
 	if cfg.Environment != "production" {
 		coll.AddExporter("192.168.1.1", time.Now().Add(-12*time.Second), 45892)
@@ -267,6 +270,12 @@ func main() {
 
 		// Shutdown the Flow Aggregator (flushes remaining in-memory states to database)
 		agg.Shutdown()
+
+		// Shutdown the webhook dispatcher after final anomaly callbacks have had a chance to enqueue notifications.
+		if err := webhookEngine.Shutdown(shutdownCtx); err != nil {
+			log.Error("Failed to shut down webhook dispatcher cleanly", slog.String("error", err.Error()))
+			shutdownFailed = true
+		}
 
 		// Close SQLite repository connections
 		if err := repo.Close(); err != nil {

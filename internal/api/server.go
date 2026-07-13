@@ -121,12 +121,13 @@ func NewAPIServer(
 	mux.HandleFunc("GET /api/traffic/timeseries", s.handleTrafficTimeSeries)
 	mux.HandleFunc("GET /api/traffic/records", s.handleTrafficRecords)
 
-	// Device inventory endpoints (Go 1.22+ wildcard patterns)
 	mux.HandleFunc("GET /api/devices", s.handleListDevices)
 	mux.HandleFunc("GET /api/devices/{ip}", s.handleGetDeviceProfile)
 	mux.HandleFunc("PUT /api/devices/{ip}/label", s.handleUpdateDeviceLabel)
 	mux.HandleFunc("GET /api/devices/{ip}/baseline", s.handleGetDeviceBaseline)
 	mux.HandleFunc("GET /api/devices/{ip}/flows", s.handleGetDeviceFlows)
+	mux.HandleFunc("GET /api/devices/{ip}/unifi-events", s.handleGetDeviceUniFiEvents)
+
 
 	// Anomaly detection endpoints (Go 1.22+ wildcard patterns)
 	mux.HandleFunc("GET /api/anomalies", s.handleListAnomalies)
@@ -136,10 +137,12 @@ func NewAPIServer(
 	mux.HandleFunc("GET /api/risk/devices", s.handleListRiskDevices)
 	mux.HandleFunc("GET /api/security/summary", s.handleSecuritySummary)
 	mux.HandleFunc("GET /api/security/timeline", s.handleSecurityTimeline)
+	mux.HandleFunc("GET /api/security/unifi-events", s.handleListUniFiEvents)
 	mux.HandleFunc("GET /api/stats/protocols", s.handleStatsProtocols)
 	mux.HandleFunc("GET /api/stats/top-devices", s.handleStatsTopDevices)
 	mux.HandleFunc("GET /api/stats/heatmap", s.handleStatsHeatmap)
 	mux.HandleFunc("GET /api/stats/collector-health", s.handleStatsCollectorHealth)
+
 
 	// Security audit log endpoints (Go 1.22+ wildcard patterns)
 	mux.HandleFunc("GET /api/audit-logs", s.handleListAuditLogs)
@@ -380,5 +383,12 @@ func (s *APIServer) handleExporters(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(exporters); err != nil {
 		s.logger.Error("Failed to encode exporters response", slog.String("error", err.Error()))
+	}
+}
+
+// ServeHTTP implements http.Handler, delegating request routing to the internal server multiplexer.
+func (s *APIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.server != nil && s.server.Handler != nil {
+		s.server.Handler.ServeHTTP(w, r)
 	}
 }

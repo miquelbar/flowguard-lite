@@ -10,6 +10,14 @@ import (
 	"github.com/miquelbar/flowguard-lite/internal/flow"
 )
 
+const aggregatorFlushQueueSize = 16
+
+type aggregatorFlushRequest struct {
+	bucket time.Time
+	batch  []flow.FlowEvent
+	done   chan struct{}
+}
+
 // FlowAggregator rolls up normalized raw flow events into 1-minute time buckets in-memory.
 type FlowAggregator struct {
 	repo   FlowRepository
@@ -20,9 +28,17 @@ type FlowAggregator struct {
 	cancel   context.CancelFunc
 	wg       sync.WaitGroup
 
+	startOnce    sync.Once
+	shutdownOnce sync.Once
+	queueMu      sync.Mutex
+	flushQueue   chan aggregatorFlushRequest
+	flushWG      sync.WaitGroup
+	queueClosed  bool
+
 	mu            sync.Mutex
 	buffer        map[string]*flow.FlowEvent
 	currentBucket time.Time
+	stopping      bool
 
 	// Post-flush callbacks to execute anomaly matching
 	onFlush []func(ctx context.Context, batch []flow.FlowEvent)
@@ -31,14 +47,18 @@ type FlowAggregator struct {
 // NewFlowAggregator creates a new thread-safe FlowAggregator instance.
 func NewFlowAggregator(repo FlowRepository, logger *slog.Logger, flushInterval time.Duration) *FlowAggregator {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &FlowAggregator{
-		repo:     repo,
-		logger:   logger,
-		interval: flushInterval,
-		buffer:   make(map[string]*flow.FlowEvent),
-		ctx:      ctx,
-		cancel:   cancel,
+	aggregator := &FlowAggregator{
+		repo:       repo,
+		logger:     logger,
+		interval:   flushInterval,
+		buffer:     make(map[string]*flow.FlowEvent),
+		ctx:        ctx,
+		cancel:     cancel,
+		flushQueue: make(chan aggregatorFlushRequest, aggregatorFlushQueueSize),
 	}
+	aggregator.flushWG.Add(1)
+	go aggregator.flushWorker()
+	return aggregator
 }
 
 // RegisterFlushCallback registers a callback to run after each successful batch flush.
@@ -49,23 +69,43 @@ func (a *FlowAggregator) RegisterFlushCallback(cb func(ctx context.Context, batc
 }
 
 func (a *FlowAggregator) Start() {
-	a.wg.Add(1)
-	go a.flushLoop()
+	a.startOnce.Do(func() {
+		a.wg.Add(1)
+		go a.flushLoop()
+	})
 }
 
 // Shutdown flushes final buffered data and halts background routines.
 func (a *FlowAggregator) Shutdown() {
-	a.cancel()
-	a.wg.Wait()
+	a.shutdownOnce.Do(func() {
+		a.cancel()
+		a.wg.Wait()
 
-	// Final flush remaining buffered data
-	a.Flush()
+		bucket, batch := a.drainForShutdown()
+		if len(batch) > 0 {
+			a.enqueueFlush(bucket, batch, true)
+		}
+
+		a.queueMu.Lock()
+		if !a.queueClosed {
+			close(a.flushQueue)
+			a.queueClosed = true
+		}
+		a.queueMu.Unlock()
+		a.flushWG.Wait()
+	})
 }
 
 // Process implements the flow.FlowProcessor interface to aggregate incoming traffic flows.
 func (a *FlowAggregator) Process(event *flow.FlowEvent) {
+	var oldBucket time.Time
+	var oldBatch []flow.FlowEvent
+
 	a.mu.Lock()
-	defer a.mu.Unlock()
+	if a.stopping {
+		a.mu.Unlock()
+		return
+	}
 
 	// Align event timestamp to 1-minute bucket boundary
 	bucketTime := event.Timestamp.Truncate(time.Minute)
@@ -74,18 +114,17 @@ func (a *FlowAggregator) Process(event *flow.FlowEvent) {
 	if a.currentBucket.IsZero() {
 		a.currentBucket = bucketTime
 	} else if bucketTime.After(a.currentBucket) {
-		oldBucket := a.currentBucket
-		oldBatch := a.drainBuffer()
+		oldBucket = a.currentBucket
+		oldBatch = a.drainBuffer()
 		a.currentBucket = bucketTime
-
-		// Execute database save in a separate helper goroutine to avoid blocking collector worker threads
-		if len(oldBatch) > 0 {
-			go a.flushBatch(oldBucket, oldBatch)
-		}
 	}
 
-	// Aggregate flows matching unique parameters: SrcIP | DstIP | DstPort | Protocol
-	key := fmt.Sprintf("%s|%s|%d|%d", event.SrcIP, event.DstIP, event.DstPort, event.Protocol)
+	collectorKind := flow.NormalizeCollectorKind(event.CollectorKind)
+	collectorID := flow.NormalizeCollectorID(event.CollectorID, collectorKind, event.ExporterIP)
+
+	// Aggregate flows matching collector source and unique traffic parameters.
+	key := fmt.Sprintf("%s|%s|%s|%s|%d|%d",
+		collectorKind, collectorID, event.SrcIP, event.DstIP, event.DstPort, event.Protocol)
 
 	if existing, ok := a.buffer[key]; ok {
 		existing.Bytes += event.Bytes
@@ -94,29 +133,40 @@ func (a *FlowAggregator) Process(event *flow.FlowEvent) {
 	} else {
 		// Clone event to avoid holding reference to collector buffer
 		a.buffer[key] = &flow.FlowEvent{
-			Timestamp:  bucketTime,
-			SrcIP:      event.SrcIP,
-			DstIP:      event.DstIP,
-			SrcPort:    event.SrcPort,
-			DstPort:    event.DstPort,
-			Protocol:   event.Protocol,
-			Bytes:      event.Bytes,
-			Packets:    event.Packets,
-			ExporterIP: event.ExporterIP,
-			TCPFlags:   event.TCPFlags,
+			Timestamp:     bucketTime,
+			SrcIP:         event.SrcIP,
+			DstIP:         event.DstIP,
+			SrcPort:       event.SrcPort,
+			DstPort:       event.DstPort,
+			Protocol:      event.Protocol,
+			Bytes:         event.Bytes,
+			Packets:       event.Packets,
+			CollectorKind: collectorKind,
+			CollectorID:   collectorID,
+			ExporterIP:    event.ExporterIP,
+			TCPFlags:      event.TCPFlags,
 		}
+	}
+	a.mu.Unlock()
+
+	if len(oldBatch) > 0 {
+		a.enqueueFlush(oldBucket, oldBatch, false)
 	}
 }
 
 // Flush manually triggers in-memory buffer clearing and transactional writes to SQLite.
 func (a *FlowAggregator) Flush() {
 	a.mu.Lock()
+	if a.stopping {
+		a.mu.Unlock()
+		return
+	}
 	bucket := a.currentBucket
 	batch := a.drainBuffer()
 	a.mu.Unlock()
 
 	if len(batch) > 0 {
-		a.flushBatch(bucket, batch)
+		a.enqueueFlush(bucket, batch, true)
 	}
 }
 
@@ -128,6 +178,43 @@ func (a *FlowAggregator) drainBuffer() []flow.FlowEvent {
 	}
 	a.buffer = make(map[string]*flow.FlowEvent)
 	return batch
+}
+
+func (a *FlowAggregator) drainForShutdown() (time.Time, []flow.FlowEvent) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.stopping = true
+	return a.currentBucket, a.drainBuffer()
+}
+
+func (a *FlowAggregator) enqueueFlush(bucket time.Time, batch []flow.FlowEvent, wait bool) bool {
+	req := aggregatorFlushRequest{bucket: bucket, batch: batch}
+	if wait {
+		req.done = make(chan struct{})
+	}
+
+	a.queueMu.Lock()
+	if a.queueClosed {
+		a.queueMu.Unlock()
+		return false
+	}
+	a.flushQueue <- req
+	a.queueMu.Unlock()
+
+	if req.done != nil {
+		<-req.done
+	}
+	return true
+}
+
+func (a *FlowAggregator) flushWorker() {
+	defer a.flushWG.Done()
+	for req := range a.flushQueue {
+		a.flushBatch(req.bucket, req.batch)
+		if req.done != nil {
+			close(req.done)
+		}
+	}
 }
 
 // Helper: Execute transaction batch write to SQLite.

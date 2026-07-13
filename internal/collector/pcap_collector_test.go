@@ -63,6 +63,9 @@ func TestCapturedFlowIPv4TCP(t *testing.T) {
 	if event.ExporterIP != "pcap:en0" || !event.Timestamp.Equal(now) {
 		t.Fatalf("unexpected metadata: %+v", event)
 	}
+	if event.CollectorKind != flow.CollectorKindPCAP || event.CollectorID != "pcap:en0" {
+		t.Fatalf("unexpected collector identity: %+v", event)
+	}
 }
 
 func TestCapturedFlowIPv6UDPAndUnsupportedPacket(t *testing.T) {

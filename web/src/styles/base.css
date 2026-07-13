@@ -49,6 +49,16 @@ body {
     max-width: 100%;
 }
 
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
 /* Background layer intentionally disabled for a utilitarian console feel. */
 .glow-bg {
     display: none;

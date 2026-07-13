@@ -1,0 +1,104 @@
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* IP Profile Workspace styles */
+.ip-link {
+    color: var(--primary-color) !important;
+    text-decoration: none;
+    font-weight: 600;
+    border-bottom: 1px dashed transparent;
+    transition: border-color 0.2s, opacity 0.2s;
+    cursor: pointer;
+}
+.ip-link:hover {
+    border-bottom-color: var(--primary-color);
+    opacity: 0.85;
+}
+
+.compact-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+}
+.compact-table th,
+.compact-table td {
+    padding: 0.35rem 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+.compact-table th {
+    background: rgba(0, 0, 0, 0.15);
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+body.dark-mode .compact-table th {
+    background: #121721 !important;
+}
+
+.device-alert-item {
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.02);
+    font-size: 0.75rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.device-alert-item.sev-high {
+    border-left-color: var(--danger-color) !important;
+}
+.device-alert-item.sev-medium {
+    border-left-color: var(--warning-color) !important;
+}
+.device-alert-item.sev-low {
+    border-left-color: var(--success-color) !important;
+}
+
+/* Audit Log Table Expansion override */
+#view-audit .table-container {
+    max-height: 80vh !important;
+}
+
+/* Notification Routing Rules and Logs Styling */
+.badge-success {
+    background-color: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+.badge-warning {
+    background-color: rgba(234, 179, 8, 0.2);
+    color: #eab308;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+.badge-danger {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+.rule-preview-container {
+    background: rgba(255, 255, 255, 0.02);
+    backdrop-filter: blur(10px);
+}
+body.dark-mode .rule-preview-container {
+    background: rgba(13, 19, 31, 0.6);
+}

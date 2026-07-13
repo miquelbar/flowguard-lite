@@ -1,0 +1,126 @@
+/* Dark mode */
+body.dark-mode {
+    --bg-color: #171916;
+    --panel-bg: #20231f;
+    --border-color: #383d35;
+    --border-highlight: #454b41;
+    --text-primary: #f0f2ed;
+    --text-secondary: #c8cec1;
+    --text-muted: #8f9889;
+    --primary-color: #9caf88;
+    --primary-gradient: #5f7359;
+    --muted-accent: #7b8c72;
+    --primary-hover: #718767;
+    --success-color: #91b58b;
+    --warning-color: #d8aa62;
+    --danger-color: #d1746f;
+}
+
+body.dark-mode .sidebar,
+body.dark-mode .main-header,
+body.dark-mode .stat-card,
+body.dark-mode .panel,
+body.dark-mode .settings-card,
+body.dark-mode .modern-dialog,
+body.dark-mode .wizard-card,
+body.dark-mode .toast,
+body.dark-mode .settings-nav {
+    background: var(--panel-bg);
+    border-color: var(--border-color);
+}
+
+body.dark-mode .panel-body,
+body.dark-mode .settings-card form {
+    background: var(--panel-bg);
+}
+
+body.dark-mode .settings-card-header,
+body.dark-mode th,
+body.dark-mode .stat-icon,
+body.dark-mode .packets-glow,
+body.dark-mode .drops-glow,
+body.dark-mode .errors-glow,
+body.dark-mode .queue-glow,
+body.dark-mode .firewall-code-container,
+body.dark-mode .baseline-stat-row,
+body.dark-mode .anomaly-details-row,
+body.dark-mode .anomaly-meta-grid {
+    background: #272b25 !important;
+    border-color: var(--border-color);
+}
+
+body.dark-mode .form-control,
+body.dark-mode .btn-secondary,
+body.dark-mode .btn-triage,
+body.dark-mode .btn-block-rules,
+body.dark-mode .sidebar-tool-btn,
+body.dark-mode .show-sidebar-btn {
+    background: #20231f;
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+
+body.dark-mode .form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(156, 175, 136, 0.2);
+}
+
+body.dark-mode .nav-link:hover,
+body.dark-mode .tab-btn:hover,
+body.dark-mode .triage-filter-btn:hover,
+body.dark-mode .settings-nav a:hover,
+body.dark-mode .btn-secondary:hover,
+body.dark-mode .btn-triage:hover,
+body.dark-mode .btn-block-rules:hover,
+body.dark-mode .sidebar-tool-btn:hover,
+body.dark-mode .show-sidebar-btn:hover {
+    background: #2d332b;
+    color: var(--text-primary);
+}
+
+body.dark-mode .settings-nav a.active {
+    background: rgba(156, 175, 136, 0.16);
+    border-color: rgba(156, 175, 136, 0.34);
+    color: var(--text-primary);
+}
+
+body.dark-mode .nav-link.active,
+body.dark-mode .tab-btn.active,
+body.dark-mode .triage-filter-btn.active,
+body.dark-mode .fw-tab-btn.active,
+body.dark-mode .sidebar .nav-link.active {
+    background: #30392d;
+    color: #d6e3c8;
+    border-color: #53624b;
+}
+
+body.dark-mode td {
+    border-bottom-color: #30352e;
+}
+
+body.dark-mode tr:hover td,
+body.dark-mode tr.selected td {
+    background: #272b25 !important;
+}
+
+body.dark-mode .risk-badge-low,
+body.dark-mode .badge-low,
+body.dark-mode .badge-label {
+    background: #253226 !important;
+    color: #c8dec2 !important;
+    border-color: #486044 !important;
+}
+
+body.dark-mode .risk-badge-medium,
+body.dark-mode .badge-medium {
+    background: #342b1d !important;
+    color: #e8c985 !important;
+    border-color: #6e5731 !important;
+}
+
+body.dark-mode .risk-badge-high,
+body.dark-mode .badge-high {
+    background: #392222 !important;
+    color: #e8aaaa !important;
+    border-color: #704242 !important;
+}

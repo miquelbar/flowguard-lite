@@ -105,6 +105,8 @@ go run ./cmd/flowguard -config config-dev.yaml -seed
 
 The seed is deterministic and resets existing demo devices, flow aggregates, anomalies, policies, notification logs, and audit logs before repopulating them. It also marks first-run setup complete. Flow history remains bounded by `retention_days`; for example, the default `retention_days: 7` keeps roughly the latest week of seeded flow shards visible after startup retention cleanup.
 
+The reset is bounded rather than globally transactional: SQLite metadata reset is transactional, but a full development seed spans metadata tables, daily flow shard files, and the YAML config file. If the final setup-bypass config write fails, the command reports an error instead of claiming complete success; already populated demo database rows are not rolled back across shard files.
+
 ---
 
 ## Verifying the Installation

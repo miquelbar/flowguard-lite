@@ -2,7 +2,7 @@
 
 🛡️ **FlowGuard Lite** is a lightweight network visibility, anomaly detection, and DDoS detection product designed for homelabs, prosumer networks, small offices, and technical teams who do not have a dedicated Security Operations Center (SOC).
 
-It receives NetFlow v5/v9, IPFIX, or sFlow telemetry from your routers (e.g. UniFi, MikroTik, OPNsense, pfSense) and correlates it with optional Suricata IDS events to build device behavioral baselines, identify flood patterns, and explain security anomalies.
+It receives NetFlow v5/v9, IPFIX, or sFlow telemetry from supported routers/firewalls and correlates it with optional Suricata IDS events to build device behavioral baselines, identify flood patterns, and explain security anomalies. UniFi gateways are fully integrated using either IPFIX telemetry or SIEM/syslog event streams; SNMP is planned as a future connector.
 
 ---
 
