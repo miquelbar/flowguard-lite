@@ -1560,7 +1560,7 @@
                                 <ol class="guide-steps">
                                     <li>Navigate to <strong>Settings > CyberSecure > Traffic Logging</strong> in the UniFi Controller.</li>
                                     <li>Enable <strong>Activity Logging (Syslog)</strong>.</li>
-                                    <li>Set the <strong>SIEM Server IP</strong> to this FlowGuard host's IP address.</li>
+                                    <li>Set the <strong>SIEM Server IP</strong> to <code>[FLOWGUARD_IP]</code>.</li>
                                     <li>Set the <strong>Port</strong> to <code>514</code> (mapped to FlowGuard's <code>5514</code> container port).</li>
                                     <li>Enable categories like <em>Critical</em>, <em>Devices</em>, and <em>Security Detections</em>.</li>
                                 </ol>
@@ -1569,7 +1569,7 @@
                                 <ol class="guide-steps">
                                     <li>Go to <strong>Settings > Networks > Global Network Settings</strong>.</li>
                                     <li>Find the <strong>NetFlow</strong> or <strong>Flow Export</strong> section.</li>
-                                    <li>Set the collector target to this host's IP address and port <code>2055</code>.</li>
+                                    <li>Set the collector target to <code>[FLOWGUARD_IP]</code> and port <code>2055</code>.</li>
                                 </ol>
                             </div>
 
@@ -1600,7 +1600,7 @@ set enabled=yes</code></pre>
                                     <li>Install the <strong>softflowd</strong> package via the Package Manager.</li>
                                     <li>Navigate to <strong>Services > Softflowd</strong>.</li>
                                     <li>Select the interfaces to monitor (e.g. LAN).</li>
-                                    <li>Set the <strong>Host/Port</strong> to this host's IP address and port <code>2055</code>.</li>
+                                    <li>Set the <strong>Host/Port</strong> to <code>[FLOWGUARD_IP]</code> and port <code>2055</code>.</li>
                                     <li>Set the <strong>NetFlow Version</strong> to <code>9</code>.</li>
                                 </ol>
                             </div>

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -61,6 +62,7 @@ type HealthResponse struct {
 	Timestamp    string           `json:"timestamp"`
 	Version      string           `json:"version"`
 	Collector    *collector.Stats `json:"collector,omitempty"`
+	LocalIPs     []string         `json:"local_ips,omitempty"`
 }
 
 // CollectorHealthSample is a bounded point-in-time snapshot used for Overview trends.
@@ -345,12 +347,25 @@ func (s *APIServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	localIPs := []string{}
+	if addrs, err := net.InterfaceAddrs(); err == nil {
+		for _, addr := range addrs {
+			ipnet, ok := addr.(*net.IPNet)
+			if ok && !ipnet.IP.IsLoopback() {
+				if ipnet.IP.To4() != nil {
+					localIPs = append(localIPs, ipnet.IP.String())
+				}
+			}
+		}
+	}
+
 	res := HealthResponse{
 		Status:      "OK",
 		Healthy:     true,
 		Environment: s.cfg.Environment,
 		Timestamp:   time.Now().UTC().Format(time.RFC3339),
 		Version:     "0.1.0",
+		LocalIPs:    localIPs,
 	}
 
 	if s.collector != nil {

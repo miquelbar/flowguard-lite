@@ -43,6 +43,7 @@ async function loadShellStatus() {
     });
 
     updateStatusIndicator(health);
+    state.healthData = health;
     state.riskDevicesData = threatRisk || [];
 }
 

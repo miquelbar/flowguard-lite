@@ -103,9 +103,43 @@ export function renderSettingsView() {
         setVal("setting-env", state.settingsData.environment || "production");
     }
 
+    // Dynamic IP replacements for integrations setup guides
+    const integrationsCard = document.getElementById("settings-integrations");
+    if (integrationsCard) {
+        const ip = getFlowGuardIP();
+        if (ip && ip !== "[FLOWGUARD_IP]") {
+            integrationsCard.querySelectorAll(".code-block, code, strong").forEach(el => {
+                if (el.innerHTML.includes("[FLOWGUARD_IP]")) {
+                    el.innerHTML = el.innerHTML.replaceAll("[FLOWGUARD_IP]", ip);
+                }
+            });
+        }
+    }
+
     // Clear unsaved badges only for sections not currently being edited
     Object.keys(state.unsavedChanges).forEach(k => {
         if (!state.unsavedChanges[k]) markUnsaved(k, false);
     });
     switchSettingsSection(activeSettingsSection, { confirmUnsaved: false, updateHash: false });
+}
+
+function getFlowGuardIP() {
+    const hn = window.location.hostname;
+    if (hn && hn !== "localhost" && hn !== "127.0.0.1" && hn !== "::1") {
+        return hn;
+    }
+    const health = state.healthData;
+    if (health && health.local_ips && health.local_ips.length > 0) {
+        const rfc1918 = health.local_ips.find(ip => {
+            return ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("172.16.") ||
+                   ip.startsWith("172.17.") || ip.startsWith("172.18.") || ip.startsWith("172.19.") ||
+                   ip.startsWith("172.20.") || ip.startsWith("172.21.") || ip.startsWith("172.22.") ||
+                   ip.startsWith("172.23.") || ip.startsWith("172.24.") || ip.startsWith("172.25.") ||
+                   ip.startsWith("172.26.") || ip.startsWith("172.27.") || ip.startsWith("172.28.") ||
+                   ip.startsWith("172.29.") || ip.startsWith("172.30.") || ip.startsWith("172.31.");
+        });
+        if (rfc1918) return rfc1918;
+        return health.local_ips[0];
+    }
+    return "[FLOWGUARD_IP]";
 }
