@@ -4,7 +4,7 @@ export const TRAFFIC_RANGE_DEFS = [
     { id: "1h", label: "1h", durationMs: 60 * 60 * 1000, bucket: 60 },
     { id: "6h", label: "6h", durationMs: 6 * 60 * 60 * 1000, bucket: 300 },
     { id: "24h", label: "24h", durationMs: 24 * 60 * 60 * 1000, bucket: 900 },
-    { id: "3d", label: "3d", durationMs: 3 * 24 * 60 * 60 * 1000, bucket: 1800 },
+    { id: "3d", label: "3d", durationMs: 3 * 24 * 60 * 60 * 1000, bucket: 3600 },
     { id: "7d", label: "7d", durationMs: 7 * 24 * 60 * 60 * 1000, bucket: 3600 },
     { id: "15d", label: "15d", durationMs: 15 * 24 * 60 * 60 * 1000, bucket: 6 * 3600 },
     { id: "30d", label: "30d", durationMs: 30 * 24 * 60 * 60 * 1000, bucket: 12 * 3600 },
