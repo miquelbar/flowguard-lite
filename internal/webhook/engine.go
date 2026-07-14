@@ -18,7 +18,8 @@ import (
 type WebhookEngine struct {
 	mu             sync.RWMutex
 	repo           storage.StorageRepository
-	url            string
+	slackURL       string
+	webhookURL     string
 	format         string // "generic", "slack", "telegram"
 	webhookHeaders map[string]string
 	tgEnabled      bool
@@ -34,13 +35,14 @@ type WebhookEngine struct {
 }
 
 // NewWebhookEngine creates and configures a WebhookEngine instance.
-func NewWebhookEngine(repo storage.StorageRepository, url string, format string, headers map[string]string, tgEnabled bool, tgToken string, tgChatID string, logger *slog.Logger) *WebhookEngine {
+func NewWebhookEngine(repo storage.StorageRepository, slackURL string, webhookURL string, format string, headers map[string]string, tgEnabled bool, tgToken string, tgChatID string, logger *slog.Logger) *WebhookEngine {
 	if format == "" {
 		format = "generic"
 	}
 	engine := &WebhookEngine{
 		repo:           repo,
-		url:            url,
+		slackURL:       slackURL,
+		webhookURL:     webhookURL,
 		format:         format,
 		webhookHeaders: cloneHeaders(headers),
 		tgEnabled:      tgEnabled,
@@ -58,11 +60,12 @@ func NewWebhookEngine(repo storage.StorageRepository, url string, format string,
 }
 
 // UpdateConfig dynamically updates the notification endpoints at runtime thread-safely.
-func (w *WebhookEngine) UpdateConfig(url string, format string, headers map[string]string, tgEnabled bool, tgToken string, tgChatID string) {
+func (w *WebhookEngine) UpdateConfig(slackURL string, webhookURL string, format string, headers map[string]string, tgEnabled bool, tgToken string, tgChatID string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.url = url
+	w.slackURL = slackURL
+	w.webhookURL = webhookURL
 	if format == "" {
 		format = "generic"
 	}
@@ -76,7 +79,8 @@ func (w *WebhookEngine) UpdateConfig(url string, format string, headers map[stri
 	w.tgChatID = tgChatID
 
 	w.logger.Info("Notification configurations dynamically updated",
-		slog.Bool("webhook_configured", url != ""),
+		slog.Bool("slack_configured", slackURL != ""),
+		slog.Bool("webhook_configured", webhookURL != ""),
 		slog.String("webhook_format", format),
 		slog.Int("webhook_headers_count", len(headers)),
 		slog.Bool("telegram_enabled", tgEnabled))
@@ -99,8 +103,8 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 	}
 
 	w.mu.RLock()
-	url := w.url
-	format := w.format
+	slackURL := w.slackURL
+	webhookURL := w.webhookURL
 	headers := make(map[string]string)
 	for k, v := range w.webhookHeaders {
 		headers[k] = v
@@ -147,22 +151,23 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 		}
 	}
 
-	// 1. Fallback mode: if no custom notification rules exist, use the default global webhook/Telegram settings
+	// 1. Fallback mode: if no custom notification rules exist, use all configured global channels.
 	if len(activeRules) == 0 {
-		if url != "" {
-			var payload interface{}
-			// "telegram" format is deprecated in favour of the native Bot path below.
-			// If a user saved format="telegram" previously, treat it as generic.
-			if format == "slack" {
-				payload = map[string]interface{}{"text": messageText}
+		if slackURL != "" {
+			bodyBytes, err := json.Marshal(map[string]interface{}{"text": messageText})
+			if err != nil {
+				w.logger.Error("Failed to marshal Slack payload", slog.String("error", err.Error()))
 			} else {
-				payload = anomaly
+				w.enqueueDispatch(context.Background(), anomaly.ID, nil, "slack", slackURL, bodyBytes, nil)
 			}
-			bodyBytes, err := json.Marshal(payload)
+		}
+
+		if webhookURL != "" {
+			bodyBytes, err := json.Marshal(anomaly)
 			if err != nil {
 				w.logger.Error("Failed to marshal webhook payload", slog.String("error", err.Error()))
 			} else {
-				w.enqueueDispatch(context.Background(), anomaly.ID, nil, "webhook", url, bodyBytes, headers)
+				w.enqueueDispatch(context.Background(), anomaly.ID, nil, "webhook", webhookURL, bodyBytes, headers)
 			}
 		}
 
@@ -245,9 +250,31 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 		ruleIDCopy := rule.ID
 		for _, ch := range rule.ChannelTargets {
 			switch ch {
-			case "webhook", "slack":
-				if url == "" {
-					w.logger.Error("Webhook/Slack routing matched but webhook URL is not configured")
+			case "slack":
+				if slackURL == "" {
+					w.logger.Error("Slack routing matched but Slack webhook URL is not configured")
+					if w.repo != nil {
+						_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
+							AnomalyID:    anomaly.ID,
+							RuleID:       &ruleIDCopy,
+							Channel:      ch,
+							Status:       "failed",
+							ErrorMessage: "Slack webhook URL is not configured",
+							DispatchedAt: time.Now(),
+						})
+					}
+					continue
+				}
+				bodyBytes, err := json.Marshal(map[string]interface{}{"text": messageText})
+				if err != nil {
+					w.logger.Error("Failed to marshal Slack payload", slog.String("error", err.Error()))
+				} else {
+					w.enqueueDispatch(context.Background(), anomaly.ID, &ruleIDCopy, ch, slackURL, bodyBytes, nil)
+				}
+
+			case "webhook":
+				if webhookURL == "" {
+					w.logger.Error("Webhook routing matched but webhook URL is not configured")
 					if w.repo != nil {
 						_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
 							AnomalyID:    anomaly.ID,
@@ -260,19 +287,11 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 					}
 					continue
 				}
-				var payload interface{}
-				// ch=="slack" always uses Slack payload format regardless of global format setting.
-				// ch=="webhook" uses the global format (only "slack" or generic; "telegram" is deprecated).
-				if ch == "slack" || format == "slack" {
-					payload = map[string]interface{}{"text": messageText}
-				} else {
-					payload = anomaly
-				}
-				bodyBytes, err := json.Marshal(payload)
+				bodyBytes, err := json.Marshal(anomaly)
 				if err != nil {
 					w.logger.Error("Failed to marshal webhook payload", slog.String("error", err.Error()))
 				} else {
-					w.enqueueDispatch(context.Background(), anomaly.ID, &ruleIDCopy, ch, url, bodyBytes, headers)
+					w.enqueueDispatch(context.Background(), anomaly.ID, &ruleIDCopy, ch, webhookURL, bodyBytes, headers)
 				}
 
 			case "telegram":
@@ -318,7 +337,8 @@ func (w *WebhookEngine) SendTestAlert(ctx context.Context, rule *storage.Notific
 		anomaly.CreatedAt.Format(time.RFC3339))
 
 	w.mu.RLock()
-	url := w.url
+	slackURL := w.slackURL
+	webhookURL := w.webhookURL
 	format := w.format
 	headers := make(map[string]string)
 	for k, v := range w.webhookHeaders {
@@ -333,8 +353,30 @@ func (w *WebhookEngine) SendTestAlert(ctx context.Context, rule *storage.Notific
 
 	for _, ch := range rule.ChannelTargets {
 		switch ch {
-		case "webhook", "slack":
-			if url == "" {
+		case "slack":
+			if slackURL == "" {
+				w.logger.Error("Test alert routing matched but Slack webhook URL is not configured")
+				if w.repo != nil {
+					_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
+						AnomalyID:    anomaly.ID,
+						RuleID:       &ruleIDCopy,
+						Channel:      ch,
+						Status:       "failed",
+						ErrorMessage: "Slack webhook URL is not configured",
+						DispatchedAt: time.Now(),
+					})
+				}
+				continue
+			}
+			bodyBytes, err := json.Marshal(map[string]interface{}{"text": messageText})
+			if err != nil {
+				w.logger.Error("Failed to marshal Slack payload", slog.String("error", err.Error()))
+			} else {
+				w.enqueueDispatch(context.Background(), anomaly.ID, &ruleIDCopy, ch, slackURL, bodyBytes, nil)
+			}
+
+		case "webhook":
+			if webhookURL == "" {
 				w.logger.Error("Test alert routing matched but webhook URL is not configured")
 				if w.repo != nil {
 					_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
@@ -348,27 +390,18 @@ func (w *WebhookEngine) SendTestAlert(ctx context.Context, rule *storage.Notific
 				}
 				continue
 			}
-			var payload interface{}
-			if ch == "slack" {
-				payload = map[string]interface{}{"text": messageText}
-			} else {
-				switch format {
-				case "slack":
-					payload = map[string]interface{}{"text": messageText}
-				case "telegram":
-					payload = map[string]interface{}{
-						"text":       messageText,
-						"parse_mode": "Markdown",
-					}
-				default:
-					payload = anomaly
+			var payload interface{} = anomaly
+			if format == "telegram" {
+				payload = map[string]interface{}{
+					"text":       messageText,
+					"parse_mode": "Markdown",
 				}
 			}
 			bodyBytes, err := json.Marshal(payload)
 			if err != nil {
 				w.logger.Error("Failed to marshal webhook payload", slog.String("error", err.Error()))
 			} else {
-				w.enqueueDispatch(context.Background(), anomaly.ID, &ruleIDCopy, ch, url, bodyBytes, headers)
+				w.enqueueDispatch(context.Background(), anomaly.ID, &ruleIDCopy, ch, webhookURL, bodyBytes, headers)
 			}
 
 		case "telegram":

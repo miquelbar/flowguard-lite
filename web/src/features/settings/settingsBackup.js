@@ -44,7 +44,8 @@ export function bindBackupEvents() {
                         telegram_enabled: settings.telegram_enabled || false,
                         telegram_token: settings.telegram_token || "",
                         telegram_chat_id: settings.telegram_chat_id || "",
-                        webhook_format: settings.webhook_format || "slack",
+                        slack_webhook_url: settings.slack_webhook_url || "",
+                        webhook_format: settings.webhook_format || "generic",
                         webhook_url: settings.webhook_url || "",
                         webhook_headers: settings.webhook_headers || {},
                         log_level: settings.log_level || "info",
@@ -155,6 +156,7 @@ export function bindBackupEvents() {
                     telegram_enabled: s.telegram_enabled,
                     telegram_token: s.telegram_token,
                     telegram_chat_id: s.telegram_chat_id,
+                    slack_webhook_url: s.slack_webhook_url,
                     webhook_format: s.webhook_format,
                     webhook_url: s.webhook_url,
                     webhook_headers: s.webhook_headers

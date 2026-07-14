@@ -96,7 +96,14 @@ function registerApiStubs() {
         ddos_threshold_fps: 1000,
         syn_flood_threshold_pps: 1000,
         udp_flood_threshold_pps: 3000,
-        icmp_flood_threshold_pps: 500
+        icmp_flood_threshold_pps: 500,
+        slack_webhook_url: "",
+        webhook_url: "",
+        webhook_format: "generic",
+        webhook_headers: {},
+        telegram_enabled: false,
+        telegram_token: "",
+        telegram_chat_id: ""
     });
     cy.intercept("GET", "/api/health", { healthy: true, status: "OK", local_ips: ["192.168.30.150"] });
     cy.intercept("GET", "/api/risk/devices", riskDevices);
@@ -399,17 +406,28 @@ describe("FlowGuard Lite UI click-to-filter workflows", () => {
         visitApp("#/settings/notifications");
 
         // 1. Initially check the checkboxes
+        cy.get("#setting-slack-enabled").should("not.be.checked");
         cy.get("#setting-webhook-enabled").should("not.be.checked");
         cy.get("#setting-telegram-enabled-chk").should("not.be.checked");
 
-        // Toggle webhook
+        // Toggle Slack / Discord
+        cy.get("#setting-slack-enabled").check();
+        cy.get("#slack-channel-config").should("be.visible");
+        cy.get("#setting-slack-webhook-url").clear().type("https://hooks.slack.local/services/T/B/C");
+
+        cy.get("#btn-test-slack").click();
+        cy.wait("@testChannelAPI").then((interception) => {
+            expect(interception.request.body.channel).to.equal("slack");
+            expect(interception.request.body.slack_webhook_url).to.equal("https://hooks.slack.local/services/T/B/C");
+        });
+
+        cy.get("#slack-test-console").should("be.visible");
+        cy.get("#slack-test-results").should("contain.value", "Success: true");
+        cy.get("#slack-test-console .test-status-badge").should("contain.text", "Success");
+
+        // Toggle generic webhook
         cy.get("#setting-webhook-enabled").check();
         cy.get("#webhook-channel-config").should("be.visible");
-
-        // Toggle format select to generic
-        cy.get("#setting-webhook-format-select").select("generic");
-        cy.get("#notif-fields-webhook").should("be.visible");
-        cy.get("#notif-fields-slack").should("not.be.visible");
 
         // Set webhook generic URL
         cy.get("#setting-webhook-url-generic").clear().type("https://custom-webhook.local/alerts");
@@ -457,6 +475,7 @@ describe("FlowGuard Lite UI click-to-filter workflows", () => {
         cy.get("#form-settings-webhook").submit();
         cy.wait("@saveSettingsNotif").then((interception) => {
             const body = interception.request.body;
+            expect(body.slack_webhook_url).to.equal("https://hooks.slack.local/services/T/B/C");
             expect(body.webhook_url).to.equal("https://custom-webhook.local/alerts");
             expect(body.webhook_format).to.equal("generic");
             expect(body.telegram_enabled).to.be.true;

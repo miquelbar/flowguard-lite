@@ -76,7 +76,7 @@ func TestWebhookEngine_RoutingRules(t *testing.T) {
 	// 1. Test suppressed by policy
 	t.Run("Suppressed by policy override", func(t *testing.T) {
 		repo := &MockRepository{}
-		engine := NewWebhookEngine(repo, server.URL, "generic", nil, false, "", "", logger)
+		engine := NewWebhookEngine(repo, "", server.URL, "generic", nil, false, "", "", logger)
 		defer shutdownWebhookEngine(t, engine)
 
 		anomaly := &storage.Anomaly{
@@ -105,7 +105,7 @@ func TestWebhookEngine_RoutingRules(t *testing.T) {
 	// 2. Test fallback mode when no rules configured
 	t.Run("Fallback mode (no rules)", func(t *testing.T) {
 		repo := &MockRepository{}
-		engine := NewWebhookEngine(repo, server.URL, "generic", nil, false, "", "", logger)
+		engine := NewWebhookEngine(repo, "", server.URL, "generic", nil, false, "", "", logger)
 		defer shutdownWebhookEngine(t, engine)
 
 		anomaly := &storage.Anomaly{
@@ -172,7 +172,7 @@ func TestWebhookEngine_RoutingRules(t *testing.T) {
 			},
 		}
 
-		engine := NewWebhookEngine(repo, server.URL, "generic", nil, false, "", "", logger)
+		engine := NewWebhookEngine(repo, server.URL, server.URL, "generic", nil, false, "", "", logger)
 		defer shutdownWebhookEngine(t, engine)
 
 		// This anomaly is high severity and 192.168.1.15, so it should match BOTH rules!
@@ -235,7 +235,7 @@ func TestWebhookEngine_RoutingRules(t *testing.T) {
 			},
 		}
 
-		engine := NewWebhookEngine(repo, server.URL, "generic", nil, false, "", "", logger)
+		engine := NewWebhookEngine(repo, "", server.URL, "generic", nil, false, "", "", logger)
 		defer shutdownWebhookEngine(t, engine)
 
 		anomaly := &storage.Anomaly{

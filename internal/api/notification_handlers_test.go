@@ -28,7 +28,7 @@ func TestHandleTestAlert(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	engine := webhook.NewWebhookEngine(nil, mockServer.URL, "generic", nil, false, "", "", logger)
+	engine := webhook.NewWebhookEngine(nil, "", mockServer.URL, "generic", nil, false, "", "", logger)
 	defer shutdownNotificationTestWebhookEngine(t, engine)
 	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil, nil, nil, engine, "")
 
@@ -75,7 +75,7 @@ func TestHandleTestNotificationRule(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	engine := webhook.NewWebhookEngine(nil, mockServer.URL, "generic", nil, false, "", "", logger)
+	engine := webhook.NewWebhookEngine(nil, mockServer.URL, "", "generic", nil, false, "", "", logger)
 	defer shutdownNotificationTestWebhookEngine(t, engine)
 	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil, nil, nil, engine, "")
 

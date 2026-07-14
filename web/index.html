@@ -1466,15 +1466,50 @@
                     <section id="settings-notifications" class="settings-card hidden">
                         <div class="settings-card-header">
                             <h3>Notifications &amp; Routing</h3>
-                            <p>Select a channel and configure how FlowGuard dispatches alerts.</p>
+                            <p>Configure delivery channels independently, then route alerts to them from Notifications rules.</p>
                         </div>
                         <form id="form-settings-webhook">
-                            <!-- Webhook Subsection -->
+                            <!-- Slack / Discord Subsection -->
                             <div class="settings-subsection">
                                 <div class="settings-subsection-header">
                                     <div>
-                                        <h4>Webhook Alerting Channel</h4>
-                                        <p>Dispatch JSON alerts to Slack, Discord, or generic webhook listeners</p>
+                                        <h4>Slack / Discord Channel</h4>
+                                        <p>Dispatch formatted alerts to Slack Incoming Webhooks or Discord Slack-compatible endpoints</p>
+                                    </div>
+                                    <label class="settings-checkbox-row settings-toggle-inline" for="setting-slack-enabled">
+                                        <input type="checkbox" id="setting-slack-enabled">
+                                        <span></span>
+                                    </label>
+                                </div>
+
+                                <div id="slack-channel-config" class="hidden settings-channel-config">
+                                    <div class="form-group form-group-shallow">
+                                        <label class="form-label-block">Incoming Webhook URL</label>
+                                        <input type="url" id="setting-slack-webhook-url" class="form-control form-control-full" placeholder="https://example.com/slack-webhook">
+                                    </div>
+                                    <p class="text-muted form-help-tiny">
+                                        Create an <strong>Incoming Webhook</strong> in your Slack workspace Apps settings. For Discord, use the Webhook URL with the <code>/slack</code> suffix.
+                                    </p>
+
+                                    <div class="settings-actions settings-actions-spaced">
+                                        <button type="button" id="btn-test-slack" class="btn-secondary">Test Slack / Discord Connection</button>
+                                    </div>
+                                    <div id="slack-test-console" class="diagnostic-console hidden">
+                                        <h5 class="diagnostic-console-title">
+                                            <span>Slack / Discord Diagnostics Console</span>
+                                            <span class="test-status-badge badge badge-info">Idle</span>
+                                        </h5>
+                                        <textarea id="slack-test-results" class="form-control form-control-readonly form-control-full diagnostic-console-output" readonly placeholder="Test logs and response payload will display here..."></textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Generic Webhook Subsection -->
+                            <div class="settings-subsection settings-subsection-separated">
+                                <div class="settings-subsection-header">
+                                    <div>
+                                        <h4>Generic Webhook Channel</h4>
+                                        <p>Dispatch raw JSON alerts to custom HTTP listeners or automation tools</p>
                                     </div>
                                     <label class="settings-checkbox-row settings-toggle-inline" for="setting-webhook-enabled">
                                         <input type="checkbox" id="setting-webhook-enabled">
@@ -1484,40 +1519,18 @@
 
                                 <div id="webhook-channel-config" class="hidden settings-channel-config">
                                     <div class="form-group form-group-spaced">
-                                        <label class="form-label-block">Payload Format</label>
-                                        <select id="setting-webhook-format-select" class="form-control form-control-full">
-                                            <option value="slack">Slack / Discord</option>
-                                            <option value="generic">Generic JSON Webhook</option>
-                                        </select>
+                                        <label class="form-label-block">Webhook URL</label>
+                                        <input type="url" id="setting-webhook-url-generic" class="form-control form-control-full" placeholder="https://your-endpoint.com/hooks/alert">
                                     </div>
-
-                                    <!-- Slack / Discord url fields -->
-                                    <div id="notif-fields-slack">
-                                        <div class="form-group form-group-shallow">
-                                            <label class="form-label-block">Incoming Webhook URL</label>
-                                            <input type="url" id="setting-webhook-url" class="form-control form-control-full" placeholder="https://example.com/slack-webhook">
+                                    <div class="form-subsection">
+                                        <h4 class="form-subsection-title">
+                                            Custom Headers <span class="inline-secondary">(optional)</span>
+                                        </h4>
+                                        <p class="text-muted form-help-tiny">e.g., Key: <code>Authorization</code>, Value: <code>Bearer token123</code></p>
+                                        <div id="webhook-headers-list" class="form-list-stack">
+                                            <!-- Dynamically inserted header rows -->
                                         </div>
-                                        <p class="text-muted form-help-tiny">
-                                            Create an <strong>Incoming Webhook</strong> in your Slack workspace Apps settings. For Discord, use the Webhook URL with the <code>/slack</code> suffix.
-                                        </p>
-                                    </div>
-
-                                    <!-- Generic Webhook url fields -->
-                                    <div id="notif-fields-webhook" class="hidden">
-                                        <div class="form-group form-group-spaced">
-                                            <label class="form-label-block">Webhook URL</label>
-                                            <input type="url" id="setting-webhook-url-generic" class="form-control form-control-full" placeholder="https://your-endpoint.com/hooks/alert">
-                                        </div>
-                                        <div class="form-subsection">
-                                            <h4 class="form-subsection-title">
-                                                Custom Headers <span class="inline-secondary">(optional)</span>
-                                            </h4>
-                                            <p class="text-muted form-help-tiny">e.g., Key: <code>Authorization</code>, Value: <code>Bearer token123</code></p>
-                                            <div id="webhook-headers-list" class="form-list-stack">
-                                                <!-- Dynamically inserted header rows -->
-                                            </div>
-                                            <button type="button" id="btn-add-webhook-header" class="btn-secondary btn-small">Add Header</button>
-                                        </div>
+                                        <button type="button" id="btn-add-webhook-header" class="btn-secondary btn-small">Add Header</button>
                                     </div>
 
                                     <div class="settings-actions settings-actions-spaced">

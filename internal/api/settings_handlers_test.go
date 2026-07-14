@@ -68,6 +68,7 @@ func TestHandleSettings(t *testing.T) {
 		LogLevel:              "debug",
 		Environment:           "development",
 		LocalSubnets:          []string{"192.168.10.0/24"},
+		SlackWebhookURL:       "https://hooks.slack.example.invalid/services/T/B/C",
 		WebhookURL:            "https://example.invalid/hook",
 		WebhookFormat:         "generic",
 		WebhookHeaders:        map[string]string{"Authorization": "Bearer test"},
@@ -103,6 +104,9 @@ func TestHandleSettings(t *testing.T) {
 	if server.cfg.WebhookHeaders["Authorization"] != "Bearer test" {
 		t.Errorf("expected webhook headers to update in memory, got %+v", server.cfg.WebhookHeaders)
 	}
+	if server.cfg.SlackWebhookURL != "https://hooks.slack.example.invalid/services/T/B/C" || server.cfg.WebhookURL != "https://example.invalid/hook" {
+		t.Errorf("expected Slack and generic webhook URLs to update independently, got slack=%q generic=%q", server.cfg.SlackWebhookURL, server.cfg.WebhookURL)
+	}
 
 	// Verify settings were persisted on disk
 	loadedConfig, err := config.LoadConfig(configPath)
@@ -120,6 +124,9 @@ func TestHandleSettings(t *testing.T) {
 	}
 	if loadedConfig.WebhookHeaders["Authorization"] != "Bearer test" {
 		t.Errorf("expected loaded config to persist webhook headers, got %+v", loadedConfig.WebhookHeaders)
+	}
+	if loadedConfig.SlackWebhookURL != "https://hooks.slack.example.invalid/services/T/B/C" || loadedConfig.WebhookURL != "https://example.invalid/hook" {
+		t.Errorf("expected loaded config to persist Slack and generic webhook URLs independently, got slack=%q generic=%q", loadedConfig.SlackWebhookURL, loadedConfig.WebhookURL)
 	}
 }
 
@@ -235,6 +242,7 @@ func TestHandleTestChannel(t *testing.T) {
 	cfg.TelegramChatID = "stored-chat-id"
 	cfg.WebhookHeaders = map[string]string{"Authorization": "Bearer stored-secret"}
 	cfg.WebhookURL = "https://hooks.example.test/flowguard"
+	cfg.SlackWebhookURL = "https://hooks.slack.example.test/services/T/B/C"
 	cfg.WebhookFormat = "generic"
 
 	var seenRequests []*http.Request
@@ -275,6 +283,21 @@ func TestHandleTestChannel(t *testing.T) {
 		t.Errorf("expected masked authorization header to be restored, got %q", got)
 	}
 
+	bodySuccessSlack := `{"channel":"slack","slack_webhook_url":"https://hooks.slack.example.test/services/T/B/C"}`
+	w = runTestChannel(bodySuccessSlack)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if !res.Success || res.StatusCode != http.StatusAccepted {
+		t.Errorf("slack test failed: %+v", res)
+	}
+	if len(seenRequests) < 2 || seenRequests[1].URL.String() != "https://hooks.slack.example.test/services/T/B/C" {
+		t.Fatalf("expected Slack request to use Slack URL, got requests: %+v", seenRequests)
+	}
+
 	bodySuccessTelegramMock := `{"channel":"telegram","telegram_token":"******","telegram_chat_id":"-10012345"}`
 	w = runTestChannel(bodySuccessTelegramMock)
 	if w.Code != http.StatusOK {
@@ -286,7 +309,7 @@ func TestHandleTestChannel(t *testing.T) {
 	if !res.Success {
 		t.Fatalf("expected telegram diagnostic success through injected client, got %+v", res)
 	}
-	if len(seenRequests) < 2 || !strings.Contains(seenRequests[1].URL.String(), "botstored-token-value/sendMessage") {
+	if len(seenRequests) < 3 || !strings.Contains(seenRequests[2].URL.String(), "botstored-token-value/sendMessage") {
 		t.Fatalf("expected Telegram request to use stored token, got requests: %+v", seenRequests)
 	}
 

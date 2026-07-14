@@ -109,6 +109,7 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 	os.Setenv("FLOWGUARD_UNIFI_SYSLOG_ENABLED", "true")
 	os.Setenv("FLOWGUARD_UNIFI_SYSLOG_PORT", "5514")
 	os.Setenv("FLOWGUARD_UNIFI_SYSLOG_ALLOWED_IPS", "192.168.1.1,192.168.1.0/24")
+	os.Setenv("FLOWGUARD_SLACK_WEBHOOK_URL", "https://hooks.slack.example.test/services/T/B/C")
 	os.Setenv("FLOWGUARD_DDOS_THRESHOLD_PPS", "6000")
 	os.Setenv("FLOWGUARD_DDOS_THRESHOLD_BPS", "12582912")
 	os.Setenv("FLOWGUARD_DDOS_THRESHOLD_FPS", "1200")
@@ -131,6 +132,7 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 		os.Unsetenv("FLOWGUARD_UNIFI_SYSLOG_ENABLED")
 		os.Unsetenv("FLOWGUARD_UNIFI_SYSLOG_PORT")
 		os.Unsetenv("FLOWGUARD_UNIFI_SYSLOG_ALLOWED_IPS")
+		os.Unsetenv("FLOWGUARD_SLACK_WEBHOOK_URL")
 		os.Unsetenv("FLOWGUARD_DDOS_THRESHOLD_PPS")
 		os.Unsetenv("FLOWGUARD_DDOS_THRESHOLD_BPS")
 		os.Unsetenv("FLOWGUARD_DDOS_THRESHOLD_FPS")
@@ -174,9 +176,43 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 	if !cfg.UniFiSyslogEnabled || cfg.UniFiSyslogPort != 5514 || len(cfg.UniFiSyslogAllowedIPs) != 2 {
 		t.Errorf("unexpected UniFi syslog env overrides: %+v", cfg)
 	}
+	if cfg.SlackWebhookURL != "https://hooks.slack.example.test/services/T/B/C" {
+		t.Errorf("expected Slack webhook URL env override, got %q", cfg.SlackWebhookURL)
+	}
 	if cfg.DDoSThresholdPPS != 6000 || cfg.DDoSThresholdBPS != 12582912 || cfg.DDoSThresholdFPS != 1200 ||
 		cfg.SYNFloodThresholdPPS != 1100 || cfg.UDPFloodThresholdPPS != 3100 || cfg.ICMPFloodThresholdPPS != 600 {
 		t.Errorf("unexpected DDoS threshold env overrides: %+v", cfg)
+	}
+}
+
+func TestLoadConfigMigratesLegacySlackWebhook(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "config_test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	yamlContent := `
+webhook_url: "https://hooks.slack.example.test/services/T/B/C"
+webhook_format: "slack"
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("failed to write temp config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+	if cfg.SlackWebhookURL != "https://hooks.slack.example.test/services/T/B/C" {
+		t.Fatalf("expected legacy Slack webhook URL to migrate, got %q", cfg.SlackWebhookURL)
+	}
+	if cfg.WebhookURL != "" {
+		t.Fatalf("expected generic webhook URL to remain empty after migration, got %q", cfg.WebhookURL)
+	}
+	if cfg.WebhookFormat != WebhookFormatGeneric {
+		t.Fatalf("expected webhook format to normalize to generic, got %q", cfg.WebhookFormat)
 	}
 }
 

@@ -22,12 +22,13 @@ type httpDoer interface {
 
 // TestChannelPayload represents parameters for testing a single notification channel.
 type TestChannelPayload struct {
-	Channel        string            `json:"channel"`
-	WebhookURL     string            `json:"webhook_url"`
-	WebhookFormat  string            `json:"webhook_format"`
-	WebhookHeaders map[string]string `json:"webhook_headers"`
-	TelegramToken  string            `json:"telegram_token"`
-	TelegramChatID string            `json:"telegram_chat_id"`
+	Channel         string            `json:"channel"`
+	SlackWebhookURL string            `json:"slack_webhook_url"`
+	WebhookURL      string            `json:"webhook_url"`
+	WebhookFormat   string            `json:"webhook_format"`
+	WebhookHeaders  map[string]string `json:"webhook_headers"`
+	TelegramToken   string            `json:"telegram_token"`
+	TelegramChatID  string            `json:"telegram_chat_id"`
 }
 
 // TestChannelResponse represents the output of a diagnostic connection check.
@@ -117,6 +118,23 @@ func diagnosticRequestParts(cfg *config.Config, payload TestChannelPayload) (str
 		}
 		return fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token), bodyBytes, headers, ""
 
+	case "slack":
+		url := strings.TrimSpace(payload.SlackWebhookURL)
+		if url == "" {
+			url = strings.TrimSpace(cfg.SlackWebhookURL)
+		}
+		if url == "" {
+			return "", nil, nil, "Slack Webhook URL must not be empty"
+		}
+		if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+			return "", nil, nil, "Slack Webhook URL must be a valid HTTP or HTTPS address"
+		}
+		bodyBytes, err := json.Marshal(map[string]interface{}{"text": messageText})
+		if err != nil {
+			return "", nil, nil, "Failed to encode Slack payload: " + err.Error()
+		}
+		return url, bodyBytes, headers, ""
+
 	case "webhook":
 		url := strings.TrimSpace(payload.WebhookURL)
 		if url == "" {
@@ -125,16 +143,7 @@ func diagnosticRequestParts(cfg *config.Config, payload TestChannelPayload) (str
 		if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 			return "", nil, nil, "Webhook URL must be a valid HTTP or HTTPS address"
 		}
-
-		format := payload.WebhookFormat
-		if format == "" {
-			format = "generic"
-		}
-		var body interface{} = testAnomaly
-		if format == "slack" {
-			body = map[string]interface{}{"text": messageText}
-		}
-		bodyBytes, err := json.Marshal(body)
+		bodyBytes, err := json.Marshal(testAnomaly)
 		if err != nil {
 			return "", nil, nil, "Failed to encode Webhook payload: " + err.Error()
 		}
@@ -148,7 +157,7 @@ func diagnosticRequestParts(cfg *config.Config, payload TestChannelPayload) (str
 		return url, bodyBytes, headers, ""
 	}
 
-	return "", nil, nil, "invalid channel value (must be 'telegram' or 'webhook')"
+	return "", nil, nil, "invalid channel value (must be 'telegram', 'slack', or 'webhook')"
 }
 
 func diagnosticMessage() (string, *storage.Anomaly) {

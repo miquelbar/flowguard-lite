@@ -82,7 +82,13 @@ func TestWebhookEngine_Dispatch(t *testing.T) {
 			defer server.Close()
 
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-			engine := NewWebhookEngine(nil, server.URL, tt.format, nil, false, "", "", logger)
+			slackURL := ""
+			webhookURL := server.URL
+			if tt.format == "slack" {
+				slackURL = server.URL
+				webhookURL = ""
+			}
+			engine := NewWebhookEngine(nil, slackURL, webhookURL, tt.format, nil, false, "", "", logger)
 			defer shutdownWebhookEngine(t, engine)
 
 			anomaly := &storage.Anomaly{
@@ -120,7 +126,7 @@ func TestWebhookEngine_TelegramDirect(t *testing.T) {
 	defer server.Close()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	engine := NewWebhookEngine(nil, "", "generic", nil, true, "token123", "chat456", logger)
+	engine := NewWebhookEngine(nil, "", "", "generic", nil, true, "token123", "chat456", logger)
 	defer shutdownWebhookEngine(t, engine)
 	engine.client.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 		expectedURL := "https://api.telegram.org/bottoken123/sendMessage"
@@ -162,17 +168,17 @@ func TestWebhookEngine_TelegramDirect(t *testing.T) {
 
 func TestWebhookEngine_UpdateConfig(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	engine := NewWebhookEngine(nil, "http://old-url", "generic", map[string]string{"X-Auth": "old"}, false, "old-token", "old-chat", logger)
+	engine := NewWebhookEngine(nil, "http://old-slack", "http://old-url", "generic", map[string]string{"X-Auth": "old"}, false, "old-token", "old-chat", logger)
 	defer shutdownWebhookEngine(t, engine)
 
-	engine.UpdateConfig("http://new-url", "slack", map[string]string{"X-Auth": "new"}, true, "new-token", "new-chat")
+	engine.UpdateConfig("http://new-slack", "http://new-url", "slack", map[string]string{"X-Auth": "new"}, true, "new-token", "new-chat")
 
 	engine.mu.RLock()
 	defer engine.mu.RUnlock()
 
-	if engine.url != "http://new-url" || engine.format != "slack" || engine.webhookHeaders["X-Auth"] != "new" || !engine.tgEnabled || engine.tgToken != "new-token" || engine.tgChatID != "new-chat" {
-		t.Errorf("UpdateConfig failed, got: url=%s format=%s enabled=%v token=%s chat=%s headers=%v",
-			engine.url, engine.format, engine.tgEnabled, engine.tgToken, engine.tgChatID, engine.webhookHeaders)
+	if engine.slackURL != "http://new-slack" || engine.webhookURL != "http://new-url" || engine.format != "slack" || engine.webhookHeaders["X-Auth"] != "new" || !engine.tgEnabled || engine.tgToken != "new-token" || engine.tgChatID != "new-chat" {
+		t.Errorf("UpdateConfig failed, got: slackURL=%s webhookURL=%s format=%s enabled=%v token=%s chat=%s headers=%v",
+			engine.slackURL, engine.webhookURL, engine.format, engine.tgEnabled, engine.tgToken, engine.tgChatID, engine.webhookHeaders)
 	}
 }
 
@@ -190,7 +196,7 @@ func TestWebhookEngine_Headers(t *testing.T) {
 		"Authorization":   "Bearer token123",
 		"X-Custom-Header": "custom-val",
 	}
-	engine := NewWebhookEngine(nil, server.URL, "generic", customHeaders, false, "", "", logger)
+	engine := NewWebhookEngine(nil, "", server.URL, "generic", customHeaders, false, "", "", logger)
 	defer shutdownWebhookEngine(t, engine)
 
 	anomaly := &storage.Anomaly{
@@ -222,7 +228,7 @@ func TestWebhookEngine_Headers(t *testing.T) {
 func TestWebhookEngine_DispatchQueueDropsWhenSaturated(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	repo := &MockRepository{}
-	engine := NewWebhookEngine(repo, "http://example.test", "generic", nil, false, "", "", logger)
+	engine := NewWebhookEngine(repo, "", "http://example.test", "generic", nil, false, "", "", logger)
 
 	block := make(chan struct{})
 	started := make(chan struct{}, webhookDispatchWorkers+webhookDispatchQueueSize)
@@ -273,7 +279,7 @@ func TestWebhookEngine_DispatchQueueDropsWhenSaturated(t *testing.T) {
 
 func TestWebhookEngine_ShutdownWaitsForQueuedDispatch(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	engine := NewWebhookEngine(nil, "http://example.test", "generic", nil, false, "", "", logger)
+	engine := NewWebhookEngine(nil, "", "http://example.test", "generic", nil, false, "", "", logger)
 
 	finished := make(chan struct{})
 	engine.client.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {

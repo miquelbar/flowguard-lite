@@ -119,7 +119,7 @@ func main() {
 			properties[yamlTag] = prop
 
 			// Mark standard configurations as required fields
-			if yamlTag != "webhook_url" && yamlTag != "webhook_format" && yamlTag != "suricata_eve_path" {
+			if yamlTag != "slack_webhook_url" && yamlTag != "webhook_url" && yamlTag != "webhook_format" && yamlTag != "suricata_eve_path" {
 				requiredFields = append(requiredFields, yamlTag)
 			}
 		}

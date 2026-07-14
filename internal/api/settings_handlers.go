@@ -27,6 +27,7 @@ type SettingsPayload struct {
 	LogLevel              string            `json:"log_level"`
 	Environment           string            `json:"environment"`
 	LocalSubnets          []string          `json:"local_subnets"`
+	SlackWebhookURL       string            `json:"slack_webhook_url"`
 	WebhookURL            string            `json:"webhook_url"`
 	WebhookFormat         string            `json:"webhook_format"`
 	WebhookHeaders        map[string]string `json:"webhook_headers"`
@@ -88,6 +89,7 @@ func (s *APIServer) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		LogLevel:              s.cfg.LogLevel,
 		Environment:           s.cfg.Environment,
 		LocalSubnets:          s.cfg.LocalSubnets,
+		SlackWebhookURL:       s.cfg.SlackWebhookURL,
 		WebhookURL:            s.cfg.WebhookURL,
 		WebhookFormat:         s.cfg.WebhookFormat,
 		WebhookHeaders:        maskedHeaders(s.cfg.WebhookHeaders),
@@ -285,7 +287,7 @@ func (s *APIServer) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cfg.WebhookHeaders = newHeaders
 
-	if s.cfg.WebhookURL != payload.WebhookURL || s.cfg.WebhookFormat != payload.WebhookFormat || s.cfg.TelegramEnabled != payload.TelegramEnabled || s.cfg.TelegramChatID != payload.TelegramChatID || telegramTokenChanged || headersChanged {
+	if s.cfg.SlackWebhookURL != payload.SlackWebhookURL || s.cfg.WebhookURL != payload.WebhookURL || s.cfg.WebhookFormat != payload.WebhookFormat || s.cfg.TelegramEnabled != payload.TelegramEnabled || s.cfg.TelegramChatID != payload.TelegramChatID || telegramTokenChanged || headersChanged {
 		categories = append(categories, "notifications")
 	}
 	if s.cfg.LogLevel != payload.LogLevel || s.cfg.Environment != payload.Environment {
@@ -306,6 +308,7 @@ func (s *APIServer) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 	s.cfg.LogLevel = payload.LogLevel
 	s.cfg.Environment = payload.Environment
 	s.cfg.LocalSubnets = payload.LocalSubnets
+	s.cfg.SlackWebhookURL = payload.SlackWebhookURL
 	s.cfg.WebhookURL = payload.WebhookURL
 	s.cfg.WebhookFormat = payload.WebhookFormat
 	s.cfg.TelegramEnabled = payload.TelegramEnabled
@@ -351,7 +354,7 @@ func (s *APIServer) handlePostSettings(w http.ResponseWriter, r *http.Request) {
 		s.ddosDetector.UpdateLocalSubnets(s.cfg.LocalSubnets)
 	}
 	if s.webhookEngine != nil {
-		s.webhookEngine.UpdateConfig(s.cfg.WebhookURL, s.cfg.WebhookFormat, s.cfg.WebhookHeaders, s.cfg.TelegramEnabled, s.cfg.TelegramToken, s.cfg.TelegramChatID)
+		s.webhookEngine.UpdateConfig(s.cfg.SlackWebhookURL, s.cfg.WebhookURL, s.cfg.WebhookFormat, s.cfg.WebhookHeaders, s.cfg.TelegramEnabled, s.cfg.TelegramToken, s.cfg.TelegramChatID)
 	}
 
 	// 6. Log granular audit actions
@@ -441,8 +444,8 @@ func (s *APIServer) handleTestChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if payload.Channel != "telegram" && payload.Channel != "webhook" {
-		writeError(w, s.logger, http.StatusBadRequest, "invalid channel value (must be 'telegram' or 'webhook')")
+	if payload.Channel != "telegram" && payload.Channel != "slack" && payload.Channel != "webhook" {
+		writeError(w, s.logger, http.StatusBadRequest, "invalid channel value (must be 'telegram', 'slack', or 'webhook')")
 		return
 	}
 	if s.channelTester == nil {

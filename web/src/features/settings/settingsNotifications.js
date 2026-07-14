@@ -51,15 +51,13 @@ export function appendWebhookHeaderRow(key = "", val = "") {
 }
 
 export function syncNotificationFields() {
+    const slackEnabled = document.getElementById("setting-slack-enabled")?.checked;
+    const slackConfig = document.getElementById("slack-channel-config");
+    if (slackConfig) slackConfig.classList.toggle("hidden", !slackEnabled);
+
     const webhookEnabled = document.getElementById("setting-webhook-enabled")?.checked;
     const webhookConfig = document.getElementById("webhook-channel-config");
     if (webhookConfig) webhookConfig.classList.toggle("hidden", !webhookEnabled);
-
-    const formatSelect = document.getElementById("setting-webhook-format-select")?.value;
-    const slackFields = document.getElementById("notif-fields-slack");
-    const webhookFields = document.getElementById("notif-fields-webhook");
-    if (slackFields) slackFields.classList.toggle("hidden", formatSelect !== "slack");
-    if (webhookFields) webhookFields.classList.toggle("hidden", formatSelect !== "generic");
 
     const telegramEnabled = document.getElementById("setting-telegram-enabled-chk")?.checked;
     const telegramConfig = document.getElementById("telegram-channel-config");

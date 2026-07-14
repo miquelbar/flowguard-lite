@@ -47,8 +47,9 @@ type Config struct {
 	UDPFloodThresholdPPS  int               `yaml:"udp_flood_threshold_pps"`
 	ICMPFloodThresholdPPS int               `yaml:"icmp_flood_threshold_pps"`
 	SuricataEvePath       string            `yaml:"suricata_eve_path"`
+	SlackWebhookURL       string            `yaml:"slack_webhook_url"`
 	WebhookURL            string            `yaml:"webhook_url"`
-	WebhookFormat         string            `yaml:"webhook_format"` // "generic", "slack", "telegram"
+	WebhookFormat         string            `yaml:"webhook_format"` // "generic"; legacy "slack" migrates to slack_webhook_url
 	WebhookHeaders        map[string]string `yaml:"webhook_headers"`
 	TelegramEnabled       bool              `yaml:"telegram_enabled"`
 	TelegramToken         string            `yaml:"telegram_token"`
@@ -83,6 +84,7 @@ func DefaultConfig() *Config {
 		UDPFloodThresholdPPS:  3000,
 		ICMPFloodThresholdPPS: 500,
 		SuricataEvePath:       "",
+		SlackWebhookURL:       "",
 		WebhookURL:            "",
 		WebhookFormat:         WebhookFormatGeneric,
 		WebhookHeaders:        make(map[string]string),
@@ -218,6 +220,9 @@ func LoadConfig(path string) (*Config, error) {
 	if val := os.Getenv("FLOWGUARD_WEBHOOK_URL"); val != "" {
 		cfg.WebhookURL = val
 	}
+	if val := os.Getenv("FLOWGUARD_SLACK_WEBHOOK_URL"); val != "" {
+		cfg.SlackWebhookURL = val
+	}
 	if val := os.Getenv("FLOWGUARD_WEBHOOK_FORMAT"); val != "" {
 		cfg.WebhookFormat = val
 	}
@@ -279,6 +284,11 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Environment = "production"
 	}
 	if cfg.WebhookFormat == "" {
+		cfg.WebhookFormat = WebhookFormatGeneric
+	}
+	if cfg.SlackWebhookURL == "" && cfg.WebhookFormat == WebhookFormatSlack && cfg.WebhookURL != "" {
+		cfg.SlackWebhookURL = cfg.WebhookURL
+		cfg.WebhookURL = ""
 		cfg.WebhookFormat = WebhookFormatGeneric
 	}
 

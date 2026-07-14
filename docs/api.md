@@ -348,8 +348,9 @@ Returns the active configuration schema.
   "local_subnets": [
     "192.168.1.0/24"
   ],
-  "webhook_url": "https://hooks.slack.com/...",
-  "webhook_format": "slack",
+  "slack_webhook_url": "https://example.com/slack-webhook",
+  "webhook_url": "https://automation.example.local/flowguard-alerts",
+  "webhook_format": "generic",
   "webhook_headers": {
     "Authorization": "******"
   },

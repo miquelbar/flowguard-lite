@@ -190,7 +190,7 @@ func main() {
 	riskEngine := risk.NewRiskEngine(repo)
 
 	// 14b. Initialize Webhook Engine (always registered to support dynamic configuration reloads)
-	webhookEngine := webhook.NewWebhookEngine(repo, cfg.WebhookURL, cfg.WebhookFormat, cfg.WebhookHeaders, cfg.TelegramEnabled, cfg.TelegramToken, cfg.TelegramChatID, log)
+	webhookEngine := webhook.NewWebhookEngine(repo, cfg.SlackWebhookURL, cfg.WebhookURL, cfg.WebhookFormat, cfg.WebhookHeaders, cfg.TelegramEnabled, cfg.TelegramToken, cfg.TelegramChatID, log)
 	repo.RegisterAnomalyCallback(func(a *storage.Anomaly) {
 		webhookEngine.SendAnomalyAlert(context.Background(), a)
 	})

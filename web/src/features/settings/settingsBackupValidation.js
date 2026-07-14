@@ -24,7 +24,8 @@ export function normalizeBackupConfig(data) {
         telegram_enabled: Boolean(s.telegram_enabled),
         telegram_token: stringField(s.telegram_token),
         telegram_chat_id: stringField(s.telegram_chat_id),
-        webhook_format: stringField(s.webhook_format, "slack"),
+        slack_webhook_url: stringField(s.slack_webhook_url),
+        webhook_format: stringField(s.webhook_format, "generic"),
         webhook_url: stringField(s.webhook_url),
         webhook_headers: objectStringMap(s.webhook_headers),
         log_level: stringField(s.log_level, "info"),
@@ -60,6 +61,7 @@ function validateSettings(s) {
     const thresholds = [s.ddos_threshold_pps, s.ddos_threshold_bps, s.ddos_threshold_fps, s.syn_flood_threshold_pps, s.udp_flood_threshold_pps, s.icmp_flood_threshold_pps];
     if (thresholds.some(v => !Number.isInteger(v) || v < 1)) return "Detection thresholds must be positive integers.";
     if (!["slack", "generic"].includes(s.webhook_format)) return "Webhook format must be 'slack' or 'generic'.";
+    if (s.slack_webhook_url && !/^https?:\/\//i.test(s.slack_webhook_url)) return "Slack Webhook URL must be HTTP or HTTPS.";
     if (s.webhook_url && !/^https?:\/\//i.test(s.webhook_url)) return "Webhook URL must be HTTP or HTTPS.";
     if (!["debug", "info", "warn", "error"].includes(s.log_level)) return "Log level must be debug, info, warn, or error.";
     if (!["production", "development"].includes(s.environment)) return "Environment must be production or development.";

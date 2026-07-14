@@ -15,18 +15,6 @@
     "capture_promiscuous": {
       "type": "boolean"
     },
-    "unifi_syslog_enabled": {
-      "type": "boolean"
-    },
-    "unifi_syslog_port": {
-      "type": "integer"
-    },
-    "unifi_syslog_allowed_ips": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
     "ddos_threshold_bps": {
       "type": "integer"
     },
@@ -69,6 +57,9 @@
     "sflow_port": {
       "type": "integer"
     },
+    "slack_webhook_url": {
+      "type": "string"
+    },
     "storage_backend": {
       "type": "string",
       "description": "\"sqlite\" or \"duckdb\"",
@@ -98,9 +89,21 @@
     "udp_flood_threshold_pps": {
       "type": "integer"
     },
+    "unifi_syslog_allowed_ips": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "unifi_syslog_enabled": {
+      "type": "boolean"
+    },
+    "unifi_syslog_port": {
+      "type": "integer"
+    },
     "webhook_format": {
       "type": "string",
-      "description": "\"generic\", \"slack\", \"telegram\"",
+      "description": "\"generic\"; legacy \"slack\" migrates to slack_webhook_url",
       "enum": [
         "generic",
         "slack",

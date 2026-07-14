@@ -63,11 +63,14 @@ log_level: "info"
 # Execution environment profile: "production" or "development"
 environment: "production"
 
-# Webhook endpoint URL to dispatch alerts to external chat platforms
-webhook_url: "https://example.com/slack-webhook"
+# Slack/Discord Incoming Webhook URL used by notification rules with channel target "slack"
+slack_webhook_url: "https://example.com/slack-webhook"
 
-# Webhook formatter to structure payloads: "generic" (raw JSON), "slack", or "telegram"
-webhook_format: "slack"
+# Generic JSON webhook URL used by notification rules with channel target "webhook"
+webhook_url: "https://automation.example.local/flowguard-alerts"
+
+# Legacy generic webhook formatter. New Slack routing uses slack_webhook_url directly.
+webhook_format: "generic"
 
 # Flag tracking first-run wizard completion status
 first_run_completed: true
@@ -160,14 +163,18 @@ These values are also available in **Settings → Collectors Setup → Passive N
 *   **Type:** Array of Strings
 *   **Description:** CIDR definitions for internal address space. Traffic flowing within or originating from these networks is profiled to discover device behaviors and baselines.
 
+### `slack_webhook_url`
+*   **Type:** String
+*   **Description:** Slack Incoming Webhook or Discord Slack-compatible webhook URL. Notification rules with channel target `slack` dispatch formatted text payloads to this endpoint.
+
 ### `webhook_url`
 *   **Type:** String
-*   **Description:** Outbound webhook destination URL. Dispatches alert payloads immediately when a network device triggers an anomaly.
+*   **Description:** Generic outbound webhook destination URL. Notification rules with channel target `webhook` dispatch raw anomaly JSON to this endpoint.
 
 ### `webhook_format`
 *   **Type:** String
 *   **Allowed Values:** `"generic"`, `"slack"`, `"telegram"`
-*   **Description:** Payload formatting structure. Adapt to Slack/Discord webhooks or Telegram bot HTTP query formats.
+*   **Description:** Legacy payload formatting value retained for compatibility. New routing uses `slack_webhook_url` for Slack/Discord, `webhook_url` for generic JSON, and Telegram bot settings for Telegram.
 
 ### `webhook_headers`
 *   **Type:** Object / map of strings
@@ -247,6 +254,7 @@ Any parameter can be overridden using environment variables prefixed with `FLOWG
 *   `FLOWGUARD_STORAGE_DIR` overrides `storage_dir`
 *   `FLOWGUARD_STORAGE_BACKEND` overrides `storage_backend`
 *   `FLOWGUARD_LOG_LEVEL` overrides `log_level`
+*   `FLOWGUARD_SLACK_WEBHOOK_URL` overrides `slack_webhook_url`
 *   `FLOWGUARD_WEBHOOK_URL` overrides `webhook_url`
 *   `FLOWGUARD_WEBHOOK_FORMAT` overrides `webhook_format`
 *   `FLOWGUARD_WEBHOOK_HEADERS` overrides `webhook_headers` using a JSON object, for example `{"Authorization":"Bearer token"}`

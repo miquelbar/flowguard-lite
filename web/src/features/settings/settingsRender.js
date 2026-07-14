@@ -80,9 +80,9 @@ export function renderSettingsView() {
     if (noUnsaved("notifications")) {
         const d = state.settingsData;
 
+        setChecked("setting-slack-enabled", Boolean(d.slack_webhook_url));
+        setVal("setting-slack-webhook-url", d.slack_webhook_url || "");
         setChecked("setting-webhook-enabled", Boolean(d.webhook_url));
-        setVal("setting-webhook-format-select", d.webhook_format || "slack");
-        setVal("setting-webhook-url", d.webhook_url || "");
         setVal("setting-webhook-url-generic", d.webhook_url || "");
         renderWebhookHeaders(d.webhook_headers || {});
 

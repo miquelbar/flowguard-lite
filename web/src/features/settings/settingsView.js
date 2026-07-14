@@ -3,22 +3,23 @@ import * as api from '../../lib/api.js';
 import { setNormalizedTrafficRange } from '../../lib/timeRanges.js';
 import { markUnsaved, switchSettingsSection } from './settingsSections.js';
 import { bindBackupEvents } from './settingsBackup.js';
+import { bindNotificationDiagnostics } from './settingsDiagnostics.js';
 import { appendWebhookHeaderRow, syncNotificationFields, updateTelegramUrlPreview } from './settingsNotifications.js';
 
 export { renderSettingsView } from './settingsRender.js';
 
 export function bindSettingsEvents(onReload) {
-    const webhookEnabledChk = document.getElementById("setting-webhook-enabled");
-    if (webhookEnabledChk) {
-        webhookEnabledChk.addEventListener("change", () => {
+    const slackEnabledChk = document.getElementById("setting-slack-enabled");
+    if (slackEnabledChk) {
+        slackEnabledChk.addEventListener("change", () => {
             syncNotificationFields();
             markUnsaved("notifications", true);
         });
     }
 
-    const formatSelect = document.getElementById("setting-webhook-format-select");
-    if (formatSelect) {
-        formatSelect.addEventListener("change", () => {
+    const webhookEnabledChk = document.getElementById("setting-webhook-enabled");
+    if (webhookEnabledChk) {
+        webhookEnabledChk.addEventListener("change", () => {
             syncNotificationFields();
             markUnsaved("notifications", true);
         });
@@ -39,111 +40,7 @@ export function bindSettingsEvents(onReload) {
         });
     }
 
-    // Diagnostics tests
-    const btnTestWebhook = document.getElementById("btn-test-webhook");
-    if (btnTestWebhook) {
-        btnTestWebhook.addEventListener("click", async () => {
-            const consoleEl = document.getElementById("webhook-test-console");
-            const resultsEl = document.getElementById("webhook-test-results");
-            const badgeEl = consoleEl?.querySelector(".test-status-badge");
-
-            if (consoleEl) consoleEl.classList.remove("hidden");
-            if (resultsEl) resultsEl.value = "Sending diagnostic webhook payload to endpoint...\nWaiting for server response...";
-            if (badgeEl) {
-                badgeEl.className = "test-status-badge badge badge-info";
-                badgeEl.textContent = "Testing...";
-            }
-
-            const format = document.getElementById("setting-webhook-format-select")?.value || "slack";
-            const url = format === "slack"
-                ? document.getElementById("setting-webhook-url")?.value.trim()
-                : document.getElementById("setting-webhook-url-generic")?.value.trim();
-
-            const headerRows = document.querySelectorAll("#webhook-headers-list .webhook-header-row");
-            const headers = {};
-            headerRows.forEach(row => {
-                const key = row.querySelector(".header-key")?.value.trim();
-                const val = row.querySelector(".header-value")?.value.trim();
-                if (key) headers[key] = val;
-            });
-
-            const payload = {
-                channel: "webhook",
-                webhook_url: url,
-                webhook_format: format,
-                webhook_headers: headers
-            };
-
-            try {
-                const res = await api.testChannel(payload);
-                if (resultsEl) {
-                    resultsEl.value = `Success: ${res.success}\nStatus Code: ${res.status_code || "N/A"}\n\nResponse Body:\n${res.response || res.error || "(Empty response)"}`;
-                }
-                if (badgeEl) {
-                    if (res.success) {
-                        badgeEl.className = "test-status-badge badge badge-success";
-                        badgeEl.textContent = "Success";
-                    } else {
-                        badgeEl.className = "test-status-badge badge badge-danger";
-                        badgeEl.textContent = "Failure";
-                    }
-                }
-            } catch (err) {
-                if (resultsEl) resultsEl.value = `Error: Connection check failed\n\nDetails:\n${err.message}`;
-                if (badgeEl) {
-                    badgeEl.className = "test-status-badge badge badge-danger";
-                    badgeEl.textContent = "Failure";
-                }
-            }
-        });
-    }
-
-    const btnTestTelegram = document.getElementById("btn-test-telegram");
-    if (btnTestTelegram) {
-        btnTestTelegram.addEventListener("click", async () => {
-            const consoleEl = document.getElementById("telegram-test-console");
-            const resultsEl = document.getElementById("telegram-test-results");
-            const badgeEl = consoleEl?.querySelector(".test-status-badge");
-
-            if (consoleEl) consoleEl.classList.remove("hidden");
-            if (resultsEl) resultsEl.value = "Sending diagnostic markdown alert via Telegram Bot API...\nWaiting for Telegram confirmation...";
-            if (badgeEl) {
-                badgeEl.className = "test-status-badge badge badge-info";
-                badgeEl.textContent = "Testing...";
-            }
-
-            const token = document.getElementById("setting-telegram-token")?.value.trim();
-            const chatId = document.getElementById("setting-telegram-chat-id")?.value.trim();
-
-            const payload = {
-                channel: "telegram",
-                telegram_token: token,
-                telegram_chat_id: chatId
-            };
-
-            try {
-                const res = await api.testChannel(payload);
-                if (resultsEl) {
-                    resultsEl.value = `Success: ${res.success}\nStatus Code: ${res.status_code || "N/A"}\n\nResponse Body:\n${res.response || res.error || "(Empty response)"}`;
-                }
-                if (badgeEl) {
-                    if (res.success) {
-                        badgeEl.className = "test-status-badge badge badge-success";
-                        badgeEl.textContent = "Success";
-                    } else {
-                        badgeEl.className = "test-status-badge badge badge-danger";
-                        badgeEl.textContent = "Failure";
-                    }
-                }
-            } catch (err) {
-                if (resultsEl) resultsEl.value = `Error: Connection check failed\n\nDetails:\n${err.message}`;
-                if (badgeEl) {
-                    badgeEl.className = "test-status-badge badge badge-danger";
-                    badgeEl.textContent = "Failure";
-                }
-            }
-        });
-    }
+    bindNotificationDiagnostics();
 
     const btnAddWebhookHeader = document.getElementById("btn-add-webhook-header");
     if (btnAddWebhookHeader) {
@@ -351,23 +248,20 @@ export function bindSettingsEvents(onReload) {
             e.preventDefault();
             if (!state.settingsData) return;
 
+            const slackEnabled = document.getElementById("setting-slack-enabled")?.checked;
+            const slackWebhookUrl = slackEnabled ? document.getElementById("setting-slack-webhook-url")?.value.trim() || "" : "";
             const webhookEnabled = document.getElementById("setting-webhook-enabled")?.checked;
-            const webhookFormat = document.getElementById("setting-webhook-format-select")?.value || "slack";
             let webhookUrl = "";
             let webhookHeaders = {};
 
             if (webhookEnabled) {
-                if (webhookFormat === "slack") {
-                    webhookUrl = document.getElementById("setting-webhook-url")?.value.trim() || "";
-                } else {
-                    webhookUrl = document.getElementById("setting-webhook-url-generic")?.value.trim() || "";
-                    const headerRows = document.querySelectorAll("#webhook-headers-list .webhook-header-row");
-                    headerRows.forEach(row => {
-                        const key = row.querySelector(".header-key")?.value.trim();
-                        const val = row.querySelector(".header-value")?.value.trim();
-                        if (key) webhookHeaders[key] = val;
-                    });
-                }
+                webhookUrl = document.getElementById("setting-webhook-url-generic")?.value.trim() || "";
+                const headerRows = document.querySelectorAll("#webhook-headers-list .webhook-header-row");
+                headerRows.forEach(row => {
+                    const key = row.querySelector(".header-key")?.value.trim();
+                    const val = row.querySelector(".header-value")?.value.trim();
+                    if (key) webhookHeaders[key] = val;
+                });
             }
 
             const telegramEnabled = document.getElementById("setting-telegram-enabled-chk")?.checked;
@@ -376,8 +270,9 @@ export function bindSettingsEvents(onReload) {
 
             const payload = {
                 ...state.settingsData,
+                slack_webhook_url: slackWebhookUrl,
                 webhook_url:      webhookUrl,
-                webhook_format:   webhookFormat,
+                webhook_format:   "generic",
                 webhook_headers:  webhookHeaders,
                 telegram_enabled: telegramEnabled,
                 telegram_token:   telegramToken,

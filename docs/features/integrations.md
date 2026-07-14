@@ -17,6 +17,7 @@ FlowGuard Lite can ingest alerts from a Suricata intrusion detection system:
 ## 2. Outbound Alert Webhooks
 
 When an anomaly is detected, FlowGuard Lite dispatches notifications.
+Configure Slack/Discord, Generic Webhook, and Telegram independently under Settings. Notification rules then choose one or more channel targets.
 
 ### Supported Webhook Formats
 
@@ -53,7 +54,7 @@ Sends a raw JSON object detailing the event for third-party scripts.
 
 ### Custom Webhook Headers
 
-Outbound webhook requests can include custom authentication headers configured from the Settings UI, `config.yaml`, or the `FLOWGUARD_WEBHOOK_HEADERS` JSON environment override. Common examples are `Authorization: Bearer ...` or `X-Webhook-Token: ...`.
+Generic outbound webhook requests can include custom authentication headers configured from the Settings UI, `config.yaml`, or the `FLOWGUARD_WEBHOOK_HEADERS` JSON environment override. Common examples are `Authorization: Bearer ...` or `X-Webhook-Token: ...`.
 
 Header values are treated as secrets in runtime logging. FlowGuard Lite logs only whether a webhook is configured and how many custom headers are active.
 

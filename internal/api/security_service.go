@@ -159,7 +159,7 @@ func (q securityQueryService) BuildSummary(ctx context.Context) (SecuritySummary
 			"ddos":               "enabled",
 			"suricata":           configuredStatus(q.cfg.SuricataEvePath != ""),
 			"unifi_siem":         configuredStatus(q.cfg.UniFiSyslogEnabled),
-			"notifications":      configuredStatus(q.cfg.TelegramEnabled || q.cfg.WebhookURL != ""),
+			"notifications":      configuredStatus(q.cfg.TelegramEnabled || q.cfg.SlackWebhookURL != "" || q.cfg.WebhookURL != ""),
 		},
 		DDoSThresholds: map[string]int{
 			"pps":  q.cfg.DDoSThresholdPPS,
@@ -170,7 +170,7 @@ func (q securityQueryService) BuildSummary(ctx context.Context) (SecuritySummary
 			"icmp": q.cfg.ICMPFloodThresholdPPS,
 		},
 		SuricataConfigured:     q.cfg.SuricataEvePath != "",
-		NotificationConfigured: q.cfg.TelegramEnabled || q.cfg.WebhookURL != "",
+		NotificationConfigured: q.cfg.TelegramEnabled || q.cfg.SlackWebhookURL != "" || q.cfg.WebhookURL != "",
 		UniFiConfigured:        q.cfg.UniFiSyslogEnabled,
 		TopRiskDevices:         topRisks,
 		RecentHighAlerts:       recentHigh,
