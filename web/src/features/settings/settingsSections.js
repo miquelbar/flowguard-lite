@@ -20,6 +20,7 @@ export function getSettingsSectionLabel(sec) {
         storage: "Storage & Retention",
         thresholds: "Detection Thresholds",
         notifications: "Notifications & Routing",
+        integrations: "Router Integrations",
         system: "System Settings"
     };
     return labels[sec] || sec;

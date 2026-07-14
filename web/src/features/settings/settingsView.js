@@ -310,6 +310,23 @@ export function bindSettingsEvents(onReload) {
         });
     }
 
+    // Integrations guide tabs switching
+    const integrationCard = document.getElementById("settings-integrations");
+    if (integrationCard) {
+        integrationCard.querySelectorAll(".integration-tabs .tab-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                integrationCard.querySelectorAll(".integration-tabs .tab-btn").forEach(t => t.classList.remove("active"));
+                btn.classList.add("active");
+                integrationCard.querySelectorAll(".integration-guide-content").forEach(g => g.classList.add("hidden"));
+                const targetGuide = btn.getAttribute("data-guide");
+                const targetEl = document.getElementById(`guide-${targetGuide}`);
+                if (targetEl) {
+                    targetEl.classList.remove("hidden");
+                }
+            });
+        });
+    }
+
     // Navigation section links
     document.querySelectorAll(".settings-nav .settings-nav-link").forEach(link => {
         link.addEventListener("click", (e) => {

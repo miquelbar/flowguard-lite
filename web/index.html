@@ -1541,17 +1541,85 @@
                     <!-- 8. Integrations -->
                     <section id="settings-integrations" class="settings-card hidden">
                         <div class="settings-card-header">
-                            <h3>Integrations</h3>
-                            <p>Router exporter setup references and documentation</p>
+                            <h3>Router & SIEM Integrations</h3>
+                            <p>Guides and configuration templates to connect your network devices</p>
                         </div>
                         <div class="settings-guide-panel">
-                            <p class="text-muted">Integrate FlowGuard Lite with your edge networking equipment using the linked guides:</p>
-                            <ul class="settings-guide-list">
-                                <li><a href="https://github.com/miquelbar/flowguard-lite/blob/main/docs/collectors/unifi.md" target="_blank" class="external-link">UniFi IPFIX/NetFlow Setup Guide</a></li>
-                                <li><a href="https://github.com/miquelbar/flowguard-lite/blob/main/docs/collectors/mikrotik.md" target="_blank" class="external-link">MikroTik Traffic-Flow Setup Guide</a></li>
-                                <li><a href="https://github.com/miquelbar/flowguard-lite/blob/main/docs/collectors/pfsense.md" target="_blank" class="external-link">OPNsense / pfSense NetFlow Exporter Guide</a></li>
-                                <li><a href="https://github.com/miquelbar/flowguard-lite/blob/main/docs/collectors/suricata.md" target="_blank" class="external-link">Suricata EVE JSON Alert Guide</a></li>
-                            </ul>
+                            <div class="integration-tabs">
+                                <button type="button" class="tab-btn active" data-guide="unifi">Ubiquiti UniFi</button>
+                                <button type="button" class="tab-btn" data-guide="mikrotik">MikroTik RouterOS</button>
+                                <button type="button" class="tab-btn" data-guide="opnsense">OPNsense / pfSense</button>
+                                <button type="button" class="tab-btn" data-guide="suricata">Suricata IDS</button>
+                            </div>
+
+                            <div id="guide-unifi" class="integration-guide-content">
+                                <h4>Ubiquiti UniFi Setup</h4>
+                                <p class="guide-intro text-muted">Depending on your UniFi Gateway model, choose the appropriate integration path:</p>
+
+                                <h5 class="guide-subheading">Path A: SIEM / Activity Logging (Recommended for Cloud Gateways)</h5>
+                                <ol class="guide-steps">
+                                    <li>Navigate to <strong>Settings > CyberSecure > Traffic Logging</strong> in the UniFi Controller.</li>
+                                    <li>Enable <strong>Activity Logging (Syslog)</strong>.</li>
+                                    <li>Set the <strong>SIEM Server IP</strong> to this FlowGuard host's IP address.</li>
+                                    <li>Set the <strong>Port</strong> to <code>514</code> (mapped to FlowGuard's <code>5514</code> container port).</li>
+                                    <li>Enable categories like <em>Critical</em>, <em>Devices</em>, and <em>Security Detections</em>.</li>
+                                </ol>
+
+                                <h5 class="guide-subheading">Path B: NetFlow / IPFIX Exporter</h5>
+                                <ol class="guide-steps">
+                                    <li>Go to <strong>Settings > Networks > Global Network Settings</strong>.</li>
+                                    <li>Find the <strong>NetFlow</strong> or <strong>Flow Export</strong> section.</li>
+                                    <li>Set the collector target to this host's IP address and port <code>2055</code>.</li>
+                                </ol>
+                            </div>
+
+                            <div id="guide-mikrotik" class="integration-guide-content hidden">
+                                <h4>MikroTik RouterOS Setup</h4>
+                                <p class="guide-intro text-muted">Run the following commands in the RouterOS terminal to enable Traffic-Flow (NetFlow v9):</p>
+                                <pre class="code-block"><code>/ip traffic-flow target
+add address=[FLOWGUARD_IP] port=2055 version=9 v9-template-timeout=1m v9-template-entries=20
+
+/ip traffic-flow
+set enabled=yes</code></pre>
+                                <p class="guide-note">Replace <code>[FLOWGUARD_IP]</code> with the IP address of the machine running FlowGuard Lite.</p>
+                            </div>
+
+                            <div id="guide-opnsense" class="integration-guide-content hidden">
+                                <h4>OPNsense & pfSense NetFlow Setup</h4>
+                                <h5 class="guide-subheading">OPNsense Steps</h5>
+                                <ol class="guide-steps">
+                                    <li>Navigate to <strong>Reporting > NetFlow</strong>.</li>
+                                    <li>In the <strong>Listening Interfaces</strong> list, select your LAN/WAN interfaces.</li>
+                                    <li>In the <strong>WAN Interfaces</strong> list, select your active WAN interface.</li>
+                                    <li>Set the <strong>Capture Target</strong> to <code>[FLOWGUARD_IP]:2055</code>.</li>
+                                    <li>Click <strong>Apply</strong> to start the NetFlow service.</li>
+                                </ol>
+
+                                <h5 class="guide-subheading">pfSense Steps</h5>
+                                <ol class="guide-steps">
+                                    <li>Install the <strong>softflowd</strong> package via the Package Manager.</li>
+                                    <li>Navigate to <strong>Services > Softflowd</strong>.</li>
+                                    <li>Select the interfaces to monitor (e.g. LAN).</li>
+                                    <li>Set the <strong>Host/Port</strong> to this host's IP address and port <code>2055</code>.</li>
+                                    <li>Set the <strong>NetFlow Version</strong> to <code>9</code>.</li>
+                                </ol>
+                            </div>
+
+                            <div id="guide-suricata" class="integration-guide-content hidden">
+                                <h4>Suricata IDS Integration</h4>
+                                <p class="guide-intro text-muted">Configure Suricata's <code>suricata.yaml</code> configuration file to export the <code>eve.json</code> log file:</p>
+                                <pre class="code-block"><code>outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: eve.json
+      types:
+        - alert:
+            payload: no
+            packet: no
+            metadata: yes</code></pre>
+                                <p class="guide-note">Once configured, input the path to the <code>eve.json</code> file inside FlowGuard's <strong>Collectors Setup</strong> settings to correlate IDS alerts with network traffic.</p>
+                            </div>
                         </div>
                     </section>
 
