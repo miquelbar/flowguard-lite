@@ -111,7 +111,7 @@ Then open `http://localhost:8080`.
 
 ## Visual Preview
 
-Screenshots are not checked into the repository yet. For now, the fastest way to inspect the UI is to run the deterministic demo seed above and open the web console.
+![FlowGuard Lite Overview dashboard with seeded demo data](docs/assets/screenshots/overview.png)
 
 The seeded console includes populated Overview, Traffic, Devices, Alerts, Policies, Notifications, Audit, and Settings views so reviewers are not greeted by empty tables.
 
