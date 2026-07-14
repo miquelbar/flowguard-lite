@@ -216,6 +216,13 @@ export async function testNotificationRule(id) {
     return true;
 }
 
+export async function testChannel(payload) {
+    const resp = await sendJSON("/api/settings/test-channel", payload, {
+        errorMessage: "Channel test connection failed"
+    });
+    return await resp.json();
+}
+
 export async function fetchDeviceProfile(ip) {
     return await getJSON(`/api/devices/${ip}`, "Failed to load device identity profile");
 }

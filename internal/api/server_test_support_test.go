@@ -283,4 +283,3 @@ func (m *MockFlowRepository) GetUniFiEventsForIP(ctx context.Context, ip string,
 	}
 	return res, m.Err
 }
-

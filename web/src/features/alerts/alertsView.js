@@ -1,11 +1,15 @@
 import { state } from '../../app/state.js';
-import { formatTime } from '../../lib/format.js';
+import { formatTime, escapeHtml } from '../../lib/format.js';
 import * as api from '../../lib/api.js';
 import { openFirewallModal } from '../devices/firewallModal.js';
-import { deviceIPCell } from '../../lib/deviceLinks.js';
+import { openPolicyModal } from '../policies/policyModal.js';
+import { isKnownDeviceIP } from '../../lib/deviceLinks.js';
 import { renderTableMessage } from '../../components/ui/states.js';
 import { bindSplitPaneClose } from '../../components/layout/splitPane.js';
 import { focusFirstVisibleOnMobile } from '../../components/ui/focus.js';
+import { appendSearchToken, bindClickableFilters, captureClickableFilterFocus, restoreClickableFilterFocus, triggerEvent } from '../../lib/filter.js';
+
+let lastFilterFocus = null;
 
 export function renderAnomalies() {
     const tblAnomalies = document.getElementById("tbl-anomalies").querySelector("tbody");
@@ -26,10 +30,15 @@ export function renderAnomalies() {
         if (state.activeTriageFilter !== "all" && anom.status !== state.activeTriageFilter) return false;
         if (severityFilter !== "all" && anom.severity !== severityFilter) return false;
         if (searchQuery !== "") {
-            const ipMatch = anom.ip.toLowerCase().includes(searchQuery);
-            const typeMatch = anom.type.toLowerCase().includes(searchQuery);
-            const descMatch = anom.description.toLowerCase().includes(searchQuery);
-            if (!ipMatch && !typeMatch && !descMatch) return false;
+            const tokens = searchQuery.split(/\s+/);
+            const matchesAll = tokens.every(token => {
+                return anom.ip.toLowerCase().includes(token) ||
+                       anom.type.toLowerCase().includes(token) ||
+                       anom.description.toLowerCase().includes(token) ||
+                       anom.severity.toLowerCase().includes(token) ||
+                       anom.status.toLowerCase().includes(token);
+            });
+            if (!matchesAll) return false;
         }
         return true;
     });
@@ -39,18 +48,24 @@ export function renderAnomalies() {
         return;
     }
 
-    tblAnomalies.innerHTML = filtered.map(anom => {
+    tblAnomalies.innerHTML = filtered.map((anom, idx) => {
         const badgeClass = anom.severity === "high" ? "badge-high" : (anom.severity === "medium" ? "badge-medium" : "badge-low");
         const statusClass = `status-${anom.status}`;
         const isSelected = state.selectedAnomalyId === anom.id.toString();
+        const ipSafe = escapeHtml(anom.ip || "-");
+        const ipHtml = `<span tabindex="0" role="button" class="clickable-filter alert-filter-ip" data-val="${ipSafe}" data-col="ip" data-row-idx="${idx}" title="Click to filter by IP: ${ipSafe}">${ipSafe}</span>` +
+            (anom.ip && isKnownDeviceIP(anom.ip) ? ` <a href="#/devices/${encodeURIComponent(anom.ip)}" class="device-profile-link" title="Go to Device Profile" aria-label="Go to Device Profile for ${ipSafe}">↗</a>` : "");
+        const typeHtml = `<span tabindex="0" role="button" class="badge ${badgeClass} clickable-filter alert-filter-type" data-val="${escapeHtml(anom.type)}" data-col="type" data-row-idx="${idx}" title="Click to filter by Type: ${escapeHtml(anom.type)}">${escapeHtml(anom.type)}</span>`;
+        const severityHtml = `<span tabindex="0" role="button" class="clickable-filter alert-filter-severity" data-val="${escapeHtml(anom.severity)}" data-col="severity" data-row-idx="${idx}" title="Click to filter by Severity: ${escapeHtml(anom.severity)}"><span class="sev-dot sev-${anom.severity}"></span>${escapeHtml(anom.severity)}</span>`;
+        const statusHtml = `<span tabindex="0" role="button" class="clickable-filter alert-filter-status" data-val="${escapeHtml(anom.status)}" data-col="status" data-row-idx="${idx}" title="Click to filter by Status: ${escapeHtml(anom.status)}"><span class="${statusClass}">${escapeHtml(anom.status)}</span></span>`;
         
         return `
-            <tr class="anomaly-row ${isSelected ? 'selected' : ''}" data-id="${anom.id}" style="cursor: pointer;">
-                <td class="font-semibold">${deviceIPCell(anom.ip)}</td>
-                <td><span class="badge ${badgeClass}">${anom.type}</span></td>
-                <td style="text-transform: capitalize;"><span class="sev-dot sev-${anom.severity}"></span>${anom.severity}</td>
+            <tr class="anomaly-row severity-${anom.severity} ${isSelected ? 'selected' : ''}" data-id="${anom.id}" style="cursor: pointer;">
+                <td class="font-semibold">${ipHtml}</td>
+                <td>${typeHtml}</td>
+                <td style="text-transform: capitalize;">${severityHtml}</td>
                 <td>${formatTime(anom.created_at)}</td>
-                <td><span class="${statusClass}">${anom.status}</span></td>
+                <td>${statusHtml}</td>
                 <td class="text-center">
                     <button class="btn-secondary btn-select-anomaly" data-id="${anom.id}" aria-label="Select alert ${anom.id} for ${anom.ip}">Select</button>
                 </td>
@@ -60,7 +75,7 @@ export function renderAnomalies() {
 
     tblAnomalies.querySelectorAll("tr").forEach(row => {
         row.addEventListener("click", (e) => {
-            if (e.target.tagName === "BUTTON" || e.target.tagName === "A") return;
+            if (e.target.tagName === "BUTTON" || e.target.tagName === "A" || e.target.closest(".clickable-filter")) return;
             const id = row.getAttribute("data-id");
             if (id) selectAnomaly(id);
         });
@@ -72,6 +87,27 @@ export function renderAnomalies() {
             selectAnomaly(id);
         });
     });
+
+    bindClickableFilters(tblAnomalies, ({ col, val }) => {
+        lastFilterFocus = captureClickableFilterFocus();
+        if (col === "ip" || col === "type") {
+            const searchInput = document.getElementById("search-anomalies");
+            appendSearchToken(searchInput, val);
+            triggerEvent(searchInput, "input");
+        } else if (col === "severity") {
+            const severitySelect = document.getElementById("filter-anomalies-severity");
+            if (severitySelect) {
+                severitySelect.value = val;
+                triggerEvent(severitySelect, "change");
+            }
+        } else if (col === "status") {
+            const btn = document.querySelector(`.triage-filter-btn[data-filter="${val}"]`);
+            if (btn) btn.click();
+        }
+    });
+
+    restoreClickableFilterFocus(tblAnomalies, lastFilterFocus);
+    lastFilterFocus = null;
 }
 
 export function selectAnomaly(id) {
@@ -110,19 +146,19 @@ export function selectAnomaly(id) {
     const badgeClass = anom.severity === "high" ? "badge-high" : (anom.severity === "medium" ? "badge-medium" : "badge-low");
     if (anomalyDetailBadgeContainer) {
         anomalyDetailBadgeContainer.innerHTML = `<span class="badge ${badgeClass}">${anom.severity.toUpperCase()}</span>`;
-    }
-
-    if (anomalyDetailActions) {
+    }    if (anomalyDetailActions) {
         let buttonsHtml = "";
         if (anom.status === "active") {
             buttonsHtml = `
                 <button class="btn-secondary btn-triage btn-ack" data-id="${anom.id}" data-action="acknowledged" aria-label="Acknowledge alert ${anom.id}">Acknowledge</button>
                 <button class="btn-secondary btn-triage btn-silence" data-id="${anom.id}" data-action="silenced" aria-label="Silence alert ${anom.id}">Silence</button>
+                <button class="btn-secondary btn-suppress-alert" data-id="${anom.id}" aria-label="Suppress alert ${anom.id}">Suppress Alert</button>
                 <button class="btn-secondary btn-block-rules" data-ip="${anom.ip}" aria-label="Generate firewall template for ${anom.ip}">Firewall Template</button>
             `;
         } else {
             buttonsHtml = `
                 <button class="btn-secondary btn-triage btn-reactivate" data-id="${anom.id}" data-action="active" aria-label="Reactivate alert ${anom.id}">Reactivate</button>
+                <button class="btn-secondary btn-suppress-alert" data-id="${anom.id}" aria-label="Suppress alert ${anom.id}">Suppress Alert</button>
                 <button class="btn-secondary btn-block-rules" data-ip="${anom.ip}" aria-label="Generate firewall template for ${anom.ip}">Firewall Template</button>
             `;
         }
@@ -140,6 +176,12 @@ export function selectAnomaly(id) {
                 } catch (err) {
                     window.showToast(err.message, "error");
                 }
+            });
+        });
+
+        anomalyDetailActions.querySelectorAll(".btn-suppress-alert").forEach(btn => {
+            btn.addEventListener("click", () => {
+                openPolicyModal({ ip: anom.ip, category: anom.type });
             });
         });
 

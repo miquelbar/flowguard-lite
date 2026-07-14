@@ -1,7 +1,7 @@
 import { state } from '../../app/state.js';
 import { renderErrorState } from '../../components/ui/states.js';
 import { markUnsaved, syncActiveSettingsSectionFromState, switchSettingsSection } from './settingsSections.js';
-import { renderWebhookHeaders, setNotifChannelFields, updateTelegramUrlPreview } from './settingsNotifications.js';
+import { renderWebhookHeaders, syncNotificationFields, updateTelegramUrlPreview } from './settingsNotifications.js';
 
 export function renderSettingsView() {
     if (state.settingsError) {
@@ -79,23 +79,19 @@ export function renderSettingsView() {
 
     if (noUnsaved("notifications")) {
         const d = state.settingsData;
-        // Derive channel type from stored config:
-        // telegram_enabled -> telegram; webhook_format==slack -> slack; else -> webhook
-        let channelType = "webhook";
-        if (d.telegram_enabled) {
-            channelType = "telegram";
-        } else if (d.webhook_format === "slack") {
-            channelType = "slack";
-        }
-        setVal("setting-channel-type", channelType);
-        setNotifChannelFields(channelType);
 
+        setChecked("setting-webhook-enabled", Boolean(d.webhook_url));
+        setVal("setting-webhook-format-select", d.webhook_format || "slack");
         setVal("setting-webhook-url", d.webhook_url || "");
         setVal("setting-webhook-url-generic", d.webhook_url || "");
+        renderWebhookHeaders(d.webhook_headers || {});
+
+        setChecked("setting-telegram-enabled-chk", Boolean(d.telegram_enabled));
         setVal("setting-telegram-token", d.telegram_token || "");
         setVal("setting-telegram-chat-id", d.telegram_chat_id || "");
         updateTelegramUrlPreview(d.telegram_token || "");
-        renderWebhookHeaders(d.webhook_headers || {});
+
+        syncNotificationFields();
     }
 
     if (noUnsaved("system")) {

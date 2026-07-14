@@ -25,7 +25,7 @@ func TestStress_QueueOverflowAndDrops(t *testing.T) {
 	cfg := &config.Config{
 		NetflowPort:           12085,
 		SflowPort:             0,
-		UniFiSyslogEnabled:   true,
+		UniFiSyslogEnabled:    true,
 		UniFiSyslogPort:       5544,
 		UniFiSyslogAllowedIPs: []string{"127.0.0.1/32"},
 		LogLevel:              "debug",
@@ -84,7 +84,7 @@ func TestStress_QueueOverflowAndDrops(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // Allow queue processing to digest as much as possible
 
 	stats := c.GetStats()
-	t.Logf("Stress test completed. Received: %d, Drops/Overload: %d, Decoded successfully: %d", 
+	t.Logf("Stress test completed. Received: %d, Drops/Overload: %d, Decoded successfully: %d",
 		stats.PacketsReceived, stats.PacketsDropped, len(proc.GetEvents()))
 }
 
@@ -93,7 +93,7 @@ func TestStress_GracefulShutdownDraining(t *testing.T) {
 	cfg := &config.Config{
 		NetflowPort:           12095,
 		SflowPort:             0,
-		UniFiSyslogEnabled:   true,
+		UniFiSyslogEnabled:    true,
 		UniFiSyslogPort:       5554,
 		UniFiSyslogAllowedIPs: []string{"127.0.0.1/32"},
 		LogLevel:              "debug",
@@ -184,7 +184,7 @@ func TestStress_AnomalyCallbackOverhead(t *testing.T) {
 		StdDevPeers:   1,
 	})
 	_ = baseEngine.LoadBaselines(context.Background())
-	
+
 	// Create 5,000 flows representing a massive port scan and high-volume surge to trigger engine evaluation
 	eventsCount := 5000
 	batch := make([]flow.FlowEvent, eventsCount)

@@ -13,7 +13,7 @@ func (r *Repository) SaveUniFiEvent(ctx context.Context, e *UniFiEvent) error {
 	defer r.mu.Unlock()
 
 	tsStr := e.Timestamp.Format(time.RFC3339)
-	
+
 	attrBytes, err := json.Marshal(e.Attributes)
 	if err != nil {
 		return fmt.Errorf("failed to marshal UniFi event attributes: %w", err)

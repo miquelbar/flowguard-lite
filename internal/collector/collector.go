@@ -57,19 +57,16 @@ type FlowCollector struct {
 	processor flow.FlowProcessor
 	repo      storage.StorageRepository
 
-	// UDP Listeners
 	nfConn *net.UDPConn
 	sfConn *net.UDPConn
 	usConn *net.UDPConn
 
-	// Concurrency & Queues
 	rawPacketsChan chan *rawPacket
 	syslogChan     chan *syslogDatagram
 	wg             sync.WaitGroup
 	ctx            context.Context
 	cancel         context.CancelFunc
 
-	// Exporter registry and stats
 	exportersMu sync.RWMutex
 	exporters   map[string]*ExporterMetadata
 
@@ -110,10 +107,10 @@ func NewFlowCollector(cfg *config.Config, logger *slog.Logger, processor flow.Fl
 	}
 
 	return &FlowCollector{
-		cfg:            cfg,
-		logger:         logger,
-		processor:      processor,
-		repo:           repo,
+		cfg:       cfg,
+		logger:    logger,
+		processor: processor,
+		repo:      repo,
 
 		rawPacketsChan: make(chan *rawPacket, 5000), // Buffer to handle bursts without blocking UDP stack
 		syslogChan:     make(chan *syslogDatagram, defaultUniFiSyslogQueueSize),

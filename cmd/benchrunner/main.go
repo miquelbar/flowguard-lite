@@ -17,14 +17,14 @@ import (
 )
 
 type SystemMetadata struct {
-	Timestamp   string `json:"timestamp"`
-	OS          string `json:"os"`
+	Timestamp    string `json:"timestamp"`
+	OS           string `json:"os"`
 	Architecture string `json:"architecture"`
-	CPU         string `json:"cpu"`
-	RAM         string `json:"ram"`
-	GoVersion   string `json:"go_version"`
-	DockerMode  bool   `json:"docker_mode"`
-	GitCommit   string `json:"git_commit"`
+	CPU          string `json:"cpu"`
+	RAM          string `json:"ram"`
+	GoVersion    string `json:"go_version"`
+	DockerMode   bool   `json:"docker_mode"`
+	GitCommit    string `json:"git_commit"`
 }
 
 type BenchmarkResult struct {
@@ -45,7 +45,7 @@ func main() {
 	flag.Parse()
 
 	fmt.Println("=== Starting FlowGuard Lite Benchmark Runner ===")
-	
+
 	// 1. Gather Metadata
 	meta := gatherMetadata()
 	fmt.Printf("System Metadata resolved:\n")
@@ -180,7 +180,7 @@ func isDocker() bool {
 func parseBenchmarkOutput(output string) []BenchmarkResult {
 	var results []BenchmarkResult
 	scanner := bufio.NewScanner(strings.NewReader(output))
-	
+
 	// Regex pattern: matches standard Go benchmark line
 	var benchRegex = regexp.MustCompile(`^(Benchmark\S+)\s+(\d+)\s+([\d\.]+)\s+ns/op(?:\s+(\d+)\s+B/op\s+(\d+)\s+allocs/op)?`)
 
@@ -191,7 +191,7 @@ func parseBenchmarkOutput(output string) []BenchmarkResult {
 			name := matches[1]
 			iters, _ := strconv.ParseInt(matches[2], 10, 64)
 			ns, _ := strconv.ParseFloat(matches[3], 64)
-			
+
 			var bytes int64
 			var allocs int64
 			if len(matches) >= 6 && matches[4] != "" {
@@ -239,7 +239,7 @@ func writeReports(report Report, suffix string) error {
 	// 2. Write Markdown
 	mdPath := filepath.Join(dir, mdName)
 	var md bytes.Buffer
-	
+
 	md.WriteString("# FlowGuard Lite Performance Benchmark Report\n\n")
 	md.WriteString(fmt.Sprintf("Generated on: `%s`  \n", report.Metadata.Timestamp))
 	md.WriteString(fmt.Sprintf("Git Commit:   `%s`  \n", report.Metadata.GitCommit))
@@ -256,12 +256,12 @@ func writeReports(report Report, suffix string) error {
 	md.WriteString("## Benchmark Run Summary\n\n")
 	md.WriteString("| Benchmark Target | Iterations | Speed (ns/op) | Allocations (B/op) | Allocations (count/op) |\n")
 	md.WriteString("| --- | --- | --- | --- | --- |\n")
-	
+
 	for _, b := range report.Benchmarks {
-		md.WriteString(fmt.Sprintf("| %s | %d | %.2f | %d | %d |\n", 
+		md.WriteString(fmt.Sprintf("| %s | %d | %.2f | %d | %d |\n",
 			b.Name, b.Iterations, b.NsPerOp, b.BytesPerOp, b.AllocsPerOp))
 	}
-	
+
 	md.WriteString("\n---\n*Report generated automatically by FlowGuard Lite benchmark runner.*\n")
 
 	err = os.WriteFile(mdPath, md.Bytes(), 0644)

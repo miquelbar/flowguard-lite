@@ -199,6 +199,114 @@
     flex: 1 1 120px;
 }
 
+.settings-toggle-inline {
+    margin: 0;
+}
+
+.settings-channel-config {
+    margin-top: 1rem;
+}
+
+.settings-subsection-separated {
+    border-top: 1px solid var(--border-color);
+    padding-top: 1.25rem;
+    margin-top: 1.25rem;
+}
+
+.settings-actions-spaced {
+    margin-top: 1.25rem;
+}
+
+.settings-actions-footer {
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+    padding-top: 1.25rem;
+}
+
+.settings-actions-compact {
+    border-top: none;
+    padding-top: 0;
+    margin-top: 0.5rem;
+}
+
+.settings-action-row {
+    margin-top: 0.75rem;
+}
+
+.btn-settings-primary {
+    width: auto;
+    min-width: 180px;
+}
+
+.form-help-block {
+    margin-top: 0.25rem;
+    margin-bottom: 0.75rem;
+}
+
+.file-input-spaced {
+    padding: 0.35rem 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.diagnostic-console,
+.import-preview-panel {
+    margin-top: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.75rem;
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.diagnostic-console-title {
+    margin: 0 0 0.5rem;
+    font-size: 0.82rem;
+    display: flex;
+    justify-content: space-between;
+}
+
+.diagnostic-console-output {
+    font-family: monospace;
+    font-size: 0.75rem;
+    height: 80px;
+    resize: none;
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.import-preview-panel {
+    margin-top: 1rem;
+}
+
+.import-preview-title {
+    margin: 0 0 0.5rem;
+    font-size: 0.875rem;
+}
+
+.import-preview-summary {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+}
+
+.import-preview-list {
+    margin: 0;
+    padding-left: 1.15rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.import-preview-warning {
+    font-size: 0.75rem;
+    margin-bottom: 0.75rem;
+    border-left: 2px solid var(--warning-color);
+    padding-left: 0.5rem;
+    line-height: 1.4;
+}
+
+.policy-dialog {
+    max-width: 500px;
+}
+
 .btn-danger-soft {
     background-color: rgba(244, 63, 94, 0.1);
     border-color: rgba(244, 63, 94, 0.2);

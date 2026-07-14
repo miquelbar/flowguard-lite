@@ -40,7 +40,7 @@ type DeviceProfiler struct {
 	lookupChan chan string
 }
 
-// NewDeviceProfiler instantiates a new DeviceProfiler agent.
+// NewDeviceProfiler instantiates a new DeviceProfiler component.
 func NewDeviceProfiler(
 	repo storage.DeviceRepository,
 	logger *slog.Logger,
@@ -77,7 +77,7 @@ func NewDeviceProfiler(
 
 // Start launches the background worker pool for reverse DNS resolution.
 func (p *DeviceProfiler) Start() {
-	p.logger.Info("Starting Device Profiler agent...")
+	p.logger.Info("Starting Device Profiler...")
 
 	// Spawn 3 background DNS lookup worker threads
 	for i := 0; i < 3; i++ {

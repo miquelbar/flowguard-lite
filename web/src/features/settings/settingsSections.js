@@ -8,7 +8,7 @@ export function syncActiveSettingsSectionFromState() {
 }
 
 export function normalizeSettingsSection(section) {
-    const allowed = new Set(["access", "network", "collectors", "storage", "thresholds", "notifications", "integrations", "system"]);
+    const allowed = new Set(["access", "network", "collectors", "storage", "thresholds", "notifications", "integrations", "system", "backup"]);
     return allowed.has(section) ? section : "access";
 }
 
@@ -21,7 +21,8 @@ export function getSettingsSectionLabel(sec) {
         thresholds: "Detection Thresholds",
         notifications: "Notifications & Routing",
         integrations: "Router Integrations",
-        system: "System Settings"
+        system: "System Settings",
+        backup: "Backup & Portability"
     };
     return labels[sec] || sec;
 }

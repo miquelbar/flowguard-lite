@@ -73,40 +73,40 @@ func (m *mockRepository) Close() error {
 func TestFlowEventGenerator(t *testing.T) {
 	gen1 := NewFlowEventGenerator(42)
 	gen2 := NewFlowEventGenerator(42)
-	
+
 	now := time.Now()
-	
+
 	// Test determinism
 	small1 := gen1.GenerateSmallOffice(10, now)
 	small2 := gen2.GenerateSmallOffice(10, now)
-	
+
 	if len(small1) != 10 || len(small2) != 10 {
 		t.Fatalf("expected 10 events, got %d and %d", len(small1), len(small2))
 	}
-	
+
 	for i := 0; i < 10; i++ {
 		if small1[i].SrcIP != small2[i].SrcIP || small1[i].DstIP != small2[i].DstIP ||
 			small1[i].SrcPort != small2[i].SrcPort || small1[i].DstPort != small2[i].DstPort {
 			t.Errorf("determinism failed at index %d: %+v vs %+v", i, small1[i], small2[i])
 		}
 	}
-	
+
 	// Test different profiles
 	busy := gen1.GenerateBusyOffice(20, now)
 	if len(busy) != 20 {
 		t.Errorf("expected 20 busy office events, got %d", len(busy))
 	}
-	
+
 	lab := gen1.GenerateHighFlowLab(30, now)
 	if len(lab) != 30 {
 		t.Errorf("expected 30 high flow lab events, got %d", len(lab))
 	}
-	
+
 	ddos := gen1.GenerateDDoSAttack(15, now, "192.168.1.100")
 	if len(ddos) != 15 {
 		t.Errorf("expected 15 DDoS events, got %d", len(ddos))
 	}
-	
+
 	for _, e := range ddos {
 		if e.DstIP != "192.168.1.100" {
 			t.Errorf("expected target DstIP 192.168.1.100, got %s", e.DstIP)
@@ -155,7 +155,7 @@ func TestUDPGenerators_Integration(t *testing.T) {
 	cfg := &config.Config{
 		NetflowPort:           12075,
 		SflowPort:             0,
-		UniFiSyslogEnabled:   true,
+		UniFiSyslogEnabled:    true,
 		UniFiSyslogPort:       5534,
 		UniFiSyslogAllowedIPs: []string{"127.0.0.1/32"},
 		LogLevel:              "debug",
@@ -165,7 +165,7 @@ func TestUDPGenerators_Integration(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	proc := &mockProcessor{}
 	mockRepo := &mockRepository{}
-	
+
 	// Create the wrapper
 	repoWrapper := &testRepoWrapper{
 		mockRepository: mockRepo,
@@ -218,7 +218,7 @@ func TestUDPGenerators_Integration(t *testing.T) {
 	mockRepo.mu.Lock()
 	syslogCount := len(mockRepo.unifiEvents)
 	mockRepo.mu.Unlock()
-	
+
 	if syslogCount != 3 {
 		t.Errorf("expected 3 syslog events saved to repo, got %d", syslogCount)
 	}

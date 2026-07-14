@@ -1,0 +1,84 @@
+.clickable-filter {
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+    border-radius: 4px;
+    padding: 0.1rem 0.25rem;
+    display: inline-block;
+}
+
+.clickable-filter:hover {
+    text-decoration: underline solid;
+    color: var(--primary-color, #3f5f46);
+    background-color: rgba(63, 95, 70, 0.08);
+}
+
+.clickable-filter:focus-visible {
+    outline: 2px solid var(--primary-color, #3f5f46);
+    outline-offset: 1px;
+}
+
+.clickable-filter.badge {
+    text-decoration: none;
+}
+
+.clickable-filter.badge:hover {
+    text-decoration: none;
+    box-shadow: 0 0 0 2px rgba(63, 95, 70, 0.25);
+}
+
+.anomaly-row.severity-high td:first-child,
+.overview-alert-row.severity-high td:first-child {
+    border-left: 3px solid var(--danger-color);
+}
+
+.anomaly-row.severity-medium td:first-child,
+.overview-alert-row.severity-medium td:first-child {
+    border-left: 3px solid var(--warning-color);
+}
+
+.anomaly-row.severity-low td:first-child,
+.overview-alert-row.severity-low td:first-child {
+    border-left: 3px solid var(--success-color);
+}
+
+.sev-dot {
+    box-shadow: 0 0 5px currentColor;
+    transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.sev-dot.sev-high {
+    background-color: var(--danger-color);
+    box-shadow: 0 0 8px var(--danger-color);
+    animation: sev-pulse 2s infinite ease-in-out;
+}
+
+.sev-dot.sev-medium {
+    background-color: var(--warning-color);
+    box-shadow: 0 0 6px var(--warning-color);
+}
+
+.sev-dot.sev-low {
+    background-color: var(--success-color);
+    box-shadow: 0 0 4px var(--success-color);
+}
+
+@keyframes sev-pulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 6px var(--danger-color);
+        opacity: 0.85;
+    }
+    50% {
+        transform: scale(1.25);
+        box-shadow: 0 0 14px var(--danger-color);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 6px var(--danger-color);
+        opacity: 0.85;
+    }
+}

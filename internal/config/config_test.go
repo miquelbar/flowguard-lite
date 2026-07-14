@@ -387,4 +387,3 @@ storage_dir: "/tmp/data"
 		t.Errorf("expected normalized WebhookFormat 'generic', got %q", cfg.WebhookFormat)
 	}
 }
-

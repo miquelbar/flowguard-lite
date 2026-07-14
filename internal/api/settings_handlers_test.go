@@ -14,6 +14,12 @@ import (
 	"github.com/miquelbar/flowguard-lite/internal/config"
 )
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
+
 func TestHandleSettings(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "api_settings_test")
 	if err != nil {
@@ -213,5 +219,92 @@ func TestSettingsAPI_ValidationAndMasking(t *testing.T) {
 	// Assert the actual secret token was preserved (not overwritten by ******)
 	if cfg.TelegramToken != "secret-token-123" {
 		t.Errorf("Telegram token was overwritten by mask: %s", cfg.TelegramToken)
+	}
+}
+
+func TestHandleTestChannel(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "api_settings_test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	cfg := config.DefaultConfig()
+	cfg.TelegramToken = "stored-token-value"
+	cfg.TelegramChatID = "stored-chat-id"
+	cfg.WebhookHeaders = map[string]string{"Authorization": "Bearer stored-secret"}
+	cfg.WebhookURL = "https://hooks.example.test/flowguard"
+	cfg.WebhookFormat = "generic"
+
+	var seenRequests []*http.Request
+	server := &APIServer{
+		cfg:    cfg,
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		channelTester: NewNotificationChannelTester(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			seenRequests = append(seenRequests, req.Clone(req.Context()))
+			return &http.Response{
+				StatusCode: http.StatusAccepted,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"ok":true,"description":"mock-success"}`)),
+			}, nil
+		})}),
+		configPath: configPath,
+	}
+
+	runTestChannel := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/settings/test-channel", strings.NewReader(body))
+		w := httptest.NewRecorder()
+		server.handleTestChannel(w, req)
+		return w
+	}
+
+	bodySuccessWebhook := `{"channel":"webhook","webhook_url":"https://hooks.example.test/flowguard","webhook_format":"generic","webhook_headers":{"Authorization":"******"}}`
+	w := runTestChannel(bodySuccessWebhook)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var res TestChannelResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if !res.Success || res.StatusCode != http.StatusAccepted || !strings.Contains(res.Response, "mock-success") {
+		t.Errorf("webhook test failed: %+v", res)
+	}
+	if got := seenRequests[0].Header.Get("Authorization"); got != "Bearer stored-secret" {
+		t.Errorf("expected masked authorization header to be restored, got %q", got)
+	}
+
+	bodySuccessTelegramMock := `{"channel":"telegram","telegram_token":"******","telegram_chat_id":"-10012345"}`
+	w = runTestChannel(bodySuccessTelegramMock)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if !res.Success {
+		t.Fatalf("expected telegram diagnostic success through injected client, got %+v", res)
+	}
+	if len(seenRequests) < 2 || !strings.Contains(seenRequests[1].URL.String(), "botstored-token-value/sendMessage") {
+		t.Fatalf("expected Telegram request to use stored token, got requests: %+v", seenRequests)
+	}
+
+	bodyEmptyWebhook := `{"channel":"webhook","webhook_url":""}`
+	w = runTestChannel(bodyEmptyWebhook)
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if res.Success || res.Error != "Webhook URL must not be empty" {
+		t.Errorf("expected empty URL error, got: %+v", res)
+	}
+
+	bodyInvalidURL := `{"channel":"webhook","webhook_url":"ftp://not-http.invalid"}`
+	w = runTestChannel(bodyInvalidURL)
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if res.Success || res.Error != "Webhook URL must be a valid HTTP or HTTPS address" {
+		t.Errorf("expected invalid URL schema error, got: %+v", res)
 	}
 }

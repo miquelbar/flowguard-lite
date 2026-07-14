@@ -42,6 +42,7 @@ type APIServer struct {
 	profiler       *device.DeviceProfiler
 	ddosDetector   *ddos.DDoSDetector
 	webhookEngine  *webhook.WebhookEngine
+	channelTester  *NotificationChannelTester
 	configPath     string
 	authMu         sync.Mutex
 	sessions       map[string]authSession
@@ -100,6 +101,7 @@ func NewAPIServer(
 		profiler:       profiler,
 		ddosDetector:   ddosDetector,
 		webhookEngine:  webhookEngine,
+		channelTester:  NewNotificationChannelTester(http.DefaultClient),
 		configPath:     configPath,
 		sessions:       make(map[string]authSession),
 		loginAttempts:  make(map[string]loginAttempt),
@@ -130,7 +132,6 @@ func NewAPIServer(
 	mux.HandleFunc("GET /api/devices/{ip}/flows", s.handleGetDeviceFlows)
 	mux.HandleFunc("GET /api/devices/{ip}/unifi-events", s.handleGetDeviceUniFiEvents)
 
-
 	// Anomaly detection endpoints (Go 1.22+ wildcard patterns)
 	mux.HandleFunc("GET /api/anomalies", s.handleListAnomalies)
 	mux.HandleFunc("PUT /api/anomalies/{id}/status", s.handleUpdateAnomalyStatus)
@@ -145,7 +146,6 @@ func NewAPIServer(
 	mux.HandleFunc("GET /api/stats/heatmap", s.handleStatsHeatmap)
 	mux.HandleFunc("GET /api/stats/collector-health", s.handleStatsCollectorHealth)
 
-
 	// Security audit log endpoints (Go 1.22+ wildcard patterns)
 	mux.HandleFunc("GET /api/audit-logs", s.handleListAuditLogs)
 
@@ -156,6 +156,7 @@ func NewAPIServer(
 	mux.HandleFunc("GET /api/settings", s.handleGetSettings)
 	mux.HandleFunc("POST /api/settings", s.handlePostSettings)
 	mux.HandleFunc("POST /api/settings/test-alert", s.handleTestAlert)
+	mux.HandleFunc("POST /api/settings/test-channel", s.handleTestChannel)
 	mux.HandleFunc("GET /api/auth/status", s.handleAuthStatus)
 
 	// Policy configuration endpoints (Go 1.22+ wildcard patterns)

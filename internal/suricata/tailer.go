@@ -50,7 +50,7 @@ type Tailer struct {
 	alertDeduplicator map[string]time.Time
 }
 
-// NewTailer creates a new Suricata log tailing agent.
+// NewTailer creates a new Suricata log tailing worker.
 func NewTailer(
 	repo storage.DeviceRepository,
 	logger *slog.Logger,

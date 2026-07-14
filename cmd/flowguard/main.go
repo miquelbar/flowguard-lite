@@ -101,7 +101,6 @@ func main() {
 	// 8. Initialize Flow Collector, using the DDoS Detector as the flow entrypoint processor
 	coll := collector.NewFlowCollector(cfg, log, ddosDetector, repo)
 
-
 	if cfg.Environment != "production" {
 		coll.AddExporter("192.168.1.1", time.Now().Add(-12*time.Second), 45892)
 		coll.AddExporter("192.168.1.5", time.Now().Add(-5*time.Minute), 2341)

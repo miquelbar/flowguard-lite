@@ -293,10 +293,10 @@ func (r *Repository) QueryFlowAggregateRecords(ctx context.Context, start, end t
 
 	clauses := []string{"bucket_ts >= ?", "bucket_ts <= ?"}
 	args := []interface{}{start.Unix(), end.Unix()}
-	queryText := strings.TrimSpace(strings.ToLower(q))
-	if queryText != "" {
+	tokens := strings.Fields(strings.ToLower(q))
+	for _, token := range tokens {
 		clauses = append(clauses, "(lower(src_ip) LIKE ? OR lower(dst_ip) LIKE ?)")
-		like := "%" + queryText + "%"
+		like := "%" + token + "%"
 		args = append(args, like, like)
 	}
 	if protocol > 0 {

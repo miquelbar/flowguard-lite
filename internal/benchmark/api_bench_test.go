@@ -40,7 +40,7 @@ func BenchmarkAPI_Endpoints(b *testing.B) {
 	ip := "192.168.1.100"
 	_ = sqliteRepo.UpsertDevice(context.Background(), ip, "test-device", now)
 	riskEngine := risk.NewRiskEngine(sqliteRepo)
-	
+
 	cfg := config.DefaultConfig()
 	// Disable auth checking for benchmarks by keeping AdminPasswordHash empty
 	cfg.AdminPasswordHash = ""

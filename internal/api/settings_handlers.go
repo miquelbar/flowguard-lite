@@ -427,3 +427,30 @@ func equalStringSlices(a, b []string) bool {
 	}
 	return true
 }
+
+// handleTestChannel synchronously tests a Slack/Telegram/generic Webhook channel and returns the remote response.
+func (s *APIServer) handleTestChannel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, s.logger, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var payload TestChannelPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeError(w, s.logger, http.StatusBadRequest, "invalid request JSON body")
+		return
+	}
+
+	if payload.Channel != "telegram" && payload.Channel != "webhook" {
+		writeError(w, s.logger, http.StatusBadRequest, "invalid channel value (must be 'telegram' or 'webhook')")
+		return
+	}
+	if s.channelTester == nil {
+		s.channelTester = NewNotificationChannelTester(http.DefaultClient)
+	}
+	result := s.channelTester.Test(r.Context(), s.cfg, payload)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(result)
+}

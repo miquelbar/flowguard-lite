@@ -39,11 +39,11 @@ func (g *FlowEventGenerator) GenerateHighFlowLab(count int, startTime time.Time)
 func (g *FlowEventGenerator) GenerateDDoSAttack(count int, startTime time.Time, victimIP string) []flow.FlowEvent {
 	events := make([]flow.FlowEvent, count)
 	protocols := []uint8{6, 17, 1} // TCP, UDP, ICMP
-	
+
 	for i := 0; i < count; i++ {
 		proto := protocols[g.rng.Intn(len(protocols))]
 		srcIP := fmt.Sprintf("10.99.%d.%d", g.rng.Intn(250)+1, g.rng.Intn(250)+1)
-		
+
 		events[i] = flow.FlowEvent{
 			Timestamp:     startTime.Add(time.Duration(i) * time.Millisecond),
 			SrcIP:         srcIP,
@@ -63,13 +63,13 @@ func (g *FlowEventGenerator) GenerateDDoSAttack(count int, startTime time.Time, 
 // Internal generator engine
 func (g *FlowEventGenerator) generate(count int, startTime time.Time, localDevicesCount, externalDstsCount int, burst bool) []flow.FlowEvent {
 	events := make([]flow.FlowEvent, count)
-	
+
 	// Generate fixed pool of IPs
 	localIPs := make([]string, localDevicesCount)
 	for i := 0; i < localDevicesCount; i++ {
 		localIPs[i] = fmt.Sprintf("192.168.1.%d", i+2) // start at 192.168.1.2
 	}
-	
+
 	externalIPs := make([]string, externalDstsCount)
 	for i := 0; i < externalDstsCount; i++ {
 		externalIPs[i] = fmt.Sprintf("8.8.8.%d", i+1)
@@ -83,7 +83,7 @@ func (g *FlowEventGenerator) generate(count int, startTime time.Time, localDevic
 		var srcIP, dstIP string
 		var collectorKind string
 		var collectorID string
-		
+
 		direction := g.rng.Float32()
 		if direction < 0.8 {
 			srcIP = localIPs[g.rng.Intn(len(localIPs))]

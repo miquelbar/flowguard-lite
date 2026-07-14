@@ -20,9 +20,15 @@ export function renderDevices() {
     const filtered = (state.devicesData || []).filter(dev => {
         const subnet = subnetLabelForDevice(dev.ip);
         const subnetMatch = !selectedSubnet || subnet === selectedSubnet;
-        const searchMatch = dev.ip.toLowerCase().includes(query) ||
-               (dev.hostname && dev.hostname.toLowerCase().includes(query)) ||
-               (dev.label && dev.label.toLowerCase().includes(query));
+        let searchMatch = true;
+        if (query !== "") {
+            const tokens = query.split(/\s+/);
+            searchMatch = tokens.every(token => {
+                return dev.ip.toLowerCase().includes(token) ||
+                       (dev.hostname && dev.hostname.toLowerCase().includes(token)) ||
+                       (dev.label && dev.label.toLowerCase().includes(token));
+            });
+        }
         return subnetMatch && searchMatch;
     });
 

@@ -6,6 +6,7 @@ import { trafficRangeConfig } from '../../lib/timeRanges.js';
 import { drawDeviceTrafficChart } from './deviceChart.js';
 import { renderDevices } from './devicesList.js';
 import { openFirewallModal } from './firewallModal.js';
+import { openPolicyModal } from '../policies/policyModal.js';
 import { focusFirstVisibleOnMobile } from '../../components/ui/focus.js';
 
 export function showNoDeviceSelected() {
@@ -46,6 +47,7 @@ export async function selectDevice(ip) {
     const baselineStatsContent = document.getElementById("baseline-stats-content");
     const devicePoliciesList = document.getElementById("device-policies-list");
     const btnDeviceFwRules = document.getElementById("btn-device-fw-rules");
+    const btnDeviceSuppress = document.getElementById("btn-device-suppress");
     const inputDetailLabel = document.getElementById("input-detail-label");
 
     if (detailsEmpty) detailsEmpty.classList.add("hidden");
@@ -64,6 +66,13 @@ export async function selectDevice(ip) {
     if (tblDevicePorts) tblDevicePorts.innerHTML = `<tr><td colspan="2" class="text-muted text-center" style="font-size: 0.75rem;">Loading ports...</td></tr>`;
     if (deviceAlertsList) deviceAlertsList.innerHTML = `<div class="text-muted text-center" style="font-size: 0.813rem; padding: 0.5rem;">Loading alerts...</div>`;
     if (baselineStatsContent) baselineStatsContent.innerHTML = `<p class="text-muted text-center">Loading baseline profile...</p>`;
+
+    if (btnDeviceSuppress) {
+        btnDeviceSuppress.setAttribute("aria-label", `Suppress activity for ${ip}`);
+        btnDeviceSuppress.onclick = () => {
+            openPolicyModal({ ip });
+        };
+    }
 
     if (btnDeviceFwRules) {
         btnDeviceFwRules.setAttribute("aria-label", `Generate firewall rule for ${ip}`);

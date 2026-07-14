@@ -8,7 +8,7 @@ FlowGuard Lite interfaces with external security tools and chat programs to prov
 
 FlowGuard Lite can ingest alerts from a Suricata intrusion detection system:
 
-*   **Log Location:** Configure the agent to point to your Suricata `eve.json` output path.
+*   **Log Location:** Configure the integration to point to your Suricata `eve.json` output path.
 *   **Mechanism:** Uses a lightweight tailing library to follow the log in real-time.
 *   **Correlation:** Matches Suricata threat categories (e.g. *Trojan activity*, *Command and Control*) with NetFlow timestamps to boost device risk scores.
 

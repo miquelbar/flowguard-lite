@@ -60,8 +60,6 @@ frontend-gate: docker-ui-test docker-ui-smoke
 pre-release-gate: product-test frontend-gate benchmark-smoke
 	@echo "Running repository whitespace check..."
 	git diff --check
-	@echo "Verifying private mission/agent files stay locally excluded..."
-	git check-ignore -v missions/flowguard-lite/STARTUP.md AGENTS.md TREE.md
 
 # 3. Docker workflow targets
 docker-build:

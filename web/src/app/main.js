@@ -6,6 +6,7 @@ import { bindTrafficEvents } from '../features/traffic/trafficView.js';
 import { bindDevicesEvents } from '../features/devices/devicesView.js';
 import { bindAlertsEvents } from '../features/alerts/alertsView.js';
 import { bindPoliciesEvents } from '../features/policies/policiesView.js';
+import { bindPolicyModalEvents } from '../features/policies/policyModal.js';
 import { bindNotificationsEvents } from '../features/notifications/notificationsView.js';
 import { renderAuditView, bindAuditEvents } from '../features/audit/auditView.js';
 import { renderSettingsView, bindSettingsEvents } from '../features/settings/settingsView.js';
@@ -285,6 +286,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     bindDevicesEvents();
     bindAlertsEvents();
     bindPoliciesEvents(loadData);
+    bindPolicyModalEvents();
     bindNotificationsEvents(loadData);
     bindAuditEvents();
     bindSettingsEvents(loadData);

@@ -59,7 +59,7 @@ func BenchmarkCollector_NetFlowDecode(b *testing.B) {
 	templates := netflow.CreateTemplateSystem()
 	srcIP := net.ParseIP("192.168.1.50")
 	dstIP := net.ParseIP("8.8.8.8")
-	
+
 	// Create a pre-crafted NetFlow v9 packet
 	packetData := GenerateNetFlowV9Packet(srcIP, dstIP, 12345, 443, 6, 1024, 5)
 
@@ -85,10 +85,10 @@ func BenchmarkSyslog_Parsing(b *testing.B) {
 		if err != nil {
 			b.Fatalf("failed to parse: %v", err)
 		}
-		
+
 		category := collector.ExtractUniFiCategory(parsed.Message, parsed.Severity)
 		clientIP := collector.ExtractIP(parsed.Message)
-		
+
 		if category != "Security Detections" || clientIP != "192.168.30.210" {
 			b.Fatalf("incorrect parsed value: category=%s IP=%s", category, clientIP)
 		}

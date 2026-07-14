@@ -222,7 +222,6 @@ func ExtractIP(msg string) string {
 	return ""
 }
 
-
 // mapSyslogSeverity maps raw syslog severity level and category to standard severity (low, medium, high, critical).
 func mapSyslogSeverity(syslogSev int, category string) string {
 	if category == "Security Detections" {
@@ -242,7 +241,6 @@ func mapSyslogSeverity(syslogSev int, category string) string {
 		return "low"
 	}
 }
-
 
 func (c *FlowCollector) incrementUniFiDrop() {
 	c.statsMu.Lock()

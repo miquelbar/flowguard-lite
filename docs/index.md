@@ -22,7 +22,7 @@ Configure your routers and firewalls to export supported telemetry:
 ### Core Features
 *   [**Anomaly Detection & Risk Scoring**](features/anomaly-detection.md) - Deep dive into statistical baselines, DDoS thresholds, and device risk indexing.
 *   [**Overview Dashboard**](features/overview-dashboard.md) - Default security posture dashboard, attack timeline, risk distribution, and remaining M26 dashboard work.
-*   [**Analyst Workflows & UI IA**](features/analyst-workflows.md) - Target operator workflows, page model, Risk Index explanation requirements, and UI implementation order.
+*   [**Analyst Workflows & UI Architecture**](features/analyst-workflows.md) - Target operator workflows, page model, Risk Index explanation requirements, and UI implementation order.
 *   [**Integrations & Webhooks**](features/integrations.md) - How to setup Suricata ingestion, configure Slack/Telegram webhooks, and block IPs.
 
 ### Reference & Development

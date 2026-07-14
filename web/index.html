@@ -743,6 +743,12 @@
                                 </div>
                             </div>
 
+                            <!-- Suppression Controls -->
+                            <div class="detail-section">
+                                <h4>Suppression Controls</h4>
+                                <button class="btn-secondary btn-block-rules btn-full-center" id="btn-device-suppress">Suppress Activity</button>
+                            </div>
+
                             <!-- Firewall Templates -->
                             <div class="detail-section">
                                 <h4>Firewall Control Template</h4>
@@ -1248,6 +1254,7 @@
                     <a href="#/settings/notifications" class="settings-nav-link" data-section="notifications">Notifications & Routing</a>
                     <a href="#/settings/integrations" class="settings-nav-link" data-section="integrations">Integrations</a>
                     <a href="#/settings/system" class="settings-nav-link" data-section="system">System Settings</a>
+                    <a href="#/settings/backup" class="settings-nav-link" data-section="backup">Backup & Portability</a>
                 </aside>
 
                 <div class="settings-main">
@@ -1462,77 +1469,120 @@
                             <p>Select a channel and configure how FlowGuard dispatches alerts.</p>
                         </div>
                         <form id="form-settings-webhook">
-
-                            <!-- Channel type selector -->
-                            <div class="form-group form-group-spaced">
-                                <label class="form-label-block">Alert Channel</label>
-                                <select id="setting-channel-type" class="form-control form-control-full">
-                                    <option value="slack">Slack / Discord</option>
-                                    <option value="telegram">Telegram Bot</option>
-                                    <option value="webhook">Generic Webhook</option>
-                                </select>
-                            </div>
-
-                            <!-- Slack / Discord fields -->
-                            <div id="notif-fields-slack">
-                                <div class="form-group form-group-shallow">
-                                    <label class="form-label-block">Incoming Webhook URL</label>
-                                    <input type="url" id="setting-webhook-url" class="form-control form-control-full" placeholder="https://example.com/slack-webhook">
-                                </div>
-                                <p class="text-muted form-help-tiny">
-                                    Create an <strong>Incoming Webhook</strong> in your Slack workspace Apps settings. For Discord, use the Webhook URL with the <code>/slack</code> suffix.
-                                </p>
-                            </div>
-
-                            <!-- Telegram Bot fields -->
-                            <div id="notif-fields-telegram" class="hidden">
-                                <div class="form-group form-group-spaced">
-                                    <label class="form-label-block">Bot Token</label>
-                                    <input type="password" id="setting-telegram-token" class="form-control form-control-full" placeholder="e.g. 123456789:ABCdef..." autocomplete="off">
-                                    <p class="text-muted form-help-tiny">
-                                        Get a token from <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" class="external-link">@BotFather</a> on Telegram.
-                                    </p>
-                                </div>
-                                <div class="form-group form-group-spaced">
-                                    <label class="form-label-block">Chat ID</label>
-                                    <input type="text" id="setting-telegram-chat-id" class="form-control form-control-full" placeholder="e.g. -100123456789 (group) or 12345678 (user)">
-                                    <p class="text-muted form-help-tiny">
-                                        Find your Chat ID with <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" class="external-link">@userinfobot</a>.
-                                    </p>
-                                </div>
-                                <div class="form-group form-group-spaced">
-                                    <label class="form-label-block">
-                                        API Endpoint <span class="inline-muted">(auto-generated, read only)</span>
-                                    </label>
-                                    <input type="text" id="setting-telegram-url-preview" class="form-control form-control-full form-control-readonly" readonly placeholder="https://api.telegram.org/bot{token}/sendMessage">
-                                </div>
-                            </div>
-
-                            <!-- Generic Webhook fields -->
-                            <div id="notif-fields-webhook" class="hidden">
-                                <div class="form-group form-group-spaced">
-                                    <label class="form-label-block">Webhook URL</label>
-                                    <input type="url" id="setting-webhook-url-generic" class="form-control form-control-full" placeholder="https://your-endpoint.com/hooks/alert">
-                                </div>
-                                <div class="form-subsection">
-                                    <h4 class="form-subsection-title">
-                                        Custom Headers <span class="inline-secondary">(optional)</span>
-                                    </h4>
-                                    <p class="text-muted form-help-tiny">e.g., Key: <code>Authorization</code>, Value: <code>Bearer token123</code></p>
-                                    <div id="webhook-headers-list" class="form-list-stack">
-                                        <!-- Dynamically inserted header rows -->
+                            <!-- Webhook Subsection -->
+                            <div class="settings-subsection">
+                                <div class="settings-subsection-header">
+                                    <div>
+                                        <h4>Webhook Alerting Channel</h4>
+                                        <p>Dispatch JSON alerts to Slack, Discord, or generic webhook listeners</p>
                                     </div>
-                                    <button type="button" id="btn-add-webhook-header" class="btn-secondary btn-small">Add Header</button>
+                                    <label class="settings-checkbox-row settings-toggle-inline" for="setting-webhook-enabled">
+                                        <input type="checkbox" id="setting-webhook-enabled">
+                                        <span></span>
+                                    </label>
+                                </div>
+
+                                <div id="webhook-channel-config" class="hidden settings-channel-config">
+                                    <div class="form-group form-group-spaced">
+                                        <label class="form-label-block">Payload Format</label>
+                                        <select id="setting-webhook-format-select" class="form-control form-control-full">
+                                            <option value="slack">Slack / Discord</option>
+                                            <option value="generic">Generic JSON Webhook</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Slack / Discord url fields -->
+                                    <div id="notif-fields-slack">
+                                        <div class="form-group form-group-shallow">
+                                            <label class="form-label-block">Incoming Webhook URL</label>
+                                            <input type="url" id="setting-webhook-url" class="form-control form-control-full" placeholder="https://example.com/slack-webhook">
+                                        </div>
+                                        <p class="text-muted form-help-tiny">
+                                            Create an <strong>Incoming Webhook</strong> in your Slack workspace Apps settings. For Discord, use the Webhook URL with the <code>/slack</code> suffix.
+                                        </p>
+                                    </div>
+
+                                    <!-- Generic Webhook url fields -->
+                                    <div id="notif-fields-webhook" class="hidden">
+                                        <div class="form-group form-group-spaced">
+                                            <label class="form-label-block">Webhook URL</label>
+                                            <input type="url" id="setting-webhook-url-generic" class="form-control form-control-full" placeholder="https://your-endpoint.com/hooks/alert">
+                                        </div>
+                                        <div class="form-subsection">
+                                            <h4 class="form-subsection-title">
+                                                Custom Headers <span class="inline-secondary">(optional)</span>
+                                            </h4>
+                                            <p class="text-muted form-help-tiny">e.g., Key: <code>Authorization</code>, Value: <code>Bearer token123</code></p>
+                                            <div id="webhook-headers-list" class="form-list-stack">
+                                                <!-- Dynamically inserted header rows -->
+                                            </div>
+                                            <button type="button" id="btn-add-webhook-header" class="btn-secondary btn-small">Add Header</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="settings-actions settings-actions-spaced">
+                                        <button type="button" id="btn-test-webhook" class="btn-secondary">Test Webhook Connection</button>
+                                    </div>
+                                    <div id="webhook-test-console" class="diagnostic-console hidden">
+                                        <h5 class="diagnostic-console-title">
+                                            <span>Webhook Diagnostics Console</span>
+                                            <span class="test-status-badge badge badge-info">Idle</span>
+                                        </h5>
+                                        <textarea id="webhook-test-results" class="form-control form-control-readonly form-control-full diagnostic-console-output" readonly placeholder="Test logs and response payload will display here..."></textarea>
+                                    </div>
                                 </div>
                             </div>
 
-                            <!-- hidden fields still needed by backend save logic -->
-                            <input type="hidden" id="setting-webhook-format" value="slack">
-                            <input type="hidden" id="setting-telegram-enabled" value="false">
+                            <!-- Telegram Subsection -->
+                            <div class="settings-subsection settings-subsection-separated">
+                                <div class="settings-subsection-header">
+                                    <div>
+                                        <h4>Telegram Bot Alerting Channel</h4>
+                                        <p>Dispatch real-time markdown notifications via a custom Telegram bot chat</p>
+                                    </div>
+                                    <label class="settings-checkbox-row settings-toggle-inline" for="setting-telegram-enabled-chk">
+                                        <input type="checkbox" id="setting-telegram-enabled-chk">
+                                        <span></span>
+                                    </label>
+                                </div>
 
-                            <div class="settings-actions">
+                                <div id="telegram-channel-config" class="hidden settings-channel-config">
+                                    <div class="form-group form-group-spaced">
+                                        <label class="form-label-block">Bot Token</label>
+                                        <input type="password" id="setting-telegram-token" class="form-control form-control-full" placeholder="e.g. 123456789:ABCdef..." autocomplete="off">
+                                        <p class="text-muted form-help-tiny">
+                                            Get a token from <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" class="external-link">@BotFather</a> on Telegram.
+                                        </p>
+                                    </div>
+                                    <div class="form-group form-group-spaced">
+                                        <label class="form-label-block">Chat ID</label>
+                                        <input type="text" id="setting-telegram-chat-id" class="form-control form-control-full" placeholder="e.g. -100123456789 (group) or 12345678 (user)">
+                                        <p class="text-muted form-help-tiny">
+                                            Find your Chat ID with <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" class="external-link">@userinfobot</a>.
+                                        </p>
+                                    </div>
+                                    <div class="form-group form-group-spaced">
+                                        <label class="form-label-block">
+                                            API Endpoint <span class="inline-muted">(auto-generated, read only)</span>
+                                        </label>
+                                        <input type="text" id="setting-telegram-url-preview" class="form-control form-control-full form-control-readonly" readonly placeholder="https://api.telegram.org/bot{token}/sendMessage">
+                                    </div>
+
+                                    <div class="settings-actions settings-actions-spaced">
+                                        <button type="button" id="btn-test-telegram" class="btn-secondary">Test Telegram Bot Connection</button>
+                                    </div>
+                                    <div id="telegram-test-console" class="diagnostic-console hidden">
+                                        <h5 class="diagnostic-console-title">
+                                            <span>Telegram Diagnostics Console</span>
+                                            <span class="test-status-badge badge badge-info">Idle</span>
+                                        </h5>
+                                        <textarea id="telegram-test-results" class="form-control form-control-readonly form-control-full diagnostic-console-output" readonly placeholder="Test logs and response payload will display here..."></textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-actions settings-actions-footer">
                                 <button type="submit" class="btn-primary">Save Notifications</button>
-                                <button type="button" id="btn-test-alert" class="btn-secondary">Send Test Alert</button>
                             </div>
                         </form>
                     </section>
@@ -1651,6 +1701,54 @@ set enabled=yes</code></pre>
                             </div>
                         </form>
                     </section>
+
+                    <!-- 10. Backup & Portability -->
+                    <section id="settings-backup" class="settings-card hidden">
+                        <div class="settings-card-header">
+                            <h3>Backup &amp; Portability</h3>
+                            <p>Export or import FlowGuard Lite configuration, policies, and notification channels</p>
+                        </div>
+                        <form id="form-settings-backup" onsubmit="event.preventDefault()">
+                            <!-- Export Subsection -->
+                            <div class="settings-subsection">
+                                <div>
+                                    <h4>Export Configuration</h4>
+                                    <p class="text-muted form-help-tiny form-help-block">
+                                        Download a JSON backup of your current policies, notifications, and thresholds settings.
+                                    </p>
+                                </div>
+                                <div class="settings-action-row">
+                                    <button type="button" id="btn-export-backup" class="btn-primary btn-settings-primary">Export Configuration (JSON)</button>
+                                </div>
+                            </div>
+
+                            <!-- Import Subsection -->
+                            <div class="settings-subsection settings-subsection-separated">
+                                <div>
+                                    <h4>Import Configuration</h4>
+                                    <p class="text-muted form-help-tiny form-help-block">
+                                        Select a previously exported FlowGuard Lite configuration JSON file to restore settings.
+                                    </p>
+                                </div>
+                                <div class="form-group form-group-spaced">
+                                    <input type="file" id="input-import-file" accept=".json" class="form-control form-control-full file-input-spaced">
+                                </div>
+
+                                <div id="import-preview-area" class="import-preview-panel hidden">
+                                    <h4 class="import-preview-title">Import Preview &amp; Validation</h4>
+                                    <div id="import-preview-summary" class="import-preview-summary">
+                                        <!-- Summary of what will be imported -->
+                                    </div>
+                                    <div id="import-preview-warning" class="text-warning import-preview-warning hidden">
+                                        <!-- Warnings if any -->
+                                    </div>
+                                    <div class="settings-actions settings-actions-compact">
+                                        <button type="button" id="btn-confirm-import" class="btn-primary btn-settings-primary">Apply Configuration</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </section>
                 </div>
             </div>
         </div>
@@ -1714,6 +1812,108 @@ set enabled=yes</code></pre>
                         Copy to Clipboard
                     </button>
                 </div>
+            </div>
+        </dialog>
+
+        <!-- Policy Creation Modal -->
+        <dialog id="modal-policy" class="modern-dialog policy-dialog" aria-labelledby="policy-modal-title" aria-describedby="policy-modal-description">
+            <div class="dialog-header">
+                <h3 id="policy-modal-title">Suppress Activity / Create Policy</h3>
+                <button id="btn-close-policy-modal" class="btn-close" type="button" aria-label="Close policy creation modal">&times;</button>
+            </div>
+            <div class="dialog-body">
+                <p id="policy-modal-description" class="dialog-desc">Configure suppression or routing rules for this target.</p>
+                <form id="form-modal-policy-editor" class="flex-column-form">
+                    <div class="form-group">
+                        <label for="modal-policy-name">Policy Name</label>
+                        <input type="text" id="modal-policy-name" placeholder="e.g. Suppress Workstation NAS alerts" class="form-control" required maxlength="100">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="modal-policy-scope">Scope</label>
+                        <select id="modal-policy-scope" class="form-control">
+                            <option value="global">Global (all nodes)</option>
+                            <option value="ip">Single IP Address</option>
+                            <option value="subnet">Subnet (CIDR)</option>
+                            <option value="alert_type">Alert Type</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="modal-policy-target" id="lbl-modal-policy-target">Target</label>
+                        <input type="text" id="modal-policy-target" placeholder="e.g. 192.168.1.15" class="form-control">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="modal-policy-severity-threshold">Minimum Severity to Alert</label>
+                        <select id="modal-policy-severity-threshold" class="form-control">
+                            <option value="">Alert on all severities</option>
+                            <option value="low">Low and above</option>
+                            <option value="medium">Medium and above (Silence Low)</option>
+                            <option value="high">High only (Silence Low & Medium)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="modal-policy-cooldown">Cooldown Period</label>
+                        <select id="modal-policy-cooldown" class="form-control">
+                            <option value="0">Disabled (always alert)</option>
+                            <option value="60">1 Minute</option>
+                            <option value="300">5 Minutes</option>
+                            <option value="1800">30 Minutes</option>
+                            <option value="3600">1 Hour</option>
+                            <option value="86400">24 Hours</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group form-grid-two">
+                        <div class="form-group form-group-tight">
+                            <label for="modal-policy-quiet-hours-start">Quiet Hours Start</label>
+                            <input type="text" id="modal-policy-quiet-hours-start" placeholder="HH:MM" class="form-control">
+                        </div>
+                        <div class="form-group form-group-tight">
+                            <label for="modal-policy-quiet-hours-end">Quiet Hours End</label>
+                            <input type="text" id="modal-policy-quiet-hours-end" placeholder="HH:MM" class="form-control">
+                        </div>
+                    </div>
+
+                    <div class="form-group form-group-shallow">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="modal-policy-suppressed">
+                            <span><strong>Silence Alerts Completely</strong></span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Route Notifications to Channels</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label checkbox-label-small">
+                                <input type="checkbox" class="modal-policy-channel-checkbox" value="slack">
+                                <span>Slack</span>
+                            </label>
+                            <label class="checkbox-label checkbox-label-small">
+                                <input type="checkbox" class="modal-policy-channel-checkbox" value="telegram">
+                                <span>Telegram</span>
+                            </label>
+                            <label class="checkbox-label checkbox-label-small">
+                                <input type="checkbox" class="modal-policy-channel-checkbox" value="webhook">
+                                <span>Generic Webhook</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="precedence-panel">
+                        <h4>Conflict & Precedence Status</h4>
+                        <div id="modal-policy-precedence-preview" class="text-muted">
+                            Fill in the form to view matching targets and precedence rank.
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary form-action-button form-action-button-wide" id="btn-modal-save-policy">Save Policy</button>
+                        <button type="button" class="btn-secondary form-action-button" id="btn-modal-cancel-policy">Cancel</button>
+                    </div>
+                </form>
             </div>
         </dialog>
 

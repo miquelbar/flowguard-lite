@@ -1,0 +1,89 @@
+.integration-tabs {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.integration-tabs .tab-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+}
+
+.integration-tabs .tab-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.integration-tabs .tab-btn.active {
+    color: var(--primary-color);
+    background: rgba(63, 95, 70, 0.1);
+    border-color: rgba(63, 95, 70, 0.25);
+}
+
+.integration-guide-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.integration-guide-content h4 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.integration-guide-content p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.guide-subheading {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0.5rem 0 0;
+    color: var(--text-primary);
+}
+
+.guide-steps {
+    margin: 0;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+.code-block {
+    margin: 0.5rem 0;
+    padding: 0.75rem;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow-x: auto;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.813rem;
+    line-height: 1.4;
+}
+
+.code-block code {
+    color: #f1f5f9;
+}
+
+.guide-note {
+    font-size: 0.813rem;
+    color: var(--text-muted);
+    border-left: 3px solid var(--primary-color);
+    padding-left: 0.75rem;
+    margin: 0.25rem 0;
+}

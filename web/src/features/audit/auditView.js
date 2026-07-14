@@ -1,5 +1,9 @@
 import { state } from '../../app/state.js';
 import { renderTableMessage } from '../../components/ui/states.js';
+import { appendSearchToken, bindClickableFilters, captureClickableFilterFocus, restoreClickableFilterFocus, triggerEvent } from '../../lib/filter.js';
+import { escapeHtml } from '../../lib/format.js';
+
+let lastFilterFocus = null;
 
 export function renderAuditLogs() {
     const tblAuditLogs = document.getElementById("tbl-audit-logs");
@@ -17,7 +21,10 @@ export function renderAuditLogs() {
 
     const filtered = (state.auditLogsData || []).filter(log => {
         if (searchQuery === "") return true;
-        return log.action.toLowerCase().includes(searchQuery) || log.details.toLowerCase().includes(searchQuery);
+        const tokens = searchQuery.split(/\s+/);
+        return tokens.every(token => {
+            return log.action.toLowerCase().includes(token) || log.details.toLowerCase().includes(token);
+        });
     });
 
     const total = filtered.length;
@@ -53,13 +60,25 @@ export function renderAuditLogs() {
         return;
     }
 
-    tbody.innerHTML = pageData.map(log => `
+    tbody.innerHTML = pageData.map((log, idx) => `
         <tr>
             <td style="white-space: nowrap;">${new Date(log.timestamp).toLocaleString()}</td>
-            <td><span class="badge badge-label">${log.action}</span></td>
-            <td>${log.details}</td>
+            <td><span tabindex="0" role="button" class="badge badge-label clickable-filter audit-filter-action" data-val="${escapeHtml(log.action)}" data-col="action" data-row-idx="${idx}" title="Click to filter by Action: ${escapeHtml(log.action)}">${escapeHtml(log.action)}</span></td>
+            <td>${escapeHtml(log.details)}</td>
         </tr>
     `).join("");
+
+    bindClickableFilters(tbody, ({ col, val }) => {
+        lastFilterFocus = captureClickableFilterFocus();
+        if (col === "action") {
+            const searchInput = document.getElementById("search-audit-logs");
+            appendSearchToken(searchInput, val);
+            triggerEvent(searchInput, "input");
+        }
+    });
+
+    restoreClickableFilterFocus(tbody, lastFilterFocus);
+    lastFilterFocus = null;
 }
 
 export function renderAuditView() {

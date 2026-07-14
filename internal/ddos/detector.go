@@ -50,7 +50,7 @@ type DDoSDetector struct {
 	alertDeduplicator map[string]time.Time
 }
 
-// NewDDoSDetector instantiates a new DDoSDetector agent.
+// NewDDoSDetector instantiates a new DDoSDetector component.
 func NewDDoSDetector(
 	repo storage.DeviceRepository,
 	logger *slog.Logger,

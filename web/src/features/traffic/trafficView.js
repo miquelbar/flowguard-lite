@@ -1,9 +1,10 @@
 import { state } from '../../app/state.js';
-import { escapeHtml, formatBytes, formatNumber, formatTime } from '../../lib/format.js';
+import { escapeHtml, formatBytes, formatNumber } from '../../lib/format.js';
 import { renderTrafficCharts } from '../../components/ui/chart.js';
 import * as api from '../../lib/api.js';
 import { trafficRangeConfig } from '../../lib/timeRanges.js';
 import { deviceIPCell, deviceHref } from '../../lib/deviceLinks.js';
+import { renderFlowExplorer } from './trafficFlowExplorer.js';
 
 export function updateDashboardHeroStats() {
     const valTotalVolume = document.getElementById("val-total-volume");
@@ -267,119 +268,6 @@ export function renderTopTalkers() {
             </tr>
         `;
     }).join('');
-}
-
-function populateCollectorDropdown() {
-    const select = document.getElementById("flow-explorer-collector");
-    if (!select) return;
-
-    const currentValue = select.value;
-    const uniqueIds = new Set();
-    if (state.trafficRecordsData) {
-        state.trafficRecordsData.forEach(r => {
-            if (r.collector_id) {
-                uniqueIds.add(r.collector_id);
-            }
-        });
-    }
-
-    let html = `<option value="">All Collectors</option>`;
-    Array.from(uniqueIds).sort().forEach(id => {
-        html += `<option value="${escapeHtml(id)}">${escapeHtml(id)}</option>`;
-    });
-
-    select.innerHTML = html;
-    if (uniqueIds.has(currentValue)) {
-        select.value = currentValue;
-    } else {
-        select.value = "";
-    }
-}
-
-function renderFlowExplorer() {
-    const body = document.querySelector("#tbl-flow-explorer tbody");
-    if (!body) return;
-
-    syncFlowExplorerSortHeaders();
-    populateCollectorDropdown();
-
-    let rows = state.trafficRecordsData || [];
-
-    const collectorFilter = document.getElementById("flow-explorer-collector");
-    if (collectorFilter && collectorFilter.value) {
-        const selected = collectorFilter.value;
-        rows = rows.filter(r => r.collector_id === selected);
-    }
-
-    rows = sortFlowExplorerRows(rows);
-    if (rows.length === 0) {
-        body.innerHTML = `<tr><td colspan="9" class="text-center text-muted">No aggregate records match the active filters.</td></tr>`;
-        return;
-    }
-
-    body.innerHTML = rows.map(row => `
-        <tr>
-            <td class="font-mono text-muted">${formatTime(row.timestamp)}</td>
-            <td>${collectorSourceCell(row)}</td>
-            <td>${deviceIPCell(row.src_ip)}</td>
-            <td>${deviceIPCell(row.dst_ip)}</td>
-            <td class="text-right">${formatNumber(row.protocol || 0)}</td>
-            <td class="text-right">${formatNumber(row.dst_port || 0)}</td>
-            <td class="text-right">${formatNumber(row.flows || 0)}</td>
-            <td class="text-right">${formatNumber(row.packets || 0)}</td>
-            <td class="text-right">${formatBytes(row.bytes || 0)}</td>
-        </tr>
-    `).join("");
-}
-
-
-function collectorSourceCell(row) {
-    const kind = row.collector_kind || "unknown";
-    const id = row.collector_id || "unknown";
-    return `<span class="badge badge-label" title="${escapeHtml(kind)}">${escapeHtml(id)}</span>`;
-}
-
-function sortFlowExplorerRows(rows) {
-    const sort = state.trafficRecordSort || { key: "timestamp", direction: "desc" };
-    const key = sort.key || "timestamp";
-    const multiplier = sort.direction === "asc" ? 1 : -1;
-    const numericKeys = new Set(["protocol", "dst_port", "flows", "packets", "bytes"]);
-    return [...rows].sort((a, b) => {
-        let av = a[key];
-        let bv = b[key];
-        if (key === "timestamp") {
-            av = new Date(av).getTime();
-            bv = new Date(bv).getTime();
-        } else if (numericKeys.has(key)) {
-            av = Number(av || 0);
-            bv = Number(bv || 0);
-        } else {
-            av = String(av || "");
-            bv = String(bv || "");
-            return av.localeCompare(bv, undefined, { numeric: true, sensitivity: "base" }) * multiplier;
-        }
-        if (av < bv) return -1 * multiplier;
-        if (av > bv) return 1 * multiplier;
-        return 0;
-    });
-}
-
-function syncFlowExplorerSortHeaders() {
-    const sort = state.trafficRecordSort || { key: "timestamp", direction: "desc" };
-    document.querySelectorAll("[data-flow-sort]").forEach(btn => {
-        const isActive = btn.getAttribute("data-flow-sort") === sort.key;
-        btn.classList.toggle("active", isActive);
-        const th = btn.closest("th");
-        if (th) th.setAttribute("aria-sort", isActive ? (sort.direction === "asc" ? "ascending" : "descending") : "none");
-        const baseLabel = btn.textContent.replace(/[▲▼]/g, "").trim();
-        btn.setAttribute("aria-label", isActive
-            ? `Sort flow explorer by ${baseLabel}, currently ${sort.direction === "asc" ? "ascending" : "descending"}`
-            : `Sort flow explorer by ${baseLabel}`);
-        const indicator = btn.querySelector(".sort-indicator");
-        if (indicator) {
-            indicator.textContent = isActive ? (sort.direction === "asc" ? "▲" : "▼") : "";
-        }
-    });
 }
 
 export function renderTrafficView() {

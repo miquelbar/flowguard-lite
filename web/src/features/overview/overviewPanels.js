@@ -91,7 +91,7 @@ export function renderRecentHighSeverity(alerts) {
         return;
     }
     body.innerHTML = rows.map(alert => `
-        <tr data-alert-id="${alert.id || ""}" class="overview-alert-row">
+        <tr data-alert-id="${alert.id || ""}" class="overview-alert-row severity-${alert.severity || "low"}">
             <td><a href="${linkForAlert(alert.id)}" class="ip-link">${escapeHtml(anomalyIP(alert))}</a></td>
             <td>${escapeHtml(alert.type || alert.anomaly_type || "alert")}</td>
             <td><span class="badge ${severityClass(alert.severity)}">${escapeHtml(alert.severity || "low")}</span></td>
