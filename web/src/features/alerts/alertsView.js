@@ -11,6 +11,22 @@ import { appendSearchToken, bindClickableFilters, captureClickableFilterFocus, r
 
 let lastFilterFocus = null;
 
+function deviceIdentityForIP(ip) {
+    const device = (state.devicesData || []).find(dev => dev.ip === ip);
+    if (!device) {
+        return { title: ip || "-", subtitle: "" };
+    }
+    const label = (device.label || "").trim();
+    const hostname = (device.hostname || "").trim();
+    if (label) {
+        return { title: label, subtitle: hostname && hostname !== label ? hostname : "" };
+    }
+    if (hostname) {
+        return { title: hostname, subtitle: "" };
+    }
+    return { title: ip || "-", subtitle: "" };
+}
+
 export function renderAnomalies() {
     const tblAnomalies = document.getElementById("tbl-anomalies").querySelector("tbody");
     if (!tblAnomalies) return;
@@ -121,6 +137,7 @@ export function selectAnomaly(id) {
     const anomalyDetailsEmpty = document.getElementById("anomaly-details-empty");
     const anomalyDetailsContent = document.getElementById("anomaly-details-content");
     const anomalyDetailIp = document.getElementById("anomaly-detail-ip");
+    const anomalyDetailDevice = document.getElementById("anomaly-detail-device");
     const anomalyDetailType = document.getElementById("anomaly-detail-type");
     const anomalyDetailDescription = document.getElementById("anomaly-detail-description");
     const anomalyDetailTime = document.getElementById("anomaly-detail-time");
@@ -134,7 +151,14 @@ export function selectAnomaly(id) {
     if (anomalyDetailsEmpty) anomalyDetailsEmpty.classList.add("hidden");
     if (anomalyDetailsContent) anomalyDetailsContent.classList.remove("hidden");
 
-    if (anomalyDetailIp) anomalyDetailIp.textContent = anom.ip;
+    const deviceIdentity = deviceIdentityForIP(anom.ip);
+    if (anomalyDetailIp) {
+        anomalyDetailIp.textContent = deviceIdentity.title;
+        anomalyDetailIp.title = deviceIdentity.subtitle ? `${deviceIdentity.subtitle} (${anom.ip})` : anom.ip;
+    }
+    if (anomalyDetailDevice) {
+        anomalyDetailDevice.textContent = deviceIdentity.subtitle ? `${deviceIdentity.subtitle} · ${anom.ip}` : anom.ip;
+    }
     if (anomalyDetailType) anomalyDetailType.textContent = anom.type;
     if (anomalyDetailDescription) anomalyDetailDescription.textContent = anom.description;
     if (anomalyDetailTime) anomalyDetailTime.textContent = new Date(anom.created_at).toLocaleString();

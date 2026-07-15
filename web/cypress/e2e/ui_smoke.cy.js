@@ -275,6 +275,8 @@ describe("FlowGuard Lite UI smoke regressions", () => {
         visitApp("#/alerts");
         cy.contains("#tbl-anomalies tbody tr", "192.168.30.210").find(".btn-select-anomaly").click();
         cy.get("#anomaly-details-content").should("be.visible");
+        cy.get("#anomaly-detail-ip").should("contain.text", "Analyst laptop");
+        cy.get("#anomaly-detail-device").should("contain.text", "workstation-210.local").and("contain.text", "192.168.30.210");
         cy.get("#btn-close-anomaly-details-floating").should("be.visible").click();
         cy.get("#panel-anomaly-details").should("not.be.visible");
         cy.location("hash").should("eq", "#/alerts");
