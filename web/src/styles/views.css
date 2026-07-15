@@ -17,6 +17,16 @@
     min-height: 280px;
 }
 
+.overview-table-panel .panel-body {
+    min-height: 0;
+}
+
+.overview-table-panel .compact-table-container {
+    flex: 1;
+    min-height: 0;
+    max-height: none !important;
+}
+
 .overview-stack {
     display: flex;
     flex-direction: column;

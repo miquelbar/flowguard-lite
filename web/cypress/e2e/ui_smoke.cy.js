@@ -293,6 +293,7 @@ describe("FlowGuard Lite UI smoke regressions", () => {
             cy.get(".global-time-control").should(shouldShowTimeControls ? "be.visible" : "not.be.visible");
             if (hash === "#/overview") {
                 cy.get("#overview-collector-health").should("contain.text", "unifi_syslog").and("contain.text", "listening");
+                cy.get("#overview-recent-alerts").parents(".table-container").invoke("height").should("be.gt", 190);
             }
         });
     });
