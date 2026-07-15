@@ -12,6 +12,7 @@ services:
       - "8080:8080"        # HTTP Web UI & REST API
       - "2055:2055/udp"    # NetFlow / IPFIX collector
       - "6343:6343/udp"    # sFlow collector
+      - "514:5514/udp"     # UniFi SIEM / Activity Logging syslog
     volumes:
       - ../dev-data:/data
     environment:
