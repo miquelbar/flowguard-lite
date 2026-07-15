@@ -245,12 +245,20 @@ func TestHandleAnomalies(t *testing.T) {
 		t.Errorf("expected status OK, got %d", w.Code)
 	}
 
-	var anomalies []storage.Anomaly
+	var anomalies []struct {
+		storage.Anomaly
+		DeviceLabel       string `json:"device_label"`
+		DeviceHostname    string `json:"device_hostname"`
+		DeviceDisplayName string `json:"device_display_name"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &anomalies); err != nil {
 		t.Fatalf("failed decoding anomalies: %v", err)
 	}
 	if len(anomalies) != 1 || anomalies[0].ID != 123 || anomalies[0].Type != "TRAFFIC_SPIKE" {
 		t.Errorf("unexpected anomalies result: %v", anomalies)
+	}
+	if anomalies[0].DeviceDisplayName != "Discovered Device" || anomalies[0].DeviceHostname != "test.local" {
+		t.Errorf("expected anomaly device identity enrichment, got: %+v", anomalies[0])
 	}
 
 	// 2. PUT /api/anomalies/123/status (valid)

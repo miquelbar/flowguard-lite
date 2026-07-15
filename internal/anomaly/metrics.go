@@ -18,6 +18,7 @@ func (e *AnomalyEngine) aggregateDeviceMetrics(batch []flow.FlowEvent) map[strin
 			m = &deviceMetrics{
 				dstIPs:               make(map[string]bool),
 				dstPorts:             make(map[int]bool),
+				dstIPByPort:          make(map[int]string),
 				internalDstIPs:       make(map[string]bool),
 				portsByDestination:   make(map[string]map[int]bool),
 				packetsByDestination: make(map[string]uint64),
@@ -47,6 +48,9 @@ func (e *AnomalyEngine) aggregateDeviceMetrics(batch []flow.FlowEvent) map[strin
 		if f.DstPort > 0 && f.DstPort <= 65535 {
 			if len(m.dstPorts) < maxFanoutCardinality {
 				m.dstPorts[f.DstPort] = true
+			}
+			if _, exists := m.dstIPByPort[f.DstPort]; !exists && len(m.dstIPByPort) < maxFanoutCardinality {
+				m.dstIPByPort[f.DstPort] = f.DstIP
 			}
 			ports, exists := m.portsByDestination[f.DstIP]
 			if !exists && len(m.portsByDestination) < maxFanoutCardinality {

@@ -67,11 +67,16 @@ func (e *AnomalyEngine) checkNewDestinations(ctx context.Context, repo storage.F
 		}
 
 		if !result.Observed {
+			dstIP := m.dstIPByPort[dstPort]
+			destinationContext := "an observed destination"
+			if dstIP != "" {
+				destinationContext = fmt.Sprintf("destination %s", dstIP)
+			}
 			reason := fmt.Sprintf(
-				"what happened: device contacted destination port %d for the first time in the past 7 days; why unusual: the port was absent from the device's retained aggregate history; baseline used: 7 days of stored flow aggregates for this source/port pair; current value: destination port %d present in this one-minute batch; expected value: port previously observed or explicitly approved; confidence: low; recommended next check: verify the application protocol and whether a new service, update, or admin workflow introduced this port",
-				dstPort, dstPort,
+				"what happened: device contacted %s on destination port %d for the first time in the past 7 days; why unusual: the port was absent from the device's retained aggregate history; baseline used: 7 days of stored flow aggregates for this source/port pair; current value: %s port %d present in this one-minute batch; expected value: port previously observed or explicitly approved; confidence: low; recommended next check: verify the remote host, application protocol, and whether a new service, update, or admin workflow introduced this port",
+				destinationContext, dstPort, destinationContext, dstPort,
 			)
-			e.triggerAlert(ctx, ip, "NEW_PORT", reason, "low")
+			e.triggerAlertWithDestination(ctx, ip, dstIP, "NEW_PORT", reason, "low")
 		}
 	}
 }

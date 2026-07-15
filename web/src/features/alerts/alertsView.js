@@ -11,7 +11,17 @@ import { appendSearchToken, bindClickableFilters, captureClickableFilterFocus, r
 
 let lastFilterFocus = null;
 
-function deviceIdentityForIP(ip) {
+function deviceIdentityForAnomaly(anomaly) {
+    const ip = anomaly?.ip || "";
+    const apiDisplayName = (anomaly?.device_display_name || "").trim();
+    const apiLabel = (anomaly?.device_label || "").trim();
+    const apiHostname = (anomaly?.device_hostname || "").trim();
+    if (apiDisplayName || apiLabel || apiHostname) {
+        const title = apiDisplayName || apiLabel || apiHostname;
+        const metadataName = apiHostname || apiLabel || title;
+        return { title, metadata: `${metadataName} · ${ip}` };
+    }
+
     const device = (state.devicesData || []).find(dev => dev.ip === ip);
     if (!device) {
         return { title: ip || "-", metadata: ip || "-" };
@@ -139,6 +149,8 @@ export function selectAnomaly(id) {
     const anomalyDetailsContent = document.getElementById("anomaly-details-content");
     const anomalyDetailIp = document.getElementById("anomaly-detail-ip");
     const anomalyDetailDevice = document.getElementById("anomaly-detail-device");
+    const anomalyDetailDestinationRow = document.getElementById("anomaly-detail-destination-row");
+    const anomalyDetailDestination = document.getElementById("anomaly-detail-destination");
     const anomalyDetailType = document.getElementById("anomaly-detail-type");
     const anomalyDetailDescription = document.getElementById("anomaly-detail-description");
     const anomalyDetailTime = document.getElementById("anomaly-detail-time");
@@ -152,13 +164,18 @@ export function selectAnomaly(id) {
     if (anomalyDetailsEmpty) anomalyDetailsEmpty.classList.add("hidden");
     if (anomalyDetailsContent) anomalyDetailsContent.classList.remove("hidden");
 
-    const deviceIdentity = deviceIdentityForIP(anom.ip);
+    const deviceIdentity = deviceIdentityForAnomaly(anom);
     if (anomalyDetailIp) {
         anomalyDetailIp.textContent = deviceIdentity.title;
         anomalyDetailIp.title = deviceIdentity.metadata || anom.ip;
     }
     if (anomalyDetailDevice) {
         anomalyDetailDevice.textContent = deviceIdentity.metadata;
+    }
+    if (anomalyDetailDestinationRow && anomalyDetailDestination) {
+        const destinationIP = (anom.destination_ip || "").trim();
+        anomalyDetailDestination.textContent = destinationIP;
+        anomalyDetailDestinationRow.classList.toggle("hidden", destinationIP === "");
     }
     if (anomalyDetailType) anomalyDetailType.textContent = anom.type;
     if (anomalyDetailDescription) anomalyDetailDescription.textContent = anom.description;

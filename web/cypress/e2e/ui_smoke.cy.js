@@ -33,6 +33,9 @@ const anomalies = [
         ip: "192.168.30.210",
         type: "BEACONING",
         anomaly_type: "BEACONING",
+        device_label: "Analyst laptop",
+        device_hostname: "workstation-210.local",
+        device_display_name: "Analyst laptop",
         severity: "high",
         status: "active",
         description: "Periodic external communication",
@@ -58,6 +61,9 @@ const anomalies = [
         ip: "192.168.30.236",
         type: "TRAFFIC_SPIKE",
         anomaly_type: "TRAFFIC_SPIKE",
+        device_hostname: "iPhone",
+        device_display_name: "iPhone",
+        destination_ip: "198.51.100.80",
         severity: "high",
         status: "active",
         description: "Traffic spike on a hostname-only device",
@@ -340,6 +346,8 @@ describe("FlowGuard Lite UI smoke regressions", () => {
         cy.get("#anomaly-details-content").should("be.visible");
         cy.get("#anomaly-detail-ip").should("contain.text", "iPhone");
         cy.get("#anomaly-detail-device").should("contain.text", "iPhone").and("contain.text", "192.168.30.236");
+        cy.get("#anomaly-detail-destination-row").should("be.visible");
+        cy.get("#anomaly-detail-destination").should("contain.text", "198.51.100.80");
     });
 
     it("keeps retention-aware range buttons and auto-refresh defaults stable", () => {

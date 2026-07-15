@@ -58,6 +58,7 @@ type deviceMetrics struct {
 	packets              uint64
 	dstIPs               map[string]bool
 	dstPorts             map[int]bool
+	dstIPByPort          map[int]string
 	internalDstIPs       map[string]bool
 	portsByDestination   map[string]map[int]bool
 	packetsByDestination map[string]uint64

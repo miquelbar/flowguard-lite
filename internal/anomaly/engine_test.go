@@ -156,9 +156,12 @@ func TestAnomalyEngineNewDestinationAndPort(t *testing.T) {
 	if anomalies[1].Type != "NEW_PORT" || anomalies[1].Severity != "low" {
 		t.Fatalf("unexpected new port anomaly: %+v", anomalies[1])
 	}
+	if anomalies[1].DestinationIP != knownDestination {
+		t.Fatalf("expected new port destination evidence %s, got %+v", knownDestination, anomalies[1])
+	}
 	for _, field := range []string{
 		"what happened:", "why unusual:", "baseline used:", "current value:",
-		"expected value:", "confidence:", "recommended next check:",
+		"expected value:", "confidence:", "recommended next check:", knownDestination,
 	} {
 		if !strings.Contains(anomalies[1].Description, field) {
 			t.Errorf("new port explanation missing %q: %s", field, anomalies[1].Description)

@@ -1,14 +1,23 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
+
+type anomalyResponse struct {
+	storage.Anomaly
+	DeviceLabel       string `json:"device_label,omitempty"`
+	DeviceHostname    string `json:"device_hostname,omitempty"`
+	DeviceDisplayName string `json:"device_display_name,omitempty"`
+}
 
 // handleListAnomalies returns the list of recent triggered alerts.
 func (s *APIServer) handleListAnomalies(w http.ResponseWriter, r *http.Request) {
@@ -34,12 +43,44 @@ func (s *APIServer) handleListAnomalies(w http.ResponseWriter, r *http.Request) 
 		writeError(w, s.logger, http.StatusInternalServerError, "internal database error")
 		return
 	}
+	response := enrichAnomalyDevices(r.Context(), s.deviceRepo, s.logger, list)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(list); err != nil {
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		s.logger.Error("Failed to encode anomalies list response", slog.String("error", err.Error()))
 	}
+}
+
+func enrichAnomalyDevices(ctx context.Context, repo storage.DeviceRepository, logger *slog.Logger, anomalies []storage.Anomaly) []anomalyResponse {
+	devices, err := repo.ListDevices(ctx)
+	if err != nil {
+		logger.Warn("Failed listing devices for anomaly identity enrichment", slog.String("error", err.Error()))
+		devices = nil
+	}
+	deviceByIP := make(map[string]storage.Device, len(devices))
+	for _, device := range devices {
+		deviceByIP[device.IP] = device
+	}
+
+	response := make([]anomalyResponse, 0, len(anomalies))
+	for _, anomaly := range anomalies {
+		item := anomalyResponse{Anomaly: anomaly}
+		if device, ok := deviceByIP[anomaly.IP]; ok {
+			item.DeviceLabel = strings.TrimSpace(device.Label)
+			item.DeviceHostname = strings.TrimSpace(device.Hostname)
+			item.DeviceDisplayName = deviceDisplayName(device)
+		}
+		response = append(response, item)
+	}
+	return response
+}
+
+func deviceDisplayName(device storage.Device) string {
+	if label := strings.TrimSpace(device.Label); label != "" {
+		return label
+	}
+	return strings.TrimSpace(device.Hostname)
 }
 
 // handleUpdateAnomalyStatus updates the lifecycle review status of a triggered alert.
