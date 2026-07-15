@@ -8,6 +8,13 @@ import { appendWebhookHeaderRow, syncNotificationFields, updateTelegramUrlPrevie
 
 export { renderSettingsView } from './settingsRender.js';
 
+function csvListValue(id) {
+    return (document.getElementById(id)?.value || "")
+        .split(",")
+        .map(item => item.trim())
+        .filter(Boolean);
+}
+
 export function bindSettingsEvents(onReload) {
     const slackEnabledChk = document.getElementById("setting-slack-enabled");
     if (slackEnabledChk) {
@@ -215,14 +222,37 @@ export function bindSettingsEvents(onReload) {
         formSettingsThresholds.addEventListener("submit", async (e) => {
             e.preventDefault();
             if (!state.settingsData) return;
+            const disabledAnomalyTypes = csvListValue("setting-disabled-anomaly-types");
+            const mutedAnomalySubnets = csvListValue("setting-muted-anomaly-subnets");
+            const notifyAllowedSubnets = csvListValue("setting-notify-allowed-subnets");
+            const notifySuppressedTypes = csvListValue("setting-notify-suppressed-types");
+            const newDestinationHistory = parseInt(document.getElementById("setting-new-destination-history").value, 10);
+            const beaconObservations = parseInt(document.getElementById("setting-beacon-observations").value, 10);
+            const beaconMinInterval = parseInt(document.getElementById("setting-beacon-min-interval").value, 10);
+            const trafficSpikeMinPackets = parseInt(document.getElementById("setting-traffic-spike-min-packets").value, 10);
+            const trafficSpikeMinBytes = parseInt(document.getElementById("setting-traffic-spike-min-bytes").value, 10);
             const pps = parseInt(document.getElementById("setting-threshold-pps").value, 10);
             const bps = parseInt(document.getElementById("setting-threshold-bps").value, 10);
             const fps = parseInt(document.getElementById("setting-threshold-fps").value, 10);
             const syn = parseInt(document.getElementById("setting-threshold-syn").value, 10);
             const udp = parseInt(document.getElementById("setting-threshold-udp").value, 10);
             const icmp = parseInt(document.getElementById("setting-threshold-icmp").value, 10);
+            const allNumbers = [newDestinationHistory, beaconObservations, beaconMinInterval, trafficSpikeMinPackets, trafficSpikeMinBytes, pps, bps, fps, syn, udp, icmp];
+            if (allNumbers.some(v => Number.isNaN(v) || v < 1)) {
+                window.showToast("Detection thresholds must be positive numbers.", "error");
+                return;
+            }
             const payload = {
                 ...state.settingsData,
+                disabled_anomaly_types: disabledAnomalyTypes,
+                muted_anomaly_subnets: mutedAnomalySubnets,
+                notify_allowed_subnets: notifyAllowedSubnets,
+                notify_suppressed_types: notifySuppressedTypes,
+                new_destination_min_history_buckets: newDestinationHistory,
+                beacon_min_observations: beaconObservations,
+                beacon_min_interval_seconds: beaconMinInterval,
+                traffic_spike_min_packets: trafficSpikeMinPackets,
+                traffic_spike_min_bytes: trafficSpikeMinBytes,
                 ddos_threshold_pps: pps,
                 ddos_threshold_bps: bps,
                 ddos_threshold_fps: fps,

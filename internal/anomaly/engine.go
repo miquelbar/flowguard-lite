@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/miquelbar/flowguard-lite/internal/baseline"
+	"github.com/miquelbar/flowguard-lite/internal/config"
 	"github.com/miquelbar/flowguard-lite/internal/flow"
 	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
@@ -103,6 +104,14 @@ type internalPeerProfile struct {
 	lastSeen         time.Time
 }
 
+type detectionControls struct {
+	disabledTypes                   map[string]bool
+	mutedSubnets                    []*net.IPNet
+	newDestinationMinHistoryBuckets int
+	beaconMinObservations           int
+	beaconMinInterval               time.Duration
+}
+
 // AnomalyEngine processes aggregated flows to detect traffic spikes, new ports, and new destinations.
 type AnomalyEngine struct {
 	repo           storage.DeviceRepository
@@ -115,6 +124,9 @@ type AnomalyEngine struct {
 	// In-memory cache to deduplicate alerts triggered in the last 15 minutes
 	mu                sync.Mutex
 	alertDeduplicator map[string]time.Time
+
+	controlsMu sync.RWMutex
+	controls   detectionControls
 
 	beaconMu        sync.Mutex
 	beacons         map[beaconKey]*beaconSeries
@@ -164,7 +176,47 @@ func NewAnomalyEngine(
 		location:             time.Local,
 		deviceProfiles:       make(map[string]*deviceFeatureProfile),
 		internalPeerProfiles: make(map[string]*internalPeerProfile),
+		controls: detectionControls{
+			disabledTypes:                   make(map[string]bool),
+			newDestinationMinHistoryBuckets: minNewDestinationHistoryBuckets,
+			beaconMinObservations:           beaconMinObservations,
+			beaconMinInterval:               beaconMinInterval,
+		},
 	}
+}
+
+// UpdateConfig applies runtime detection controls from daemon configuration.
+func (e *AnomalyEngine) UpdateConfig(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	controls := detectionControls{
+		disabledTypes:                   make(map[string]bool),
+		newDestinationMinHistoryBuckets: cfg.NewDestinationMinHistoryBuckets,
+		beaconMinObservations:           cfg.BeaconMinObservations,
+		beaconMinInterval:               time.Duration(cfg.BeaconMinIntervalSeconds) * time.Second,
+	}
+	for _, item := range cfg.DisabledAnomalyTypes {
+		controls.disabledTypes[item] = true
+	}
+	for _, cidr := range cfg.MutedAnomalySubnets {
+		_, ipNet, err := net.ParseCIDR(cidr)
+		if err == nil {
+			controls.mutedSubnets = append(controls.mutedSubnets, ipNet)
+		}
+	}
+	if controls.newDestinationMinHistoryBuckets <= 0 {
+		controls.newDestinationMinHistoryBuckets = minNewDestinationHistoryBuckets
+	}
+	if controls.beaconMinObservations <= 0 {
+		controls.beaconMinObservations = beaconMinObservations
+	}
+	if controls.beaconMinInterval <= 0 {
+		controls.beaconMinInterval = beaconMinInterval
+	}
+	e.controlsMu.Lock()
+	e.controls = controls
+	e.controlsMu.Unlock()
 }
 
 // AnalyzeBatch inspects a flushed batch of 1-minute flow events to detect anomalies.

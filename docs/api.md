@@ -356,6 +356,23 @@ Returns the active configuration schema.
   },
   "first_run_completed": true,
   "retention_days": 7,
+  "disabled_anomaly_types": [
+    "NEW_PORT"
+  ],
+  "muted_anomaly_subnets": [
+    "192.168.50.0/24"
+  ],
+  "notify_allowed_subnets": [
+    "192.168.10.0/24"
+  ],
+  "notify_suppressed_types": [
+    "BEACONING"
+  ],
+  "new_destination_min_history_buckets": 12,
+  "beacon_min_observations": 12,
+  "beacon_min_interval_seconds": 90,
+  "traffic_spike_min_packets": 2500,
+  "traffic_spike_min_bytes": 1048576,
   "ddos_threshold_pps": 5000,
   "ddos_threshold_bps": 10485760,
   "ddos_threshold_fps": 1000,
@@ -374,6 +391,7 @@ Updates the configuration keys and saves them to `config.yaml` on disk.
 *   **Response Status:** `200 OK` (Returns the updated config)
 *   **Collector validation:** `netflow_port` and `sflow_port` accept `0` to disable those listeners. Enabled UDP collector ports must not conflict. UniFi SIEM/syslog uses `unifi_syslog_enabled`, `unifi_syslog_port`, and optional `unifi_syslog_allowed_ips`; it is distinct from NetFlow/IPFIX, uses bounded datagram/queue handling, and changes require a daemon restart.
 *   **Passive capture validation:** `capture_interface` is optional and enables capture when non-empty. An enabled interface requires a non-empty `capture_bpf_filter`; interface and filter values are length-bounded and reject null/control line breaks. Capture changes require a daemon restart.
+*   **Detection/noise validation:** anomaly type lists accept known alert identifiers only. `muted_anomaly_subnets` and `notify_allowed_subnets` must be CIDR ranges. Detector sensitivity thresholds must be positive and bounded. Notification allow/suppress controls affect outbound dispatch only; stored anomalies remain available unless the detector is disabled or muted.
 
 ---
 

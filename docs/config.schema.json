@@ -6,6 +6,12 @@
     "admin_password_hash": {
       "type": "string"
     },
+    "beacon_min_interval_seconds": {
+      "type": "integer"
+    },
+    "beacon_min_observations": {
+      "type": "integer"
+    },
     "capture_bpf_filter": {
       "type": "string"
     },
@@ -23,6 +29,12 @@
     },
     "ddos_threshold_pps": {
       "type": "integer"
+    },
+    "disabled_anomaly_types": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "environment": {
       "type": "string"
@@ -42,8 +54,29 @@
     "log_level": {
       "type": "string"
     },
+    "muted_anomaly_subnets": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "netflow_port": {
       "type": "integer"
+    },
+    "new_destination_min_history_buckets": {
+      "type": "integer"
+    },
+    "notify_allowed_subnets": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notify_suppressed_types": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "port": {
       "type": "string"
@@ -85,6 +118,12 @@
     },
     "telegram_token": {
       "type": "string"
+    },
+    "traffic_spike_min_bytes": {
+      "type": "integer"
+    },
+    "traffic_spike_min_packets": {
+      "type": "integer"
     },
     "udp_flood_threshold_pps": {
       "type": "integer"
@@ -143,6 +182,15 @@
     "first_run_completed",
     "admin_password_hash",
     "session_secret",
-    "retention_days"
+    "retention_days",
+    "disabled_anomaly_types",
+    "muted_anomaly_subnets",
+    "notify_allowed_subnets",
+    "notify_suppressed_types",
+    "new_destination_min_history_buckets",
+    "beacon_min_observations",
+    "beacon_min_interval_seconds",
+    "traffic_spike_min_packets",
+    "traffic_spike_min_bytes"
   ]
 }

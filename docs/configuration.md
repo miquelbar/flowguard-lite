@@ -93,6 +93,19 @@ session_secret: ""
 # Data retention in days for historical databases (pruned daily)
 retention_days: 7
 
+# Global alert noise controls
+disabled_anomaly_types: []
+muted_anomaly_subnets: []
+notify_allowed_subnets: []
+notify_suppressed_types: []
+
+# Behavioral detector sensitivity
+new_destination_min_history_buckets: 12
+beacon_min_observations: 12
+beacon_min_interval_seconds: 90
+traffic_spike_min_packets: 2500
+traffic_spike_min_bytes: 1048576
+
 # Global Volumetric DDoS triggers
 ddos_threshold_pps: 5000
 ddos_threshold_bps: 10485760
@@ -224,6 +237,54 @@ These values are also available in **Settings → Collectors Setup → Passive N
 *   **Allowed Range:** `1` to `60`
 *   **Description:** Number of days to retain database flow events, aggregates, and evidence records before pruning them. Values above 60 are rejected to preserve bounded storage on small hardware.
 
+### `disabled_anomaly_types`
+*   **Type:** Array of strings
+*   **Default:** `[]`
+*   **Description:** Alert types that should not be created by behavioral/DDoS detectors. Use this only for globally unwanted detections; prefer notification rules or policies when evidence should still be stored.
+
+### `muted_anomaly_subnets`
+*   **Type:** Array of CIDR strings
+*   **Default:** `[]`
+*   **Description:** Source subnets for which behavioral/DDoS anomaly creation is skipped. This is useful for approved noisy VLANs such as lab, guest, or IoT networks. Empty means all local subnets are eligible.
+
+### `notify_allowed_subnets`
+*   **Type:** Array of CIDR strings
+*   **Default:** `[]`
+*   **Description:** Optional global notification allowlist. When set, Slack, Telegram, and generic webhook dispatch only occurs for anomalies whose source IP is inside one of these CIDRs. Anomalies outside the list remain stored.
+
+### `notify_suppressed_types`
+*   **Type:** Array of strings
+*   **Default:** `[]`
+*   **Description:** Alert types that are persisted but never dispatched to Slack, Telegram, or generic webhooks. Use this to keep evidence while avoiding real-time noise.
+
+### `new_destination_min_history_buckets`
+*   **Type:** Integer
+*   **Default:** `12`
+*   **Allowed Range:** `1` to `10080`
+*   **Description:** Number of retained one-minute source buckets required before `NEW_DESTINATION` and `NEW_PORT` detections become active for that source.
+
+### `beacon_min_observations`
+*   **Type:** Integer
+*   **Default:** `12`
+*   **Allowed Range:** `3` to `60`
+*   **Description:** Number of periodic observations required before `BEACONING` can alert.
+
+### `beacon_min_interval_seconds`
+*   **Type:** Integer
+*   **Default:** `90`
+*   **Allowed Range:** `1` to `86400`
+*   **Description:** Minimum interval between beacon observations. Raising it suppresses common one-minute cloud keepalives.
+
+### `traffic_spike_min_packets`
+*   **Type:** Integer
+*   **Default:** `2500`
+*   **Description:** Minimum packets per one-minute source bucket before packet-count `TRAFFIC_SPIKE` statistical checks can alert.
+
+### `traffic_spike_min_bytes`
+*   **Type:** Integer
+*   **Default:** `1048576`
+*   **Description:** Minimum bytes per one-minute source bucket before byte-volume `TRAFFIC_SPIKE` statistical checks can alert.
+
 ### `ddos_threshold_pps`
 *   **Type:** Integer
 *   **Default:** `5000`
@@ -290,6 +351,15 @@ Any parameter can be overridden using environment variables prefixed with `FLOWG
 *   `FLOWGUARD_DDOS_THRESHOLD_PPS` overrides `ddos_threshold_pps`
 *   `FLOWGUARD_DDOS_THRESHOLD_BPS` overrides `ddos_threshold_bps`
 *   `FLOWGUARD_DDOS_THRESHOLD_FPS` overrides `ddos_threshold_fps`
+*   `FLOWGUARD_DISABLED_ANOMALY_TYPES` overrides `disabled_anomaly_types`
+*   `FLOWGUARD_MUTED_ANOMALY_SUBNETS` overrides `muted_anomaly_subnets`
+*   `FLOWGUARD_NOTIFY_ALLOWED_SUBNETS` overrides `notify_allowed_subnets`
+*   `FLOWGUARD_NOTIFY_SUPPRESSED_TYPES` overrides `notify_suppressed_types`
+*   `FLOWGUARD_NEW_DESTINATION_MIN_HISTORY_BUCKETS` overrides `new_destination_min_history_buckets`
+*   `FLOWGUARD_BEACON_MIN_OBSERVATIONS` overrides `beacon_min_observations`
+*   `FLOWGUARD_BEACON_MIN_INTERVAL_SECONDS` overrides `beacon_min_interval_seconds`
+*   `FLOWGUARD_TRAFFIC_SPIKE_MIN_PACKETS` overrides `traffic_spike_min_packets`
+*   `FLOWGUARD_TRAFFIC_SPIKE_MIN_BYTES` overrides `traffic_spike_min_bytes`
 *   `FLOWGUARD_SYN_FLOOD_THRESHOLD_PPS` overrides `syn_flood_threshold_pps`
 *   `FLOWGUARD_UDP_FLOOD_THRESHOLD_PPS` overrides `udp_flood_threshold_pps`
 *   `FLOWGUARD_ICMP_FLOOD_THRESHOLD_PPS` overrides `icmp_flood_threshold_pps`

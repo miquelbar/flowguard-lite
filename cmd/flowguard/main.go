@@ -140,6 +140,7 @@ func main() {
 
 	// 10. Initialize Baseline Engine
 	baselineEngine := baseline.NewBaselineEngine(repo, log)
+	baselineEngine.UpdateThresholds(uint64(cfg.TrafficSpikeMinBytes), uint64(cfg.TrafficSpikeMinPackets))
 	if err := baselineEngine.LoadBaselines(context.Background()); err != nil {
 		log.Warn("Failed to load device baselines on startup", slog.String("error", err.Error()))
 	}
@@ -175,6 +176,7 @@ func main() {
 
 	// 12. Initialize Anomaly Engine & Register post-flush hooks on FlowAggregator
 	anomalyEngine := anomaly.NewAnomalyEngine(repo, log, baselineEngine, cfg.LocalSubnets)
+	anomalyEngine.UpdateConfig(cfg)
 	agg.RegisterFlushCallback(func(ctx context.Context, batch []flow.FlowEvent) {
 		anomalyEngine.AnalyzeBatch(ctx, repo, batch)
 	})
@@ -191,13 +193,14 @@ func main() {
 
 	// 14b. Initialize Webhook Engine (always registered to support dynamic configuration reloads)
 	webhookEngine := webhook.NewWebhookEngine(repo, cfg.SlackWebhookURL, cfg.WebhookURL, cfg.WebhookFormat, cfg.WebhookHeaders, cfg.TelegramEnabled, cfg.TelegramToken, cfg.TelegramChatID, log)
+	webhookEngine.UpdateNoiseControls(webhook.NoiseControls{SuppressedTypes: cfg.NotifySuppressedTypes, AllowedSubnets: cfg.NotifyAllowedSubnets})
 	repo.RegisterAnomalyCallback(func(a *storage.Anomaly) {
 		webhookEngine.SendAnomalyAlert(context.Background(), a)
 	})
 	log.Info("Webhook Engine started and registered post-anomaly trigger callbacks")
 
 	// 15. Initialize API HTTP server
-	server := api.NewAPIServer(cfg, log, coll, repo, repo, baselineEngine, riskEngine, profiler, ddosDetector, webhookEngine, *configPath)
+	server := api.NewAPIServer(cfg, log, coll, repo, repo, baselineEngine, riskEngine, profiler, ddosDetector, webhookEngine, *configPath, anomalyEngine)
 
 	// 16. Run HTTP server in a separate goroutine so we can trap signals concurrently
 	serverErrChan := make(chan error, 1)

@@ -200,7 +200,7 @@ Settings must clearly show:
 
 ## Existing Gaps to Reconcile
 
-The mission plan already mentions several product capabilities that are not yet properly represented in the UI:
+The product roadmap already includes several capabilities that are not yet properly represented in the UI:
 
 - device detail links to flows, anomalies, and Suricata evidence;
 - device detail view with a dynamic flow timeline;
@@ -254,7 +254,7 @@ Avoid:
 - decorative glows;
 - glassmorphism;
 - oversized cards;
-- AI/SaaS gradient styling;
+- generic SaaS gradient styling;
 - vague "insight" panels without operational value.
 
 Prefer:

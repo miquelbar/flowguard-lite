@@ -17,22 +17,29 @@ import (
 
 // WebhookEngine handles asynchronous dispatching of security anomaly alerts to external channels.
 type WebhookEngine struct {
-	mu             sync.RWMutex
-	repo           storage.StorageRepository
-	slackURL       string
-	webhookURL     string
-	format         string // "generic", "slack", "telegram"
-	webhookHeaders map[string]string
-	tgEnabled      bool
-	tgToken        string
-	tgChatID       string
-	client         *http.Client
-	logger         *slog.Logger
+	mu              sync.RWMutex
+	repo            storage.StorageRepository
+	slackURL        string
+	webhookURL      string
+	format          string // "generic", "slack", "telegram"
+	webhookHeaders  map[string]string
+	tgEnabled       bool
+	tgToken         string
+	tgChatID        string
+	suppressedTypes map[string]bool
+	allowedSubnets  []*net.IPNet
+	client          *http.Client
+	logger          *slog.Logger
 
 	dispatchQueue chan webhookDispatchRequest
 	dispatchWG    sync.WaitGroup
 	queueMu       sync.Mutex
 	queueClosed   bool
+}
+
+type NoiseControls struct {
+	SuppressedTypes []string
+	AllowedSubnets  []string
 }
 
 // NewWebhookEngine creates and configures a WebhookEngine instance.
@@ -41,23 +48,43 @@ func NewWebhookEngine(repo storage.StorageRepository, slackURL string, webhookUR
 		format = "generic"
 	}
 	engine := &WebhookEngine{
-		repo:           repo,
-		slackURL:       slackURL,
-		webhookURL:     webhookURL,
-		format:         format,
-		webhookHeaders: cloneHeaders(headers),
-		tgEnabled:      tgEnabled,
-		tgToken:        tgToken,
-		tgChatID:       tgChatID,
-		client:         netclient.NewHTTPClient(10 * time.Second),
-		logger:         logger,
-		dispatchQueue:  make(chan webhookDispatchRequest, webhookDispatchQueueSize),
+		repo:            repo,
+		slackURL:        slackURL,
+		webhookURL:      webhookURL,
+		format:          format,
+		webhookHeaders:  cloneHeaders(headers),
+		tgEnabled:       tgEnabled,
+		tgToken:         tgToken,
+		tgChatID:        tgChatID,
+		suppressedTypes: make(map[string]bool),
+		client:          netclient.NewHTTPClient(10 * time.Second),
+		logger:          logger,
+		dispatchQueue:   make(chan webhookDispatchRequest, webhookDispatchQueueSize),
 	}
 	for i := 0; i < webhookDispatchWorkers; i++ {
 		engine.dispatchWG.Add(1)
 		go engine.dispatchWorker()
 	}
 	return engine
+}
+
+// UpdateNoiseControls dynamically updates global notification noise filters.
+func (w *WebhookEngine) UpdateNoiseControls(controls NoiseControls) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.suppressedTypes = make(map[string]bool, len(controls.SuppressedTypes))
+	for _, item := range controls.SuppressedTypes {
+		w.suppressedTypes[strings.TrimSpace(item)] = true
+	}
+
+	w.allowedSubnets = nil
+	for _, cidr := range controls.AllowedSubnets {
+		_, ipNet, err := net.ParseCIDR(strings.TrimSpace(cidr))
+		if err == nil {
+			w.allowedSubnets = append(w.allowedSubnets, ipNet)
+		}
+	}
 }
 
 // UpdateConfig dynamically updates the notification endpoints at runtime thread-safely.
@@ -100,6 +127,9 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 				DispatchedAt: time.Now(),
 			})
 		}
+		return
+	}
+	if w.notificationSuppressedByConfig(ctx, anomaly) {
 		return
 	}
 
@@ -323,6 +353,54 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 				}
 			}
 		}
+	}
+}
+
+func (w *WebhookEngine) notificationSuppressedByConfig(ctx context.Context, anomaly *storage.Anomaly) bool {
+	w.mu.RLock()
+	suppressedTypes := make(map[string]bool, len(w.suppressedTypes))
+	for item, suppressed := range w.suppressedTypes {
+		suppressedTypes[item] = suppressed
+	}
+	allowedSubnets := append([]*net.IPNet(nil), w.allowedSubnets...)
+	w.mu.RUnlock()
+
+	for item, suppressed := range suppressedTypes {
+		if suppressed && strings.EqualFold(item, anomaly.Type) {
+			w.recordConfigSuppressedNotification(ctx, anomaly, "Suppressed by global notification alert-type filter")
+			return true
+		}
+	}
+	if len(allowedSubnets) == 0 {
+		return false
+	}
+	ip := net.ParseIP(anomaly.IP)
+	if ip == nil {
+		return false
+	}
+	for _, subnet := range allowedSubnets {
+		if subnet.Contains(ip) {
+			return false
+		}
+	}
+	w.recordConfigSuppressedNotification(ctx, anomaly, "Suppressed because source IP is outside configured notification subnets")
+	return true
+}
+
+func (w *WebhookEngine) recordConfigSuppressedNotification(ctx context.Context, anomaly *storage.Anomaly, reason string) {
+	w.logger.Info("Notification suppressed by global noise control",
+		slog.Int64("anomaly_id", anomaly.ID),
+		slog.String("ip", anomaly.IP),
+		slog.String("type", anomaly.Type),
+		slog.String("reason", reason))
+	if w.repo != nil {
+		_ = w.repo.SaveNotificationLog(ctx, &storage.NotificationLog{
+			AnomalyID:    anomaly.ID,
+			Channel:      "all",
+			Status:       "suppressed",
+			ErrorMessage: reason,
+			DispatchedAt: time.Now(),
+		})
 	}
 }
 

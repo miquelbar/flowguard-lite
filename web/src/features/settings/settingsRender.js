@@ -81,6 +81,15 @@ export function renderSettingsView() {
     }
 
     if (noUnsaved("thresholds")) {
+        setVal("setting-disabled-anomaly-types", (state.settingsData.disabled_anomaly_types || []).join(", "));
+        setVal("setting-muted-anomaly-subnets", (state.settingsData.muted_anomaly_subnets || []).join(", "));
+        setVal("setting-notify-allowed-subnets", (state.settingsData.notify_allowed_subnets || []).join(", "));
+        setVal("setting-notify-suppressed-types", (state.settingsData.notify_suppressed_types || []).join(", "));
+        setVal("setting-new-destination-history", state.settingsData.new_destination_min_history_buckets || 12);
+        setVal("setting-beacon-observations", state.settingsData.beacon_min_observations || 12);
+        setVal("setting-beacon-min-interval", state.settingsData.beacon_min_interval_seconds || 90);
+        setVal("setting-traffic-spike-min-packets", state.settingsData.traffic_spike_min_packets || 2500);
+        setVal("setting-traffic-spike-min-bytes", state.settingsData.traffic_spike_min_bytes || 1048576);
         setVal("setting-threshold-pps", state.settingsData.ddos_threshold_pps || 5000);
         setVal("setting-threshold-bps", state.settingsData.ddos_threshold_bps || 10000000);
         setVal("setting-threshold-fps", state.settingsData.ddos_threshold_fps || 1000);

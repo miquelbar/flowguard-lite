@@ -15,6 +15,15 @@ export function normalizeBackupConfig(data) {
         storage_dir: stringField(s.storage_dir, "/data"),
         storage_backend: stringField(s.storage_backend, "sqlite"),
         retention_days: intField(s.retention_days, 7),
+        disabled_anomaly_types: arrayField(s.disabled_anomaly_types),
+        muted_anomaly_subnets: arrayField(s.muted_anomaly_subnets),
+        notify_allowed_subnets: arrayField(s.notify_allowed_subnets),
+        notify_suppressed_types: arrayField(s.notify_suppressed_types),
+        new_destination_min_history_buckets: intField(s.new_destination_min_history_buckets, 12),
+        beacon_min_observations: intField(s.beacon_min_observations, 12),
+        beacon_min_interval_seconds: intField(s.beacon_min_interval_seconds, 90),
+        traffic_spike_min_packets: intField(s.traffic_spike_min_packets, 2500),
+        traffic_spike_min_bytes: intField(s.traffic_spike_min_bytes, 1048576),
         ddos_threshold_pps: intField(s.ddos_threshold_pps, 5000),
         ddos_threshold_bps: intField(s.ddos_threshold_bps, 10000000),
         ddos_threshold_fps: intField(s.ddos_threshold_fps, 1000),
@@ -58,7 +67,10 @@ function validateSettings(s) {
     if (s.unifi_syslog_enabled && s.unifi_syslog_port === 0) return "UniFi syslog port must be greater than 0 when enabled.";
     if (!["sqlite", "duckdb"].includes(s.storage_backend)) return "Storage backend must be 'sqlite' or 'duckdb'.";
     if (s.retention_days < 1 || s.retention_days > 365) return "Retention days must be between 1 and 365.";
-    const thresholds = [s.ddos_threshold_pps, s.ddos_threshold_bps, s.ddos_threshold_fps, s.syn_flood_threshold_pps, s.udp_flood_threshold_pps, s.icmp_flood_threshold_pps];
+    for (const cidr of [...s.muted_anomaly_subnets, ...s.notify_allowed_subnets]) {
+        if (!validateCidr(cidr)) return `Invalid CIDR in detection/noise controls: '${cidr}'`;
+    }
+    const thresholds = [s.new_destination_min_history_buckets, s.beacon_min_observations, s.beacon_min_interval_seconds, s.traffic_spike_min_packets, s.traffic_spike_min_bytes, s.ddos_threshold_pps, s.ddos_threshold_bps, s.ddos_threshold_fps, s.syn_flood_threshold_pps, s.udp_flood_threshold_pps, s.icmp_flood_threshold_pps];
     if (thresholds.some(v => !Number.isInteger(v) || v < 1)) return "Detection thresholds must be positive integers.";
     if (!["slack", "generic"].includes(s.webhook_format)) return "Webhook format must be 'slack' or 'generic'.";
     if (s.slack_webhook_url && !/^https?:\/\//i.test(s.slack_webhook_url)) return "Slack Webhook URL must be HTTP or HTTPS.";

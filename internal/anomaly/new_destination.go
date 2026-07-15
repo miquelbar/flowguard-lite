@@ -38,7 +38,7 @@ func (e *AnomalyEngine) checkNewDestinations(ctx context.Context, repo storage.F
 			continue
 		}
 
-		if !hasMatureNewDestinationHistory(result) {
+		if !hasMatureNewDestinationHistory(result, e.detectionControlsSnapshot().newDestinationMinHistoryBuckets) {
 			continue
 		}
 
@@ -62,7 +62,7 @@ func (e *AnomalyEngine) checkNewDestinations(ctx context.Context, repo storage.F
 			continue
 		}
 
-		if !hasMatureNewDestinationHistory(result) {
+		if !hasMatureNewDestinationHistory(result, e.detectionControlsSnapshot().newDestinationMinHistoryBuckets) {
 			continue
 		}
 
@@ -76,6 +76,9 @@ func (e *AnomalyEngine) checkNewDestinations(ctx context.Context, repo storage.F
 	}
 }
 
-func hasMatureNewDestinationHistory(result storage.FlowHistoryResult) bool {
-	return result.SourceBuckets >= minNewDestinationHistoryBuckets
+func hasMatureNewDestinationHistory(result storage.FlowHistoryResult, minBuckets int) bool {
+	if minBuckets <= 0 {
+		minBuckets = minNewDestinationHistoryBuckets
+	}
+	return result.SourceBuckets >= minBuckets
 }

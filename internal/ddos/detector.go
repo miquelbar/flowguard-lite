@@ -251,6 +251,10 @@ func (d *DDoSDetector) evaluateRates() {
 
 // triggerAlert registers the DDoS anomaly in the database.
 func (d *DDoSDetector) triggerAlert(ip string, alertType string, reason string, severity string) {
+	if config.AnomalyTypeListed(d.cfg.DisabledAnomalyTypes, alertType) || config.IPInCIDRList(ip, d.cfg.MutedAnomalySubnets) {
+		return
+	}
+
 	d.alertMu.Lock()
 	dedupKey := fmt.Sprintf("%s|%s", ip, alertType)
 	lastTriggered, exists := d.alertDeduplicator[dedupKey]

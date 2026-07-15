@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
+	"strings"
 	"time"
 
 	"github.com/miquelbar/flowguard-lite/internal/storage"
@@ -15,6 +17,10 @@ func (e *AnomalyEngine) triggerAlert(ctx context.Context, ip string, alertType s
 }
 
 func (e *AnomalyEngine) triggerAlertWithDestination(ctx context.Context, ip string, destinationIP string, alertType string, reason string, severity string) {
+	if e.alertSuppressed(ip, alertType) {
+		return
+	}
+
 	e.mu.Lock()
 	dedupKey := fmt.Sprintf("%s|%s", ip, alertType)
 	lastTriggered, exists := e.alertDeduplicator[dedupKey]
@@ -53,4 +59,34 @@ func (e *AnomalyEngine) triggerAlertWithDestination(ctx context.Context, ip stri
 			e.logger.Error("Failed to save triggered anomaly into database", slog.String("error", err.Error()))
 		}
 	}()
+}
+
+func (e *AnomalyEngine) alertSuppressed(ip string, alertType string) bool {
+	e.controlsMu.RLock()
+	defer e.controlsMu.RUnlock()
+
+	for disabledType := range e.controls.disabledTypes {
+		if strings.EqualFold(disabledType, alertType) {
+			return true
+		}
+	}
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return false
+	}
+	for _, subnet := range e.controls.mutedSubnets {
+		if subnet.Contains(parsedIP) {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *AnomalyEngine) detectionControlsSnapshot() detectionControls {
+	e.controlsMu.RLock()
+	defer e.controlsMu.RUnlock()
+	controls := e.controls
+	controls.disabledTypes = nil
+	controls.mutedSubnets = nil
+	return controls
 }

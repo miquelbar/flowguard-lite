@@ -55,32 +55,41 @@ func TestHandleSettings(t *testing.T) {
 
 	// 2. POST settings
 	newSettings := SettingsPayload{
-		Port:                  "9090",
-		NetflowPort:           3000,
-		SflowPort:             4000,
-		UniFiSyslogEnabled:    true,
-		UniFiSyslogPort:       5514,
-		UniFiSyslogAllowedIPs: []string{"192.168.1.1", "192.168.1.0/24"},
-		CaptureInterface:      "eth0",
-		CaptureBPFFilter:      "tcp or udp",
-		CapturePromiscuous:    true,
-		StorageDir:            "/tmp/foo",
-		LogLevel:              "debug",
-		Environment:           "development",
-		LocalSubnets:          []string{"192.168.10.0/24"},
-		SlackWebhookURL:       "https://hooks.slack.example.invalid/services/T/B/C",
-		WebhookURL:            "https://example.invalid/hook",
-		WebhookFormat:         "generic",
-		WebhookHeaders:        map[string]string{"Authorization": "Bearer test"},
-		StorageBackend:        "duckdb",
-		FirstRunCompleted:     true,
-		RetentionDays:         7,
-		DDoSThresholdPPS:      5000,
-		DDoSThresholdBPS:      10485760,
-		DDoSThresholdFPS:      1000,
-		SYNFloodThresholdPPS:  1000,
-		UDPFloodThresholdPPS:  3000,
-		ICMPFloodThresholdPPS: 500,
+		Port:                            "9090",
+		NetflowPort:                     3000,
+		SflowPort:                       4000,
+		UniFiSyslogEnabled:              true,
+		UniFiSyslogPort:                 5514,
+		UniFiSyslogAllowedIPs:           []string{"192.168.1.1", "192.168.1.0/24"},
+		CaptureInterface:                "eth0",
+		CaptureBPFFilter:                "tcp or udp",
+		CapturePromiscuous:              true,
+		StorageDir:                      "/tmp/foo",
+		LogLevel:                        "debug",
+		Environment:                     "development",
+		LocalSubnets:                    []string{"192.168.10.0/24"},
+		SlackWebhookURL:                 "https://hooks.slack.example.invalid/services/T/B/C",
+		WebhookURL:                      "https://example.invalid/hook",
+		WebhookFormat:                   "generic",
+		WebhookHeaders:                  map[string]string{"Authorization": "Bearer test"},
+		StorageBackend:                  "duckdb",
+		FirstRunCompleted:               true,
+		RetentionDays:                   7,
+		DisabledAnomalyTypes:            []string{"NEW_PORT"},
+		MutedAnomalySubnets:             []string{"192.168.50.0/24"},
+		NotifyAllowedSubnets:            []string{"192.168.10.0/24"},
+		NotifySuppressedTypes:           []string{"BEACONING"},
+		NewDestinationMinHistoryBuckets: 24,
+		BeaconMinObservations:           16,
+		BeaconMinIntervalSeconds:        120,
+		TrafficSpikeMinPackets:          4000,
+		TrafficSpikeMinBytes:            2097152,
+		DDoSThresholdPPS:                5000,
+		DDoSThresholdBPS:                10485760,
+		DDoSThresholdFPS:                1000,
+		SYNFloodThresholdPPS:            1000,
+		UDPFloodThresholdPPS:            3000,
+		ICMPFloodThresholdPPS:           500,
 	}
 
 	bodyBytes, _ := json.Marshal(newSettings)
@@ -107,6 +116,17 @@ func TestHandleSettings(t *testing.T) {
 	if server.cfg.SlackWebhookURL != "https://hooks.slack.example.invalid/services/T/B/C" || server.cfg.WebhookURL != "https://example.invalid/hook" {
 		t.Errorf("expected Slack and generic webhook URLs to update independently, got slack=%q generic=%q", server.cfg.SlackWebhookURL, server.cfg.WebhookURL)
 	}
+	if len(server.cfg.DisabledAnomalyTypes) != 1 || server.cfg.DisabledAnomalyTypes[0] != "NEW_PORT" ||
+		len(server.cfg.MutedAnomalySubnets) != 1 || server.cfg.MutedAnomalySubnets[0] != "192.168.50.0/24" ||
+		len(server.cfg.NotifyAllowedSubnets) != 1 || server.cfg.NotifyAllowedSubnets[0] != "192.168.10.0/24" ||
+		len(server.cfg.NotifySuppressedTypes) != 1 || server.cfg.NotifySuppressedTypes[0] != "BEACONING" {
+		t.Errorf("expected detection/noise controls to update in memory, got %+v", server.cfg)
+	}
+	if server.cfg.NewDestinationMinHistoryBuckets != 24 || server.cfg.BeaconMinObservations != 16 ||
+		server.cfg.BeaconMinIntervalSeconds != 120 || server.cfg.TrafficSpikeMinPackets != 4000 ||
+		server.cfg.TrafficSpikeMinBytes != 2097152 {
+		t.Errorf("expected behavioral thresholds to update in memory, got %+v", server.cfg)
+	}
 
 	// Verify settings were persisted on disk
 	loadedConfig, err := config.LoadConfig(configPath)
@@ -127,6 +147,12 @@ func TestHandleSettings(t *testing.T) {
 	}
 	if loadedConfig.SlackWebhookURL != "https://hooks.slack.example.invalid/services/T/B/C" || loadedConfig.WebhookURL != "https://example.invalid/hook" {
 		t.Errorf("expected loaded config to persist Slack and generic webhook URLs independently, got slack=%q generic=%q", loadedConfig.SlackWebhookURL, loadedConfig.WebhookURL)
+	}
+	if len(loadedConfig.DisabledAnomalyTypes) != 1 || loadedConfig.DisabledAnomalyTypes[0] != "NEW_PORT" ||
+		len(loadedConfig.MutedAnomalySubnets) != 1 || loadedConfig.MutedAnomalySubnets[0] != "192.168.50.0/24" ||
+		len(loadedConfig.NotifyAllowedSubnets) != 1 || loadedConfig.NotifyAllowedSubnets[0] != "192.168.10.0/24" ||
+		len(loadedConfig.NotifySuppressedTypes) != 1 || loadedConfig.NotifySuppressedTypes[0] != "BEACONING" {
+		t.Errorf("expected loaded config to persist detection/noise controls, got %+v", loadedConfig)
 	}
 }
 
@@ -208,6 +234,24 @@ func TestSettingsAPI_ValidationAndMasking(t *testing.T) {
 	server.server.Handler.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 Bad Request for collector port conflict, got %d", w.Code)
+	}
+
+	// F. Detection controls must reject unknown anomaly types.
+	badAnomalyType := `{"port":"8080","netflow_port":2055,"sflow_port":6343,"storage_backend":"sqlite","local_subnets":["192.168.0.0/24"],"retention_days":7,"disabled_anomaly_types":["NOT_REAL"],"ddos_threshold_pps":5000,"ddos_threshold_bps":10000000,"ddos_threshold_fps":1000,"syn_flood_threshold_pps":1000,"udp_flood_threshold_pps":3000,"icmp_flood_threshold_pps":500,"log_level":"info","environment":"production"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader(badAnomalyType))
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for invalid anomaly type, got %d", w.Code)
+	}
+
+	// G. Detection subnet controls must be CIDR ranges.
+	badNoiseCIDR := `{"port":"8080","netflow_port":2055,"sflow_port":6343,"storage_backend":"sqlite","local_subnets":["192.168.0.0/24"],"retention_days":7,"notify_allowed_subnets":["192.168.300.0/24"],"ddos_threshold_pps":5000,"ddos_threshold_bps":10000000,"ddos_threshold_fps":1000,"syn_flood_threshold_pps":1000,"udp_flood_threshold_pps":3000,"icmp_flood_threshold_pps":500,"log_level":"info","environment":"production"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader(badNoiseCIDR))
+	w = httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for invalid notification subnet, got %d", w.Code)
 	}
 
 	// 3. POST settings - verify successful update with masked token preservation

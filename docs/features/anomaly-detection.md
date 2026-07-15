@@ -2,6 +2,8 @@
 
 FlowGuard Lite uses statistical modeling rather than opaque machine learning to detect anomalies. This ensures that every alert is explainable.
 
+Detection sensitivity and notification noise are configurable from Settings. Operators can disable specific anomaly types, mute anomaly creation for selected CIDR subnets, keep storing anomalies while suppressing selected notification types, or restrict Slack/Telegram/webhook dispatch to selected VLAN/subnet CIDRs.
+
 ---
 
 ## 1. Behavioral Baselines

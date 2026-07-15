@@ -23,6 +23,10 @@ import (
 	"github.com/miquelbar/flowguard-lite/internal/webhook"
 )
 
+type anomalyConfigUpdater interface {
+	UpdateConfig(*config.Config)
+}
+
 // CollectorProvider defines the contract for fetching collector stats and exporters.
 type CollectorProvider interface {
 	GetStats() collector.Stats
@@ -42,6 +46,7 @@ type APIServer struct {
 	profiler       *device.DeviceProfiler
 	ddosDetector   *ddos.DDoSDetector
 	webhookEngine  *webhook.WebhookEngine
+	anomalyEngine  anomalyConfigUpdater
 	channelTester  *NotificationChannelTester
 	configPath     string
 	authMu         sync.Mutex
@@ -88,6 +93,7 @@ func NewAPIServer(
 	ddosDetector *ddos.DDoSDetector,
 	webhookEngine *webhook.WebhookEngine,
 	configPath string,
+	anomalyEngines ...anomalyConfigUpdater,
 ) *APIServer {
 	mux := http.NewServeMux()
 	s := &APIServer{
@@ -111,6 +117,9 @@ func NewAPIServer(
 			WriteTimeout: 10 * time.Second,
 			IdleTimeout:  120 * time.Second,
 		},
+	}
+	if len(anomalyEngines) > 0 {
+		s.anomalyEngine = anomalyEngines[0]
 	}
 
 	// Dynamic routing matching PLAN.md

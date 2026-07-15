@@ -1326,7 +1326,7 @@
 	                                <div class="settings-subsection-header">
 	                                    <div>
 	                                        <h4>UniFi SIEM / Syslog</h4>
-	                                        <p>Dedicated future ingest path for CyberSecure Activity Logging SIEM export. Do not point this at NetFlow/IPFIX.</p>
+	                                        <p>Dedicated ingest path for CyberSecure Activity Logging SIEM export. Do not point this at NetFlow/IPFIX.</p>
 	                                    </div>
 	                                    <span class="badge badge-warning">Restart required</span>
 	                                </div>
@@ -1334,7 +1334,7 @@
 	                                    <input type="checkbox" id="setting-unifi-syslog-enabled">
 	                                    <span>
 	                                        <strong>Enable UniFi SIEM/syslog collector</strong>
-	                                        <small>Default off. The UDP collector is introduced in the next mission slice.</small>
+	                                        <small>Default off. Enable only after configuring the UniFi SIEM server address and port.</small>
 	                                    </span>
 	                                </label>
 	                                <div class="form-row">
@@ -1428,9 +1428,82 @@
                     <section id="settings-thresholds" class="settings-card hidden">
                         <div class="settings-card-header">
                             <h3>Detection Thresholds</h3>
-                            <p>Global volumetric DDoS and flood trigger thresholds</p>
+                            <p>Detection sensitivity, muted scopes, and global notification noise controls</p>
                         </div>
                         <form id="form-settings-thresholds">
+                            <div class="settings-subsection">
+                                <div class="settings-subsection-header">
+                                    <div>
+                                        <h4>Alert Noise Controls</h4>
+                                        <p>Persist fewer noisy detections or restrict real-time notifications by subnet</p>
+                                    </div>
+                                </div>
+                                <div class="form-row form-row-spaced">
+                                    <div class="form-group">
+                                        <label class="form-label-block">Disabled Detection Types</label>
+                                        <input type="text" id="setting-disabled-anomaly-types" class="form-control form-control-full" placeholder="e.g. NEW_PORT, BEACONING">
+                                        <p class="text-muted form-help-tiny">No anomaly will be created for these types.</p>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label-block">Muted Detection Subnets</label>
+                                        <input type="text" id="setting-muted-anomaly-subnets" class="form-control form-control-full" placeholder="e.g. 192.168.50.0/24">
+                                        <p class="text-muted form-help-tiny">No behavioral anomaly will be created for source IPs in these CIDRs.</p>
+                                    </div>
+                                </div>
+                                <div class="form-row form-row-spaced">
+                                    <div class="form-group">
+                                        <label class="form-label-block">Notify Only These Subnets</label>
+                                        <input type="text" id="setting-notify-allowed-subnets" class="form-control form-control-full" placeholder="empty = notify all matching rules">
+                                        <p class="text-muted form-help-tiny">Limits Slack, Telegram, and webhook dispatches to these source CIDRs.</p>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label-block">Never Notify These Types</label>
+                                        <input type="text" id="setting-notify-suppressed-types" class="form-control form-control-full" placeholder="e.g. NEW_PORT, BEACONING">
+                                        <p class="text-muted form-help-tiny">Anomalies are still stored, but notification dispatch is suppressed.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-subsection settings-subsection-separated">
+                                <div class="settings-subsection-header">
+                                    <div>
+                                        <h4>Behavioral Detector Sensitivity</h4>
+                                        <p>Adjust learning windows and traffic spike floors without editing YAML by hand</p>
+                                    </div>
+                                </div>
+                                <div class="form-row form-row-spaced">
+                                    <div class="form-group">
+                                        <label class="form-label-block">New Destination Learning Buckets</label>
+                                        <input type="number" id="setting-new-destination-history" class="form-control form-control-full" min="1" max="10080" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label-block">Beacon Observations</label>
+                                        <input type="number" id="setting-beacon-observations" class="form-control form-control-full" min="3" max="60" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label-block">Beacon Min Interval (sec)</label>
+                                        <input type="number" id="setting-beacon-min-interval" class="form-control form-control-full" min="1" max="86400" required>
+                                    </div>
+                                </div>
+                                <div class="form-row form-row-spaced">
+                                    <div class="form-group">
+                                        <label class="form-label-block">Traffic Spike Min Packets/min</label>
+                                        <input type="number" id="setting-traffic-spike-min-packets" class="form-control form-control-full" min="1" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label-block">Traffic Spike Min Bytes/min</label>
+                                        <input type="number" id="setting-traffic-spike-min-bytes" class="form-control form-control-full" min="1" required>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-subsection settings-subsection-separated">
+                                <div class="settings-subsection-header">
+                                    <div>
+                                        <h4>DDoS Thresholds</h4>
+                                        <p>Global volumetric DDoS and flood trigger thresholds</p>
+                                    </div>
+                                </div>
                             <div class="form-row form-row-spaced">
                                 <div class="form-group">
                                     <label class="form-label-block">DDoS PPS Threshold</label>
@@ -1456,6 +1529,7 @@
                             <div class="form-group form-group-spaced">
                                 <label class="form-label-block">ICMP Flood PPS Threshold</label>
                                 <input type="number" id="setting-threshold-icmp" class="form-control form-control-full" min="1" required>
+                            </div>
                             </div>
                             <div class="settings-actions">
                                 <button type="submit" class="btn-primary">Save Thresholds</button>

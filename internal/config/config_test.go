@@ -33,6 +33,12 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Environment != "production" {
 		t.Errorf("expected default Environment 'production', got %s", cfg.Environment)
 	}
+	if cfg.NewDestinationMinHistoryBuckets != 12 || cfg.BeaconMinObservations != 12 || cfg.BeaconMinIntervalSeconds != 90 {
+		t.Errorf("unexpected default behavioral thresholds: %+v", cfg)
+	}
+	if cfg.TrafficSpikeMinPackets != 2500 || cfg.TrafficSpikeMinBytes != 1024*1024 {
+		t.Errorf("unexpected default traffic spike floors: %+v", cfg)
+	}
 }
 
 func TestLoadConfig_Yaml(t *testing.T) {
@@ -57,6 +63,19 @@ unifi_syslog_port: 5514
 unifi_syslog_allowed_ips:
   - "192.168.1.1"
   - "192.168.1.0/24"
+disabled_anomaly_types:
+  - "NEW_PORT"
+muted_anomaly_subnets:
+  - "192.168.50.0/24"
+notify_allowed_subnets:
+  - "192.168.10.0/24"
+notify_suppressed_types:
+  - "BEACONING"
+new_destination_min_history_buckets: 30
+beacon_min_observations: 18
+beacon_min_interval_seconds: 180
+traffic_spike_min_packets: 5000
+traffic_spike_min_bytes: 2097152
 `
 	configPath := filepath.Join(tmpDir, "config.yaml")
 	if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
@@ -92,6 +111,17 @@ unifi_syslog_allowed_ips:
 	if !cfg.UniFiSyslogEnabled || cfg.UniFiSyslogPort != 5514 || len(cfg.UniFiSyslogAllowedIPs) != 2 {
 		t.Errorf("unexpected UniFi syslog config: %+v", cfg)
 	}
+	if len(cfg.DisabledAnomalyTypes) != 1 || cfg.DisabledAnomalyTypes[0] != "NEW_PORT" ||
+		len(cfg.MutedAnomalySubnets) != 1 || cfg.MutedAnomalySubnets[0] != "192.168.50.0/24" ||
+		len(cfg.NotifyAllowedSubnets) != 1 || cfg.NotifyAllowedSubnets[0] != "192.168.10.0/24" ||
+		len(cfg.NotifySuppressedTypes) != 1 || cfg.NotifySuppressedTypes[0] != "BEACONING" {
+		t.Errorf("unexpected detection/noise controls: %+v", cfg)
+	}
+	if cfg.NewDestinationMinHistoryBuckets != 30 || cfg.BeaconMinObservations != 18 ||
+		cfg.BeaconMinIntervalSeconds != 180 || cfg.TrafficSpikeMinPackets != 5000 ||
+		cfg.TrafficSpikeMinBytes != 2097152 {
+		t.Errorf("unexpected behavioral threshold controls: %+v", cfg)
+	}
 }
 
 func TestLoadConfig_EnvOverride(t *testing.T) {
@@ -116,6 +146,15 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 	os.Setenv("FLOWGUARD_SYN_FLOOD_THRESHOLD_PPS", "1100")
 	os.Setenv("FLOWGUARD_UDP_FLOOD_THRESHOLD_PPS", "3100")
 	os.Setenv("FLOWGUARD_ICMP_FLOOD_THRESHOLD_PPS", "600")
+	os.Setenv("FLOWGUARD_DISABLED_ANOMALY_TYPES", "NEW_PORT,BEACONING")
+	os.Setenv("FLOWGUARD_MUTED_ANOMALY_SUBNETS", "192.168.50.0/24")
+	os.Setenv("FLOWGUARD_NOTIFY_ALLOWED_SUBNETS", "192.168.10.0/24")
+	os.Setenv("FLOWGUARD_NOTIFY_SUPPRESSED_TYPES", "NEW_DESTINATION")
+	os.Setenv("FLOWGUARD_NEW_DESTINATION_MIN_HISTORY_BUCKETS", "24")
+	os.Setenv("FLOWGUARD_BEACON_MIN_OBSERVATIONS", "16")
+	os.Setenv("FLOWGUARD_BEACON_MIN_INTERVAL_SECONDS", "120")
+	os.Setenv("FLOWGUARD_TRAFFIC_SPIKE_MIN_PACKETS", "4000")
+	os.Setenv("FLOWGUARD_TRAFFIC_SPIKE_MIN_BYTES", "2000000")
 
 	defer func() {
 		os.Unsetenv("FLOWGUARD_PORT")
@@ -139,6 +178,15 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 		os.Unsetenv("FLOWGUARD_SYN_FLOOD_THRESHOLD_PPS")
 		os.Unsetenv("FLOWGUARD_UDP_FLOOD_THRESHOLD_PPS")
 		os.Unsetenv("FLOWGUARD_ICMP_FLOOD_THRESHOLD_PPS")
+		os.Unsetenv("FLOWGUARD_DISABLED_ANOMALY_TYPES")
+		os.Unsetenv("FLOWGUARD_MUTED_ANOMALY_SUBNETS")
+		os.Unsetenv("FLOWGUARD_NOTIFY_ALLOWED_SUBNETS")
+		os.Unsetenv("FLOWGUARD_NOTIFY_SUPPRESSED_TYPES")
+		os.Unsetenv("FLOWGUARD_NEW_DESTINATION_MIN_HISTORY_BUCKETS")
+		os.Unsetenv("FLOWGUARD_BEACON_MIN_OBSERVATIONS")
+		os.Unsetenv("FLOWGUARD_BEACON_MIN_INTERVAL_SECONDS")
+		os.Unsetenv("FLOWGUARD_TRAFFIC_SPIKE_MIN_PACKETS")
+		os.Unsetenv("FLOWGUARD_TRAFFIC_SPIKE_MIN_BYTES")
 	}()
 
 	cfg, err := LoadConfig("non-existent-config.yaml")
@@ -182,6 +230,17 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 	if cfg.DDoSThresholdPPS != 6000 || cfg.DDoSThresholdBPS != 12582912 || cfg.DDoSThresholdFPS != 1200 ||
 		cfg.SYNFloodThresholdPPS != 1100 || cfg.UDPFloodThresholdPPS != 3100 || cfg.ICMPFloodThresholdPPS != 600 {
 		t.Errorf("unexpected DDoS threshold env overrides: %+v", cfg)
+	}
+	if len(cfg.DisabledAnomalyTypes) != 2 || cfg.DisabledAnomalyTypes[0] != "NEW_PORT" ||
+		len(cfg.MutedAnomalySubnets) != 1 || cfg.MutedAnomalySubnets[0] != "192.168.50.0/24" ||
+		len(cfg.NotifyAllowedSubnets) != 1 || cfg.NotifyAllowedSubnets[0] != "192.168.10.0/24" ||
+		len(cfg.NotifySuppressedTypes) != 1 || cfg.NotifySuppressedTypes[0] != "NEW_DESTINATION" {
+		t.Errorf("unexpected detection/noise env overrides: %+v", cfg)
+	}
+	if cfg.NewDestinationMinHistoryBuckets != 24 || cfg.BeaconMinObservations != 16 ||
+		cfg.BeaconMinIntervalSeconds != 120 || cfg.TrafficSpikeMinPackets != 4000 ||
+		cfg.TrafficSpikeMinBytes != 2000000 {
+		t.Errorf("unexpected behavioral threshold env overrides: %+v", cfg)
 	}
 }
 
@@ -280,6 +339,22 @@ func TestConfigValidateRejectsUnsafeValues(t *testing.T) {
 		{
 			name:   "invalid unifi syslog allowlist",
 			mutate: func(cfg *Config) { cfg.UniFiSyslogAllowedIPs = []string{"not-an-ip"} },
+		},
+		{
+			name:   "invalid disabled anomaly type",
+			mutate: func(cfg *Config) { cfg.DisabledAnomalyTypes = []string{"NOT_REAL"} },
+		},
+		{
+			name:   "invalid muted anomaly subnet",
+			mutate: func(cfg *Config) { cfg.MutedAnomalySubnets = []string{"192.168.300.0/24"} },
+		},
+		{
+			name:   "invalid notification allowed subnet",
+			mutate: func(cfg *Config) { cfg.NotifyAllowedSubnets = []string{"not-cidr"} },
+		},
+		{
+			name:   "invalid beacon observations",
+			mutate: func(cfg *Config) { cfg.BeaconMinObservations = 2 },
 		},
 	}
 

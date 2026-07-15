@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -277,4 +278,62 @@ func TestWebhookEngine_RoutingRules(t *testing.T) {
 			t.Errorf("expected status 'deduplicated', got %q", repo.logs[1].Status)
 		}
 	})
+}
+
+func TestWebhookEngine_GlobalNoiseControlsSuppressNotification(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo := &MockRepository{}
+	engine := NewWebhookEngine(repo, "", "http://example.test/hook", "generic", nil, false, "", "", logger)
+	defer shutdownWebhookEngine(t, engine)
+	engine.UpdateNoiseControls(NoiseControls{
+		SuppressedTypes: []string{"BEACONING"},
+	})
+
+	engine.SendAnomalyAlert(context.Background(), &storage.Anomaly{
+		ID:        77,
+		IP:        "192.168.1.77",
+		Type:      "BEACONING",
+		Severity:  "medium",
+		Status:    "active",
+		CreatedAt: time.Now(),
+	})
+
+	time.Sleep(25 * time.Millisecond)
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	if len(repo.logs) != 1 {
+		t.Fatalf("expected one suppressed notification log, got %d", len(repo.logs))
+	}
+	if repo.logs[0].Status != "suppressed" || repo.logs[0].Channel != "all" {
+		t.Fatalf("unexpected notification log: %+v", repo.logs[0])
+	}
+}
+
+func TestWebhookEngine_GlobalAllowedSubnetsSuppressOutsideSource(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo := &MockRepository{}
+	engine := NewWebhookEngine(repo, "", "http://example.test/hook", "generic", nil, false, "", "", logger)
+	defer shutdownWebhookEngine(t, engine)
+	engine.UpdateNoiseControls(NoiseControls{
+		AllowedSubnets: []string{"192.168.10.0/24"},
+	})
+
+	engine.SendAnomalyAlert(context.Background(), &storage.Anomaly{
+		ID:        78,
+		IP:        "192.168.50.77",
+		Type:      "TRAFFIC_SPIKE",
+		Severity:  "high",
+		Status:    "active",
+		CreatedAt: time.Now(),
+	})
+
+	time.Sleep(25 * time.Millisecond)
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	if len(repo.logs) != 1 {
+		t.Fatalf("expected one suppressed notification log, got %d", len(repo.logs))
+	}
+	if repo.logs[0].Status != "suppressed" || !strings.Contains(repo.logs[0].ErrorMessage, "outside configured notification subnets") {
+		t.Fatalf("unexpected notification log: %+v", repo.logs[0])
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/miquelbar/flowguard-lite/internal/baseline"
+	"github.com/miquelbar/flowguard-lite/internal/config"
 	"github.com/miquelbar/flowguard-lite/internal/flow"
 	"github.com/miquelbar/flowguard-lite/internal/storage"
 	duckdbstore "github.com/miquelbar/flowguard-lite/internal/storage/duckdb"
@@ -280,6 +281,84 @@ func TestAnomalyEngineNewDestinationWaitsForMatureSourceHistory(t *testing.T) {
 	defer mockRepo.mu.Unlock()
 	if len(mockRepo.Anomalies) != 0 {
 		t.Fatalf("expected immature source history to suppress new destination/port alerts, got %+v", mockRepo.Anomalies)
+	}
+}
+
+func TestAnomalyEngineDetectionControlsSuppressAlerts(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	sqliteRepo, err := sqlitestore.NewRepository(t.TempDir(), logger)
+	if err != nil {
+		t.Fatalf("failed to create repository: %v", err)
+	}
+	defer sqliteRepo.Close()
+
+	ctx := context.Background()
+	sourceIP := "192.168.1.114"
+	seedMatureNewDestinationHistory(t, ctx, sqliteRepo, sourceIP, "198.51.100.114", 53, time.Now().UTC())
+
+	mockRepo := &MockDeviceRepository{}
+	engine := NewAnomalyEngine(
+		mockRepo,
+		logger,
+		baseline.NewBaselineEngine(sqliteRepo, logger),
+		[]string{"192.168.1.0/24"},
+	)
+	cfg := config.DefaultConfig()
+	cfg.DisabledAnomalyTypes = []string{"NEW_DESTINATION"}
+	engine.UpdateConfig(cfg)
+
+	engine.AnalyzeBatch(ctx, sqliteRepo, []flow.FlowEvent{{
+		Timestamp: time.Now().UTC(), SrcIP: sourceIP, DstIP: "203.0.113.114",
+		DstPort: 53, Protocol: 17, Bytes: 256, Packets: 1,
+	}})
+	time.Sleep(50 * time.Millisecond)
+
+	mockRepo.mu.Lock()
+	defer mockRepo.mu.Unlock()
+	if len(mockRepo.Anomalies) != 0 {
+		t.Fatalf("expected disabled NEW_DESTINATION to suppress alert, got %+v", mockRepo.Anomalies)
+	}
+}
+
+func TestAnomalyEngineMutedSubnetSuppressesAlerts(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	sqliteRepo, err := sqlitestore.NewRepository(t.TempDir(), logger)
+	if err != nil {
+		t.Fatalf("failed to create repository: %v", err)
+	}
+	defer sqliteRepo.Close()
+
+	repo := &MockDeviceRepository{}
+	baseEngine := baseline.NewBaselineEngine(sqliteRepo, logger)
+	ip := "192.168.50.22"
+	if err := sqliteRepo.UpsertDevice(context.Background(), ip, "muted-device", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := sqliteRepo.SaveBaseline(context.Background(), &storage.DeviceBaseline{
+		IP: ip, MeanBytes: 10, StdDevBytes: 1, MeanPackets: 10, StdDevPackets: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	baseEngine.UpdateThresholds(1, 1)
+	if err := baseEngine.LoadBaselines(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := NewAnomalyEngine(repo, logger, baseEngine, []string{"192.168.50.0/24"})
+	cfg := config.DefaultConfig()
+	cfg.MutedAnomalySubnets = []string{"192.168.50.0/24"}
+	engine.UpdateConfig(cfg)
+
+	engine.AnalyzeBatch(context.Background(), nil, []flow.FlowEvent{{
+		Timestamp: time.Now().UTC(), SrcIP: ip, DstIP: "203.0.113.50",
+		DstPort: 443, Protocol: 6, Bytes: 1000, Packets: 1000,
+	}})
+	time.Sleep(50 * time.Millisecond)
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	if len(repo.Anomalies) != 0 {
+		t.Fatalf("expected muted subnet to suppress traffic spike, got %+v", repo.Anomalies)
 	}
 }
 

@@ -69,6 +69,18 @@ func (e *BaselineEngine) GetCachedBaseline(ip string) *storage.DeviceBaseline {
 	return e.cachedBaselines[ip]
 }
 
+// UpdateThresholds changes absolute floors used before statistical anomaly checks.
+func (e *BaselineEngine) UpdateThresholds(minBytes, minPackets uint64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if minBytes > 0 {
+		e.minBytesThreshold = minBytes
+	}
+	if minPackets > 0 {
+		e.minPacketsThreshold = minPackets
+	}
+}
+
 // CalculateBaselines scans retained flow aggregate history and recalculates statistical metrics for all devices.
 func (e *BaselineEngine) CalculateBaselines(ctx context.Context, flowRepo storage.BaselineSampleRepository) error {
 	devices, err := e.repo.ListDevices(ctx)
@@ -117,13 +129,18 @@ func (e *BaselineEngine) CalculateBaselines(ctx context.Context, flowRepo storag
 
 // IsAnomaly checks if current minute traffic for a device is a statistical outlier.
 func (e *BaselineEngine) IsAnomaly(ip string, bytesVal uint64, packetsVal uint64, peersVal int) (bool, string) {
-	b := e.GetCachedBaseline(ip)
+	e.mu.RLock()
+	b := e.cachedBaselines[ip]
+	minBytesThreshold := e.minBytesThreshold
+	minPacketsThreshold := e.minPacketsThreshold
+	minPeersThreshold := e.minPeersThreshold
+	e.mu.RUnlock()
 	if b == nil {
 		return false, ""
 	}
 
 	// 1. Check Bytes Outlier
-	if bytesVal > e.minBytesThreshold {
+	if bytesVal > minBytesThreshold {
 		limit := b.MeanBytes + (3 * b.StdDevBytes)
 		if float64(bytesVal) > limit {
 			reason := fmt.Sprintf("traffic volume of %d bytes exceeded statistical limit of %.0f bytes (mean: %.0f, stddev: %.0f)",
@@ -133,7 +150,7 @@ func (e *BaselineEngine) IsAnomaly(ip string, bytesVal uint64, packetsVal uint64
 	}
 
 	// 2. Check Packets Outlier
-	if packetsVal > e.minPacketsThreshold {
+	if packetsVal > minPacketsThreshold {
 		limit := b.MeanPackets + (3 * b.StdDevPackets)
 		if float64(packetsVal) > limit {
 			reason := fmt.Sprintf("packet count of %d packets exceeded statistical limit of %.0f packets (mean: %.0f, stddev: %.0f)",
@@ -143,7 +160,7 @@ func (e *BaselineEngine) IsAnomaly(ip string, bytesVal uint64, packetsVal uint64
 	}
 
 	// 3. Check Peers Outlier
-	if peersVal > e.minPeersThreshold {
+	if peersVal > minPeersThreshold {
 		limit := b.MeanPeers + (3 * b.StdDevPeers)
 		if float64(peersVal) > limit {
 			reason := fmt.Sprintf("unique contacting peers of %d exceeded statistical limit of %.0f (mean: %.0f, stddev: %.0f)",

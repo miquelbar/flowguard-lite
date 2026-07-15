@@ -1,6 +1,6 @@
 # Frontend Architecture
 
-FlowGuard Lite currently uses Vite with vanilla JavaScript modules and CSS. Do not introduce React, TypeScript, Tailwind, or another framework unless `missions/flowguard-lite/DECISIONS.md` records an explicit decision.
+FlowGuard Lite currently uses Vite with vanilla JavaScript modules and CSS. Do not introduce React, TypeScript, Tailwind, or another framework unless a project decision record explicitly approves it.
 
 The frontend is organized around feature boundaries:
 
@@ -96,7 +96,7 @@ For the full pre-release gate, run:
 make pre-release-gate
 ```
 
-That gate runs product Go tests, the frontend gate, whitespace checks, and local mission-file ignore checks.
+That gate runs product Go tests, the frontend gate, whitespace checks, and local private-workflow ignore checks.
 
 Host-native convenience targets exist for local development when Node is installed:
 
