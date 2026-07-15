@@ -175,9 +175,8 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 		if tgEnabled && tgToken != "" && tgChatID != "" {
 			tgURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", tgToken)
 			payload := map[string]interface{}{
-				"chat_id":    tgChatID,
-				"text":       messageText,
-				"parse_mode": "Markdown",
+				"chat_id": tgChatID,
+				"text":    messageText,
 			}
 			bodyBytes, err := json.Marshal(payload)
 			if err != nil {
@@ -312,9 +311,8 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 				}
 				tgURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", tgToken)
 				payload := map[string]interface{}{
-					"chat_id":    tgChatID,
-					"text":       messageText,
-					"parse_mode": "Markdown",
+					"chat_id": tgChatID,
+					"text":    messageText,
 				}
 				bodyBytes, err := json.Marshal(payload)
 				if err != nil {
@@ -394,8 +392,7 @@ func (w *WebhookEngine) SendTestAlert(ctx context.Context, rule *storage.Notific
 			var payload interface{} = anomaly
 			if format == "telegram" {
 				payload = map[string]interface{}{
-					"text":       messageText,
-					"parse_mode": "Markdown",
+					"text": messageText,
 				}
 			}
 			bodyBytes, err := json.Marshal(payload)
@@ -422,9 +419,8 @@ func (w *WebhookEngine) SendTestAlert(ctx context.Context, rule *storage.Notific
 			}
 			tgURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", tgToken)
 			payload := map[string]interface{}{
-				"chat_id":    tgChatID,
-				"text":       messageText,
-				"parse_mode": "Markdown",
+				"chat_id": tgChatID,
+				"text":    messageText,
 			}
 			bodyBytes, err := json.Marshal(payload)
 			if err != nil {

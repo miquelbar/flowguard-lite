@@ -161,6 +161,9 @@ func TestWebhookEngine_TelegramDirect(t *testing.T) {
 		if payload["chat_id"] != "chat456" {
 			t.Errorf("expected chat_id 'chat456', got: %v", payload["chat_id"])
 		}
+		if _, ok := payload["parse_mode"]; ok {
+			t.Fatalf("expected Telegram payload to be plain text without parse_mode, got: %v", payload)
+		}
 	case <-time.After(1 * time.Second):
 		t.Fatal("timeout waiting for Telegram dispatch")
 	}

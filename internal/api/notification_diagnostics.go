@@ -110,9 +110,8 @@ func diagnosticRequestParts(cfg *config.Config, payload TestChannelPayload) (str
 			return "", nil, nil, "Telegram Token and Chat ID must not be empty"
 		}
 		bodyBytes, err := json.Marshal(map[string]interface{}{
-			"chat_id":    chatID,
-			"text":       messageText,
-			"parse_mode": "Markdown",
+			"chat_id": chatID,
+			"text":    messageText,
 		})
 		if err != nil {
 			return "", nil, nil, "Failed to encode Telegram payload: " + err.Error()

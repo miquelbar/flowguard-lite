@@ -312,6 +312,13 @@ func TestHandleTestChannel(t *testing.T) {
 	if len(seenRequests) < 3 || !strings.Contains(seenRequests[2].URL.String(), "botstored-token-value/sendMessage") {
 		t.Fatalf("expected Telegram request to use stored token, got requests: %+v", seenRequests)
 	}
+	var telegramPayload map[string]interface{}
+	if err := json.NewDecoder(seenRequests[2].Body).Decode(&telegramPayload); err != nil {
+		t.Fatalf("failed decoding Telegram diagnostic payload: %v", err)
+	}
+	if _, ok := telegramPayload["parse_mode"]; ok {
+		t.Fatalf("expected Telegram diagnostic payload to be plain text without parse_mode, got %+v", telegramPayload)
+	}
 
 	bodyEmptyWebhook := `{"channel":"webhook","webhook_url":""}`
 	w = runTestChannel(bodyEmptyWebhook)
