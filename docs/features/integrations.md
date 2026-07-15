@@ -40,14 +40,30 @@ Generates structured Slack block attachments:
 ```
 
 #### Telegram Bot API
-Dispatches HTML-formatted message blocks to your configured Telegram channel:
+Dispatches plain-text messages through the Telegram Bot API. FlowGuard intentionally does not set Telegram `parse_mode`; anomaly types, IPs, URLs, and evidence text can contain Markdown or HTML control characters and should never break notification delivery.
+
 ```json
 {
-  "chat_id": "@my_channel",
-  "text": "🛡️ <b>FlowGuard Lite Alert</b>\nDevice: 192.168.1.50\nRisk Level: High Risk\nSuspicious outbound traffic spike.",
-  "parse_mode": "HTML"
+  "chat_id": "693221",
+  "text": "FlowGuard Lite Test Alert\n\nIP Address: 192.168.1.99\nType: test_alert\nSeverity: info\nDescription: This is a FlowGuard Lite synchronous notification test alert."
 }
 ```
+
+To configure Telegram:
+
+1. Create a bot with BotFather and copy the bot token.
+2. Open a direct chat with the bot and send `/start`. For group delivery, add the bot to the group first.
+3. Send any message to the bot or group.
+4. Open `https://api.telegram.org/bot<TOKEN>/getUpdates`.
+5. Use `message.chat.id` as `telegram_chat_id`. Do not use `message.from.id` unless it is the same value as `message.chat.id`.
+6. Save the token and chat ID under **Settings → Notifications & Routing → Telegram Bot**.
+7. Click **Test Telegram Bot Connection** before enabling notification rules that target `telegram`.
+
+Common Telegram diagnostics:
+
+*   `context deadline exceeded`: the container could not complete the outbound HTTPS request. Check DNS/egress firewall. Docker hosts with broken IPv6 egress should use a FlowGuard build that prefers IPv4 for outbound notifications.
+*   `can't parse entities`: an older build sent Markdown/HTML parse mode. Upgrade; current builds send plain text.
+*   `chat not found`: the token is valid, but the bot cannot see the target chat. Send `/start` in private chat, add the bot to the group/channel, and copy `message.chat.id` from `getUpdates`.
 
 #### Generic JSON Payload
 Sends a raw JSON object detailing the event for third-party scripts.
