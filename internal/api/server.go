@@ -73,11 +73,12 @@ type HealthResponse struct {
 
 // CollectorHealthSample is a bounded point-in-time snapshot used for Overview trends.
 type CollectorHealthSample struct {
-	Timestamp       time.Time `json:"timestamp"`
-	PacketsReceived uint64    `json:"packets_received"`
-	PacketsDropped  uint64    `json:"packets_dropped"`
-	DecodeErrors    uint64    `json:"decode_errors"`
-	QueueDepth      int       `json:"queue_depth"`
+	Timestamp       time.Time               `json:"timestamp"`
+	PacketsReceived uint64                  `json:"packets_received"`
+	PacketsDropped  uint64                  `json:"packets_dropped"`
+	DecodeErrors    uint64                  `json:"decode_errors"`
+	QueueDepth      int                     `json:"queue_depth"`
+	Sources         []collector.SourceStats `json:"sources,omitempty"`
 }
 
 // NewAPIServer creates and configures a new APIServer instance.
@@ -321,6 +322,7 @@ func (s *APIServer) recordCollectorStats(ts time.Time) {
 		PacketsDropped:  stats.PacketsDropped,
 		DecodeErrors:    stats.DecodeErrors,
 		QueueDepth:      stats.QueueDepth,
+		Sources:         stats.Sources,
 	}
 
 	s.statsMu.Lock()

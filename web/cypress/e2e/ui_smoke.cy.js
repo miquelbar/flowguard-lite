@@ -188,7 +188,17 @@ function registerApiStubs() {
         { ip: "192.168.30.42", hour: 9, bytes: 200000 }
     ]);
     cy.intercept("GET", "/api/stats/collector-health*", [
-        { timestamp: "2026-07-10T09:00:00Z", packets: 100, decode_errors: 0, dropped_packets: 0, queue_depth: 1 }
+        {
+            timestamp: "2026-07-10T09:00:00Z",
+            packets_received: 101,
+            packets_dropped: 0,
+            decode_errors: 0,
+            queue_depth: 1,
+            sources: [
+                { kind: "netflow", id: "netflow", enabled: true, status: "listening", port: 2055, packets: 100, drops: 0, decode_errors: 0 },
+                { kind: "unifi_syslog", id: "unifi_syslog", enabled: true, status: "listening", port: 5514, packets: 1, drops: 0, decode_errors: 0 }
+            ]
+        }
     ]);
     cy.intercept("GET", "/api/traffic/timeseries*", seriesBuckets());
     cy.intercept("GET", "/api/top/sources*", [
@@ -281,6 +291,9 @@ describe("FlowGuard Lite UI smoke regressions", () => {
             cy.contains(text).should("be.visible");
             cy.assertNoDocumentHorizontalOverflow();
             cy.get(".global-time-control").should(shouldShowTimeControls ? "be.visible" : "not.be.visible");
+            if (hash === "#/overview") {
+                cy.get("#overview-collector-health").should("contain.text", "unifi_syslog").and("contain.text", "listening");
+            }
         });
     });
 

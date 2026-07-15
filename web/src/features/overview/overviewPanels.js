@@ -319,6 +319,7 @@ export function renderCollectorHealth(collector) {
     const dropTrend = samples.map(item => Number(item.packets_dropped || 0));
     const errorTrend = samples.map(item => Number(item.decode_errors || 0));
     const queueTrend = samples.map(item => Number(item.queue_depth || 0));
+    const sources = latest.sources || collector?.sources || [];
     el.innerHTML = `
         <div class="overview-gauge">
             <strong>${dropPct.toFixed(2)}%</strong>
@@ -340,7 +341,45 @@ export function renderCollectorHealth(collector) {
             <div><strong>Queue trend</strong><span>${formatNumber(latest.queue_depth || 0)}</span></div>
             ${timeSparkline((queueTrend.length ? queueTrend : [latest.queue_depth || 0]).map((value, idx) => ({ timestamp: collectorTimestamp(samples[idx], idx, queueTrend.length || 1), value })))}
         </div>
+        ${collectorSourcesTable(sources)}
     `;
 }
 
+function collectorSourcesTable(sources) {
+    if (!sources.length) {
+        return `<div class="empty-state compact">No collector sources reported.</div>`;
+    }
+    const rows = sources.map(source => {
+        const status = source.status || (source.enabled ? "configured" : "disabled");
+        const statusClass = status === "listening" ? "status-active" : (status === "disabled" ? "status-silenced" : "status-acknowledged");
+        return `
+            <tr>
+                <td><span class="badge badge-label">${escapeHtml(source.kind || source.id || "unknown")}</span></td>
+                <td>${source.port ? escapeHtml(String(source.port)) : "-"}</td>
+                <td><span class="${statusClass}">${escapeHtml(status)}</span></td>
+                <td class="text-right">${formatNumber(source.packets || 0)}</td>
+                <td class="text-right">${formatNumber(source.drops || 0)}</td>
+                <td class="text-right">${formatNumber(source.decode_errors || 0)}</td>
+            </tr>
+        `;
+    }).join("");
+    return `
+        <div class="collector-source-list">
+            <div class="section-mini-title">Sources</div>
+            <table class="compact-table">
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th>Port</th>
+                        <th>Status</th>
+                        <th class="text-right">Packets</th>
+                        <th class="text-right">Drops</th>
+                        <th class="text-right">Errors</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    `;
+}
 

@@ -294,12 +294,28 @@ func TestHandleStatsOverviewEndpoints(t *testing.T) {
 func TestHandleStatsCollectorHealth(t *testing.T) {
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	mockCollector := &MockCollector{Stats: collector.Stats{PacketsReceived: 100, PacketsDropped: 1, DecodeErrors: 2, QueueDepth: 3}}
+	mockCollector := &MockCollector{Stats: collector.Stats{
+		PacketsReceived: 100,
+		PacketsDropped:  1,
+		DecodeErrors:    2,
+		QueueDepth:      3,
+		Sources: []collector.SourceStats{
+			{Kind: "unifi_syslog", ID: "unifi_syslog", Enabled: true, Status: "listening", Port: 5514, Packets: 1},
+		},
+	}}
 	server := NewAPIServer(cfg, logger, mockCollector, nil, nil, nil, nil, nil, nil, nil, "")
 
 	now := time.Now().UTC()
 	server.recordCollectorStats(now.Add(-15 * time.Second))
-	mockCollector.Stats = collector.Stats{PacketsReceived: 150, PacketsDropped: 2, DecodeErrors: 3, QueueDepth: 4}
+	mockCollector.Stats = collector.Stats{
+		PacketsReceived: 150,
+		PacketsDropped:  2,
+		DecodeErrors:    3,
+		QueueDepth:      4,
+		Sources: []collector.SourceStats{
+			{Kind: "unifi_syslog", ID: "unifi_syslog", Enabled: true, Status: "listening", Port: 5514, Packets: 2},
+		},
+	}
 	server.recordCollectorStats(now)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/stats/collector-health?limit=1", nil)
@@ -314,6 +330,9 @@ func TestHandleStatsCollectorHealth(t *testing.T) {
 	}
 	if len(samples) != 1 || samples[0].PacketsReceived != 150 || samples[0].QueueDepth != 4 {
 		t.Fatalf("unexpected collector health samples: %+v", samples)
+	}
+	if len(samples[0].Sources) != 1 || samples[0].Sources[0].Kind != "unifi_syslog" || samples[0].Sources[0].Packets != 2 {
+		t.Fatalf("expected bounded collector source health in sample, got %+v", samples[0].Sources)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/stats/collector-health?limit=bad", nil)
