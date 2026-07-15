@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"github.com/miquelbar/flowguard-lite/internal/config"
+	"github.com/miquelbar/flowguard-lite/internal/netclient"
 	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
 
-const notificationDiagnosticTimeout = 5 * time.Second
+const notificationDiagnosticTimeout = 10 * time.Second
 
 type httpDoer interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -46,7 +47,7 @@ type NotificationChannelTester struct {
 
 func NewNotificationChannelTester(client httpDoer) *NotificationChannelTester {
 	if client == nil {
-		client = http.DefaultClient
+		client = netclient.NewHTTPClient(notificationDiagnosticTimeout)
 	}
 	return &NotificationChannelTester{client: client}
 }

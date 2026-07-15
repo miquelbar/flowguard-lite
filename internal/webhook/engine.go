@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/miquelbar/flowguard-lite/internal/netclient"
 	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
 
@@ -48,7 +49,7 @@ func NewWebhookEngine(repo storage.StorageRepository, slackURL string, webhookUR
 		tgEnabled:      tgEnabled,
 		tgToken:        tgToken,
 		tgChatID:       tgChatID,
-		client:         &http.Client{Timeout: 5 * time.Second},
+		client:         netclient.NewHTTPClient(10 * time.Second),
 		logger:         logger,
 		dispatchQueue:  make(chan webhookDispatchRequest, webhookDispatchQueueSize),
 	}

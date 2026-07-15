@@ -101,7 +101,7 @@ func NewAPIServer(
 		profiler:       profiler,
 		ddosDetector:   ddosDetector,
 		webhookEngine:  webhookEngine,
-		channelTester:  NewNotificationChannelTester(http.DefaultClient),
+		channelTester:  NewNotificationChannelTester(nil),
 		configPath:     configPath,
 		sessions:       make(map[string]authSession),
 		loginAttempts:  make(map[string]loginAttempt),
