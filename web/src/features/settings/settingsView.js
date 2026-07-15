@@ -5,6 +5,7 @@ import { markUnsaved, switchSettingsSection } from './settingsSections.js';
 import { bindBackupEvents } from './settingsBackup.js';
 import { bindNotificationDiagnostics } from './settingsDiagnostics.js';
 import { appendWebhookHeaderRow, syncNotificationFields, updateTelegramUrlPreview } from './settingsNotifications.js';
+import { bindThresholdControlEvents } from './settingsThresholdControls.js';
 
 export { renderSettingsView } from './settingsRender.js';
 
@@ -48,6 +49,7 @@ export function bindSettingsEvents(onReload) {
     }
 
     bindNotificationDiagnostics();
+    bindThresholdControlEvents(() => markUnsaved("thresholds", true));
 
     const btnAddWebhookHeader = document.getElementById("btn-add-webhook-header");
     if (btnAddWebhookHeader) {

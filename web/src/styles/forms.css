@@ -116,6 +116,97 @@
     color: var(--warning-color) !important;
 }
 
+.selector-chip-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.45rem;
+}
+
+.selector-chip-grid-compact {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.selector-chip {
+    min-height: 42px;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0.15rem;
+    font-size: 0.78rem;
+    line-height: 1.15;
+    text-align: left;
+    cursor: pointer;
+}
+
+.selector-chip:hover,
+.selector-chip:focus-visible {
+    border-color: var(--primary-color);
+    background: rgba(63, 95, 70, 0.12);
+}
+
+.selector-chip.active {
+    border-color: rgba(34, 197, 94, 0.55);
+    background: rgba(34, 197, 94, 0.12);
+    color: #bbf7d0;
+}
+
+.selector-chip small {
+    color: var(--text-muted);
+    font-family: var(--mono-font);
+    font-size: 0.62rem;
+}
+
+.selector-chip-network {
+    min-height: 34px;
+    font-family: var(--mono-font);
+}
+
+.selected-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    min-height: 1.6rem;
+}
+
+.selected-chip,
+.selector-empty {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-height: 1.55rem;
+    padding: 0.2rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+}
+
+.selected-chip button {
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 0 0.1rem;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.selected-chip button:hover,
+.selected-chip button:focus-visible {
+    color: var(--danger-color);
+}
+
+.selector-empty {
+    color: var(--text-muted);
+}
+
 .form-grid-two,
 .form-row {
     display: grid;

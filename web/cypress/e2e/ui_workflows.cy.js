@@ -97,6 +97,15 @@ function registerApiStubs() {
         syn_flood_threshold_pps: 1000,
         udp_flood_threshold_pps: 3000,
         icmp_flood_threshold_pps: 500,
+        disabled_anomaly_types: [],
+        muted_anomaly_subnets: [],
+        notify_allowed_subnets: [],
+        notify_suppressed_types: [],
+        new_destination_min_history_buckets: 12,
+        beacon_min_observations: 12,
+        beacon_min_interval_seconds: 90,
+        traffic_spike_min_packets: 2500,
+        traffic_spike_min_bytes: 1048576,
         slack_webhook_url: "",
         webhook_url: "",
         webhook_format: "generic",
@@ -481,6 +490,32 @@ describe("FlowGuard Lite UI click-to-filter workflows", () => {
             expect(body.telegram_enabled).to.be.true;
             expect(body.telegram_token).to.equal("123456:fake-token");
             expect(body.telegram_chat_id).to.equal("-100998877");
+        });
+    });
+
+    it("configures detection noise controls with chips and known network selectors", () => {
+        cy.viewport(1440, 900);
+        cy.intercept("POST", "/api/settings*", { statusCode: 200, body: {} }).as("saveThresholds");
+
+        visitApp("#/settings/thresholds");
+
+        cy.get("#setting-disabled-anomaly-types-picker").contains("button", "New port").click();
+        cy.get("#setting-notify-suppressed-types-picker").contains("button", "Beaconing").click();
+        cy.get("#setting-muted-anomaly-subnets-picker").contains("button", "192.168.30.0/24").click();
+        cy.get("[data-target='setting-notify-allowed-subnets']").type("192.168.40.0/24{enter}");
+
+        cy.get("#setting-disabled-anomaly-types-selected").should("contain.text", "NEW_PORT");
+        cy.get("#setting-notify-suppressed-types-selected").should("contain.text", "BEACONING");
+        cy.get("#setting-muted-anomaly-subnets-selected").should("contain.text", "192.168.30.0/24");
+        cy.get("#setting-notify-allowed-subnets-selected").should("contain.text", "192.168.40.0/24");
+
+        cy.get("#form-settings-thresholds").submit();
+        cy.wait("@saveThresholds").then((interception) => {
+            const body = interception.request.body;
+            expect(body.disabled_anomaly_types).to.deep.equal(["NEW_PORT"]);
+            expect(body.notify_suppressed_types).to.deep.equal(["BEACONING"]);
+            expect(body.muted_anomaly_subnets).to.deep.equal(["192.168.30.0/24"]);
+            expect(body.notify_allowed_subnets).to.deep.equal(["192.168.40.0/24"]);
         });
     });
 });

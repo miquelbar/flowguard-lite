@@ -1441,24 +1441,34 @@
                                 <div class="form-row form-row-spaced">
                                     <div class="form-group">
                                         <label class="form-label-block">Disabled Detection Types</label>
-                                        <input type="text" id="setting-disabled-anomaly-types" class="form-control form-control-full" placeholder="e.g. NEW_PORT, BEACONING">
-                                        <p class="text-muted form-help-tiny">No anomaly will be created for these types.</p>
+                                        <input type="hidden" id="setting-disabled-anomaly-types">
+                                        <div id="setting-disabled-anomaly-types-picker" class="selector-chip-grid" data-threshold-picker data-input="setting-disabled-anomaly-types"></div>
+                                        <div id="setting-disabled-anomaly-types-selected" class="selected-chip-row" data-selected-list data-input="setting-disabled-anomaly-types"></div>
+                                        <p class="text-muted form-help-tiny">No anomaly will be created for selected types. Use notification suppression first when evidence should remain visible.</p>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label-block">Muted Detection Subnets</label>
-                                        <input type="text" id="setting-muted-anomaly-subnets" class="form-control form-control-full" placeholder="e.g. 192.168.50.0/24">
+                                        <input type="hidden" id="setting-muted-anomaly-subnets">
+                                        <div id="setting-muted-anomaly-subnets-picker" class="selector-chip-grid selector-chip-grid-compact" data-threshold-picker data-input="setting-muted-anomaly-subnets"></div>
+                                        <input type="text" class="form-control form-control-full" data-custom-list-input data-target="setting-muted-anomaly-subnets" placeholder="Add custom CIDR and press Enter">
+                                        <div id="setting-muted-anomaly-subnets-selected" class="selected-chip-row" data-selected-list data-input="setting-muted-anomaly-subnets"></div>
                                         <p class="text-muted form-help-tiny">No behavioral anomaly will be created for source IPs in these CIDRs.</p>
                                     </div>
                                 </div>
                                 <div class="form-row form-row-spaced">
                                     <div class="form-group">
                                         <label class="form-label-block">Notify Only These Subnets</label>
-                                        <input type="text" id="setting-notify-allowed-subnets" class="form-control form-control-full" placeholder="empty = notify all matching rules">
+                                        <input type="hidden" id="setting-notify-allowed-subnets">
+                                        <div id="setting-notify-allowed-subnets-picker" class="selector-chip-grid selector-chip-grid-compact" data-threshold-picker data-input="setting-notify-allowed-subnets"></div>
+                                        <input type="text" class="form-control form-control-full" data-custom-list-input data-target="setting-notify-allowed-subnets" placeholder="Add custom CIDR and press Enter">
+                                        <div id="setting-notify-allowed-subnets-selected" class="selected-chip-row" data-selected-list data-input="setting-notify-allowed-subnets"></div>
                                         <p class="text-muted form-help-tiny">Limits Slack, Telegram, and webhook dispatches to these source CIDRs.</p>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label-block">Never Notify These Types</label>
-                                        <input type="text" id="setting-notify-suppressed-types" class="form-control form-control-full" placeholder="e.g. NEW_PORT, BEACONING">
+                                        <input type="hidden" id="setting-notify-suppressed-types">
+                                        <div id="setting-notify-suppressed-types-picker" class="selector-chip-grid" data-threshold-picker data-input="setting-notify-suppressed-types"></div>
+                                        <div id="setting-notify-suppressed-types-selected" class="selected-chip-row" data-selected-list data-input="setting-notify-suppressed-types"></div>
                                         <p class="text-muted form-help-tiny">Anomalies are still stored, but notification dispatch is suppressed.</p>
                                     </div>
                                 </div>

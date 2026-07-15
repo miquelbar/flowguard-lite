@@ -2,6 +2,7 @@ import { state } from '../../app/state.js';
 import { renderErrorState } from '../../components/ui/states.js';
 import { markUnsaved, syncActiveSettingsSectionFromState, switchSettingsSection } from './settingsSections.js';
 import { renderWebhookHeaders, syncNotificationFields, updateTelegramUrlPreview } from './settingsNotifications.js';
+import { renderThresholdControls } from './settingsThresholdControls.js';
 
 export function renderSettingsView() {
     if (state.settingsError) {
@@ -96,6 +97,7 @@ export function renderSettingsView() {
         setVal("setting-threshold-syn", state.settingsData.syn_flood_threshold_pps || 1000);
         setVal("setting-threshold-udp", state.settingsData.udp_flood_threshold_pps || 3000);
         setVal("setting-threshold-icmp", state.settingsData.icmp_flood_threshold_pps || 500);
+        renderThresholdControls();
     }
 
     if (noUnsaved("notifications")) {
