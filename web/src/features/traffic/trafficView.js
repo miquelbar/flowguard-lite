@@ -62,15 +62,15 @@ function renderTopTalkerSignal() {
     if (!topTalkerSignal) return;
     const range = trafficRangeConfig();
     
-    api.fetchTopTalkers("sources", range)
-        .then(sources => {
-            const sortedSources = [...sources].sort((a, b) => b.bytes - a.bytes);
-            if (sortedSources.length === 0) {
-                topTalkerSignal.textContent = "No top talker data in the active window.";
+    api.fetchStatsTopDevices(range)
+        .then(devices => {
+            const sortedDevices = [...devices].sort((a, b) => b.bytes - a.bytes);
+            if (sortedDevices.length === 0) {
+                topTalkerSignal.textContent = "No local device traffic in the active window.";
                 return;
             }
-            const totalBytes = sortedSources.reduce((sum, item) => sum + item.bytes, 0) || 1;
-            topTalkerSignal.innerHTML = sortedSources.map(item => {
+            const totalBytes = sortedDevices.reduce((sum, item) => sum + item.bytes, 0) || 1;
+            topTalkerSignal.innerHTML = sortedDevices.map(item => {
                 const pct = (item.bytes / totalBytes) * 100;
                 return `<div class="signal-row">
                     <span class="signal-key">${deviceIPCell(item.key)}</span>
@@ -80,7 +80,7 @@ function renderTopTalkerSignal() {
             }).join("");
         })
         .catch(() => {
-            topTalkerSignal.textContent = "Top talker share unavailable.";
+            topTalkerSignal.textContent = "Local device share unavailable.";
         });
 }
 
@@ -252,7 +252,7 @@ export function renderTopTalkers() {
 
     tblTopTalkers.innerHTML = filtered.map(item => {
         const percentage = (item.bytes / maxBytes) * 100;
-        const isIP = state.activeTab === "sources" || state.activeTab === "destinations";
+        const isIP = state.activeTab === "devices" || state.activeTab === "sources" || state.activeTab === "destinations";
         const keyHtml = isIP ? deviceIPCell(item.key) : escapeHtml(item.key);
         return `
             <tr>

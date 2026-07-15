@@ -13,6 +13,7 @@ import (
 
 	"github.com/miquelbar/flowguard-lite/internal/baseline"
 	"github.com/miquelbar/flowguard-lite/internal/config"
+	"github.com/miquelbar/flowguard-lite/internal/flow"
 	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
 
@@ -57,6 +58,54 @@ func TestHandleDevices(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected status NotFound (404), got %d", w.Code)
+	}
+}
+
+func TestHandleDevicesReconcilesLocalInventoryFromAggregates(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.LocalSubnets = []string{"192.168.10.0/24", "192.168.30.0/24"}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockRepo := &MockFlowRepository{
+		EmptyDevices: true,
+		Sources: []flow.TopResult{
+			{Key: "213.4.145.32", Bytes: 4_620_000, Packets: 3893, Flows: 3893},
+			{Key: "192.168.10.236", Bytes: 1_130_000, Packets: 1723, Flows: 1723},
+			{Key: "157.240.243.63", Bytes: 451_770, Packets: 539, Flows: 539},
+		},
+		Destinations: []flow.TopResult{
+			{Key: "192.168.10.189", Bytes: 22_880, Packets: 130, Flows: 130},
+			{Key: "192.168.30.128", Bytes: 40, Packets: 1, Flows: 1},
+			{Key: "17.250.90.12", Bytes: 27_450, Packets: 42, Flows: 42},
+		},
+	}
+
+	server := NewAPIServer(cfg, logger, nil, mockRepo, mockRepo, nil, nil, nil, nil, nil, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/devices", nil)
+	w := httptest.NewRecorder()
+	server.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status OK, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var devices []storage.Device
+	if err := json.Unmarshal(w.Body.Bytes(), &devices); err != nil {
+		t.Fatalf("failed decoding devices: %v", err)
+	}
+	got := map[string]bool{}
+	for _, device := range devices {
+		got[device.IP] = true
+	}
+	for _, want := range []string{"192.168.10.236", "192.168.10.189", "192.168.30.128"} {
+		if !got[want] {
+			t.Fatalf("expected reconciled local device %s in %+v", want, devices)
+		}
+	}
+	for _, external := range []string{"213.4.145.32", "157.240.243.63", "17.250.90.12"} {
+		if got[external] {
+			t.Fatalf("did not expect external IP %s in reconciled devices: %+v", external, devices)
+		}
 	}
 }
 

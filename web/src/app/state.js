@@ -1,6 +1,6 @@
 export const state = {
     activeView: "overview",
-    activeTab: "sources",
+    activeTab: "devices",
     activeTriageFilter: "all",
     autoRefreshSeconds: 0,
     talkersData: [],

@@ -125,8 +125,8 @@ export async function fetchStatsProtocols(range) {
     return await getJSON(`/api/stats/protocols?${params.toString()}`, "Protocol stats query failed");
 }
 
-export async function fetchStatsTopDevices(range) {
-    const params = rangeQueryParams(range, { limit: "5" });
+export async function fetchStatsTopDevices(range, limit = "5") {
+    const params = rangeQueryParams(range, { limit });
     return await getJSON(`/api/stats/top-devices?${params.toString()}`, "Top devices stats query failed");
 }
 
@@ -250,4 +250,3 @@ export async function fetchGlobalUniFiEvents(limit = 50) {
 export async function fetchDeviceUniFiEvents(ip, limit = 50) {
     return await getJSON(`/api/devices/${ip}/unifi-events?limit=${limit}`, "Failed to fetch device UniFi events");
 }
-

@@ -37,6 +37,7 @@ type MockFlowRepository struct {
 	Anomalies    []storage.Anomaly
 	UniFiEvents  []storage.UniFiEvent
 	Err          error
+	EmptyDevices bool
 }
 
 func (m *MockFlowRepository) SaveAggregates(ctx context.Context, ts time.Time, aggregates []flow.FlowEvent) error {
@@ -86,6 +87,16 @@ func (m *MockFlowRepository) GetDeviceActivityHeatmap(ctx context.Context, start
 }
 
 func (m *MockFlowRepository) UpsertDevice(ctx context.Context, ip string, hostname string, lastSeen time.Time) error {
+	for idx, device := range m.Devices {
+		if device.IP == ip {
+			m.Devices[idx].LastSeen = lastSeen
+			if hostname != "" {
+				m.Devices[idx].Hostname = hostname
+			}
+			return m.Err
+		}
+	}
+	m.Devices = append(m.Devices, storage.Device{IP: ip, Hostname: hostname, FirstSeen: lastSeen, LastSeen: lastSeen})
 	return nil
 }
 
@@ -108,6 +119,9 @@ func (m *MockFlowRepository) GetDevice(ctx context.Context, ip string) (*storage
 func (m *MockFlowRepository) ListDevices(ctx context.Context) ([]storage.Device, error) {
 	if len(m.Devices) > 0 {
 		return m.Devices, m.Err
+	}
+	if m.EmptyDevices {
+		return []storage.Device{}, m.Err
 	}
 	return []storage.Device{
 		{IP: "192.168.1.10", Label: "Discovered Device", Hostname: "test.local"},

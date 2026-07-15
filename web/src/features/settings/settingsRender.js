@@ -6,14 +6,26 @@ import { renderWebhookHeaders, syncNotificationFields, updateTelegramUrlPreview 
 export function renderSettingsView() {
     if (state.settingsError) {
         const activeSettingsSection = syncActiveSettingsSectionFromState();
-        const sectionEl = document.querySelector(`.settings-section[data-section="${activeSettingsSection}"]`);
+        switchSettingsSection(activeSettingsSection, { confirmUnsaved: false, updateHash: false });
+        document.querySelectorAll(".settings-load-error").forEach(el => el.remove());
+
+        const sectionEl = document.getElementById(`settings-${activeSettingsSection}`);
         if (sectionEl) {
-            sectionEl.innerHTML = renderErrorState(`Failed to load settings: ${state.settingsError}`);
+            const errorEl = document.createElement("div");
+            errorEl.className = "settings-load-error";
+            errorEl.innerHTML = renderErrorState(`Failed to load settings: ${state.settingsError}`);
+            const header = sectionEl.querySelector(".settings-card-header");
+            if (header) {
+                header.insertAdjacentElement("afterend", errorEl);
+            } else {
+                sectionEl.prepend(errorEl);
+            }
         }
         return;
     }
     if (!state.settingsData) return;
     const activeSettingsSection = syncActiveSettingsSectionFromState();
+    document.querySelectorAll(".settings-load-error").forEach(el => el.remove());
 
     const viewWizard = document.getElementById("view-wizard");
     if (viewWizard) {

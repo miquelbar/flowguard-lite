@@ -79,9 +79,12 @@ async function loadOverviewView() {
 }
 
 async function loadTrafficView() {
-    const range = trafficRangeConfig();
+	const range = trafficRangeConfig();
+	const talkersRequest = state.activeTab === "devices"
+		? api.fetchStatsTopDevices(range, "50")
+		: api.fetchTopTalkers(state.activeTab, range);
     const trafficRequests = {
-        topTalkers: settle("traffic top talkers", api.fetchTopTalkers(state.activeTab, range), []),
+        topTalkers: settle("traffic top talkers", talkersRequest, []),
         devices: settle("traffic devices", api.fetchDevices(), []),
         anomalies: settle("traffic anomalies", api.fetchAnomalies(), []),
         trafficSeries: settle("traffic time-series", api.fetchTrafficTimeSeries(range), [])

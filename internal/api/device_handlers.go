@@ -1,13 +1,16 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/miquelbar/flowguard-lite/internal/flow"
 	"github.com/miquelbar/flowguard-lite/internal/risk"
 	"github.com/miquelbar/flowguard-lite/internal/storage"
 )
@@ -25,12 +28,87 @@ func (s *APIServer) handleListDevices(w http.ResponseWriter, r *http.Request) {
 		writeError(w, s.logger, http.StatusInternalServerError, "internal database error")
 		return
 	}
+	if len(devices) == 0 {
+		if err := s.reconcileLocalDevicesFromAggregates(r.Context()); err != nil {
+			s.logger.Warn("Failed to reconcile local devices from retained flow aggregates", slog.String("error", err.Error()))
+		} else {
+			devices, err = s.deviceRepo.ListDevices(r.Context())
+			if err != nil {
+				s.logger.Error("Failed to list reconciled devices", slog.String("error", err.Error()))
+				writeError(w, s.logger, http.StatusInternalServerError, "internal database error")
+				return
+			}
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(devices); err != nil {
 		s.logger.Error("Failed to encode devices list response", slog.String("error", err.Error()))
 	}
+}
+
+func (s *APIServer) reconcileLocalDevicesFromAggregates(ctx context.Context) error {
+	if s.cfg == nil || s.repo == nil || s.deviceRepo == nil || len(s.cfg.LocalSubnets) == 0 {
+		return nil
+	}
+
+	localNets := make([]*net.IPNet, 0, len(s.cfg.LocalSubnets))
+	for _, cidr := range s.cfg.LocalSubnets {
+		_, ipNet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+		localNets = append(localNets, ipNet)
+	}
+	if len(localNets) == 0 {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	start := now.Add(-24 * time.Hour)
+	const candidateLimit = 1000
+
+	candidates := make(map[string]struct{})
+	collectLocalCandidates := func(items []flow.TopResult) {
+		for _, item := range items {
+			if isConfiguredLocalIP(item.Key, localNets) {
+				candidates[item.Key] = struct{}{}
+			}
+		}
+	}
+
+	sources, err := s.repo.GetTopSources(ctx, start, now, candidateLimit)
+	if err != nil {
+		return fmt.Errorf("query top sources for device reconciliation: %w", err)
+	}
+	collectLocalCandidates(sources)
+
+	destinations, err := s.repo.GetTopDestinations(ctx, start, now, candidateLimit)
+	if err != nil {
+		return fmt.Errorf("query top destinations for device reconciliation: %w", err)
+	}
+	collectLocalCandidates(destinations)
+
+	for ip := range candidates {
+		if err := s.deviceRepo.UpsertDevice(ctx, ip, "", now); err != nil {
+			return fmt.Errorf("upsert reconciled device %s: %w", ip, err)
+		}
+	}
+	return nil
+}
+
+func isConfiguredLocalIP(ipStr string, localNets []*net.IPNet) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil || ip.IsLoopback() || ip.IsMulticast() || ip.IsUnspecified() {
+		return false
+	}
+	for _, localNet := range localNets {
+		if localNet.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // handleUpdateDeviceLabel updates the manual label of a device.
