@@ -309,6 +309,15 @@ describe("FlowGuard Lite UI smoke regressions", () => {
         cy.contains("192.168.30.0/24").should("have.attr", "href", "#/devices/subnet/192.168.30.0%2F24");
     });
 
+    it("shows device identity when opening an alert detail directly", () => {
+        cy.viewport(1440, 900);
+        visitApp("#/alerts/alert-1");
+
+        cy.get("#anomaly-details-content").should("be.visible");
+        cy.get("#anomaly-detail-ip").should("contain.text", "Analyst laptop");
+        cy.get("#anomaly-detail-device").should("contain.text", "workstation-210.local").and("contain.text", "192.168.30.210");
+    });
+
     it("keeps retention-aware range buttons and auto-refresh defaults stable", () => {
         cy.viewport(1440, 900);
         visitApp("#/overview");

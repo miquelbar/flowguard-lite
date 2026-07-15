@@ -157,9 +157,16 @@ export async function loadData(isManualRefresh = false) {
             state.devicesError = res.error;
             renderDevicesView();
         } else if (state.activeView === "anomalies") {
-            const res = await settle("anomalies", api.fetchAnomalies(), []);
-            state.anomaliesData = res.value;
-            state.anomaliesError = res.error;
+            const results = Object.fromEntries(
+                await Promise.all([
+                    ["anomalies", settle("anomalies", api.fetchAnomalies(), [])],
+                    ["devices", settle("alert devices", api.fetchDevices(), [])]
+                ].map(async ([key, promise]) => [key, await promise]))
+            );
+            state.anomaliesData = results.anomalies.value;
+            state.anomaliesError = results.anomalies.error;
+            state.devicesData = results.devices.value;
+            state.devicesError = results.devices.error;
             renderAlertsView();
         } else if (state.activeView === "policies") {
             const res = await settle("policies", api.fetchPolicies(), []);
