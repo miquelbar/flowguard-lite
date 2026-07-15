@@ -14,17 +14,18 @@ let lastFilterFocus = null;
 function deviceIdentityForIP(ip) {
     const device = (state.devicesData || []).find(dev => dev.ip === ip);
     if (!device) {
-        return { title: ip || "-", subtitle: "" };
+        return { title: ip || "-", metadata: ip || "-" };
     }
     const label = (device.label || "").trim();
     const hostname = (device.hostname || "").trim();
     if (label) {
-        return { title: label, subtitle: hostname && hostname !== label ? hostname : "" };
+        const metadataName = hostname && hostname !== label ? hostname : label;
+        return { title: label, metadata: `${metadataName} · ${ip}` };
     }
     if (hostname) {
-        return { title: hostname, subtitle: "" };
+        return { title: hostname, metadata: `${hostname} · ${ip}` };
     }
-    return { title: ip || "-", subtitle: "" };
+    return { title: ip || "-", metadata: ip || "-" };
 }
 
 export function renderAnomalies() {
@@ -154,10 +155,10 @@ export function selectAnomaly(id) {
     const deviceIdentity = deviceIdentityForIP(anom.ip);
     if (anomalyDetailIp) {
         anomalyDetailIp.textContent = deviceIdentity.title;
-        anomalyDetailIp.title = deviceIdentity.subtitle ? `${deviceIdentity.subtitle} (${anom.ip})` : anom.ip;
+        anomalyDetailIp.title = deviceIdentity.metadata || anom.ip;
     }
     if (anomalyDetailDevice) {
-        anomalyDetailDevice.textContent = deviceIdentity.subtitle ? `${deviceIdentity.subtitle} · ${anom.ip}` : anom.ip;
+        anomalyDetailDevice.textContent = deviceIdentity.metadata;
     }
     if (anomalyDetailType) anomalyDetailType.textContent = anom.type;
     if (anomalyDetailDescription) anomalyDetailDescription.textContent = anom.description;

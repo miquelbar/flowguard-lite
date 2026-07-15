@@ -16,6 +16,14 @@ const devices = [
         first_seen: "2026-07-08T08:00:00Z",
         last_seen: "2026-07-10T09:45:00Z",
         subnet_vlan: "192.168.30.0/24"
+    },
+    {
+        ip: "192.168.30.236",
+        hostname: "iPhone",
+        label: "",
+        first_seen: "2026-07-08T08:00:00Z",
+        last_seen: "2026-07-10T09:50:00Z",
+        subnet_vlan: "192.168.30.0/24"
     }
 ];
 
@@ -44,6 +52,17 @@ const anomalies = [
         description: "New destination contacted",
         detected_at: "2026-07-10T08:45:00Z",
         reason: "Destination was not present in retained baseline."
+    },
+    {
+        id: "alert-3",
+        ip: "192.168.30.236",
+        type: "TRAFFIC_SPIKE",
+        anomaly_type: "TRAFFIC_SPIKE",
+        severity: "high",
+        status: "active",
+        description: "Traffic spike on a hostname-only device",
+        detected_at: "2026-07-10T09:10:00Z",
+        reason: "Traffic exceeded the learned baseline."
     }
 ];
 
@@ -316,6 +335,11 @@ describe("FlowGuard Lite UI smoke regressions", () => {
         cy.get("#anomaly-details-content").should("be.visible");
         cy.get("#anomaly-detail-ip").should("contain.text", "Analyst laptop");
         cy.get("#anomaly-detail-device").should("contain.text", "workstation-210.local").and("contain.text", "192.168.30.210");
+
+        visitApp("#/alerts/alert-3");
+        cy.get("#anomaly-details-content").should("be.visible");
+        cy.get("#anomaly-detail-ip").should("contain.text", "iPhone");
+        cy.get("#anomaly-detail-device").should("contain.text", "iPhone").and("contain.text", "192.168.30.236");
     });
 
     it("keeps retention-aware range buttons and auto-refresh defaults stable", () => {
