@@ -24,17 +24,26 @@ func analyzeBeaconSamples(engine *AnomalyEngine, source, destination string, por
 	}
 }
 
+func beaconOffsets(interval time.Duration, count int) []time.Duration {
+	offsets := make([]time.Duration, count)
+	for i := range offsets {
+		offsets[i] = time.Duration(i) * interval
+	}
+	return offsets
+}
+
 func TestAnomalyEngineBeaconingWithJitter(t *testing.T) {
 	engine, repo := newFanoutTestEngine(t)
 	start := time.Date(2026, 7, 9, 10, 0, 0, 0, time.UTC)
 	offsets := []time.Duration{
-		0, 61 * time.Second, 119 * time.Second,
-		181 * time.Second, 240 * time.Second, 301 * time.Second,
+		0, 121 * time.Second, 239 * time.Second, 361 * time.Second,
+		480 * time.Second, 602 * time.Second, 720 * time.Second, 839 * time.Second,
+		961 * time.Second, 1080 * time.Second, 1201 * time.Second, 1320 * time.Second,
 	}
 	analyzeBeaconSamples(engine, "192.168.1.100", "203.0.113.100", 443, start, offsets, 1)
 
 	anomalies := waitForAnomalies(t, repo, 1)
-	if anomalies[0].Type != "BEACONING" || anomalies[0].Severity != "high" {
+	if anomalies[0].Type != "BEACONING" || anomalies[0].Severity != "medium" {
 		t.Fatalf("unexpected beaconing anomaly: %+v", anomalies[0])
 	}
 	for _, field := range []string{
@@ -46,11 +55,11 @@ func TestAnomalyEngineBeaconingWithJitter(t *testing.T) {
 		}
 	}
 	if !strings.Contains(anomalies[0].Description, "203.0.113.100:443") ||
-		!strings.Contains(anomalies[0].Description, "6 observations") {
+		!strings.Contains(anomalies[0].Description, "12 observations") {
 		t.Fatalf("beaconing explanation lacks deterministic evidence: %s", anomalies[0].Description)
 	}
 
-	analyzeBeaconSamples(engine, "192.168.1.100", "203.0.113.100", 443, start, []time.Duration{360 * time.Second}, 1)
+	analyzeBeaconSamples(engine, "192.168.1.100", "203.0.113.100", 443, start, []time.Duration{1440 * time.Second}, 1)
 	time.Sleep(25 * time.Millisecond)
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
@@ -67,32 +76,33 @@ func TestAnomalyEngineBeaconingFalsePositiveControls(t *testing.T) {
 		dstIP   string
 	}{
 		{
-			name: "too few observations",
-			offsets: []time.Duration{
-				0, time.Minute, 2 * time.Minute, 3 * time.Minute, 4 * time.Minute,
-			},
+			name:    "too few observations",
+			offsets: beaconOffsets(2*time.Minute, beaconMinObservations-1),
 			packets: 1, dstIP: "203.0.113.110",
 		},
 		{
 			name: "irregular intervals",
 			offsets: []time.Duration{
-				0, time.Minute, 3 * time.Minute, 4 * time.Minute, 7 * time.Minute, 8 * time.Minute,
+				0, 2 * time.Minute, 4 * time.Minute, 9 * time.Minute,
+				11 * time.Minute, 13 * time.Minute, 15 * time.Minute, 18 * time.Minute,
+				20 * time.Minute, 22 * time.Minute, 24 * time.Minute, 27 * time.Minute,
 			},
 			packets: 1, dstIP: "203.0.113.111",
 		},
 		{
-			name: "high volume communication",
-			offsets: []time.Duration{
-				0, time.Minute, 2 * time.Minute, 3 * time.Minute, 4 * time.Minute, 5 * time.Minute,
-			},
+			name:    "high volume communication",
+			offsets: beaconOffsets(2*time.Minute, beaconMinObservations),
 			packets: beaconMaxPackets + 1, dstIP: "203.0.113.112",
 		},
 		{
-			name: "internal scheduled service",
-			offsets: []time.Duration{
-				0, time.Minute, 2 * time.Minute, 3 * time.Minute, 4 * time.Minute, 5 * time.Minute,
-			},
+			name:    "internal scheduled service",
+			offsets: beaconOffsets(2*time.Minute, beaconMinObservations),
 			packets: 1, dstIP: "192.168.1.200",
+		},
+		{
+			name:    "one minute cloud keepalive",
+			offsets: beaconOffsets(time.Minute, beaconMinObservations),
+			packets: 1, dstIP: "203.0.113.113",
 		},
 	}
 
@@ -167,7 +177,7 @@ func TestAnomalyEngineBeaconingHonorsAlertTypePolicy(t *testing.T) {
 	analyzeBeaconSamples(
 		engine, "192.168.1.130", "203.0.113.130", 443,
 		time.Date(2026, 7, 9, 13, 0, 0, 0, time.UTC),
-		[]time.Duration{0, time.Minute, 2 * time.Minute, 3 * time.Minute, 4 * time.Minute, 5 * time.Minute},
+		beaconOffsets(2*time.Minute, beaconMinObservations),
 		1,
 	)
 

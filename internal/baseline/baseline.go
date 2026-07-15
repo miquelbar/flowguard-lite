@@ -31,7 +31,7 @@ func NewBaselineEngine(repo storage.DeviceRepository, logger *slog.Logger) *Base
 		repo:                repo,
 		logger:              logger,
 		minBytesThreshold:   1024 * 1024, // 1MB minimum to trigger bytes anomaly
-		minPacketsThreshold: 1000,        // 1000 packets/min minimum to trigger packets anomaly
+		minPacketsThreshold: 2500,        // 2500 packets/min minimum to trigger packets anomaly
 		minPeersThreshold:   25,          // 25 peers/min minimum to trigger peer count anomaly
 		cachedBaselines:     make(map[string]*storage.DeviceBaseline),
 	}

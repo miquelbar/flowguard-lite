@@ -192,14 +192,29 @@ func (r *Repository) hasObservedFlowTuple(ctx context.Context, start, end time.T
 	startUnix := start.Unix()
 	endUnix := end.Unix()
 	queryArgs := append(args, startUnix, endUnix)
+	var history FlowHistoryResult
 	for _, db := range dbs {
+		var sourceBuckets int
+		var firstSeenUnix int64
+		if err := db.QueryRowContext(ctx, `
+			SELECT COUNT(DISTINCT bucket_ts), COALESCE(MIN(bucket_ts), 0)
+			FROM flow_aggregates
+			WHERE src_ip = ? AND bucket_ts >= ? AND bucket_ts <= ?
+		`, args[0], startUnix, endUnix).Scan(&sourceBuckets, &firstSeenUnix); err != nil {
+			return FlowHistoryResult{}, fmt.Errorf("failed querying SQLite source history: %w", err)
+		}
+		history.SourceBuckets += sourceBuckets
+		if firstSeenUnix > 0 && (history.SourceFirstSeen.IsZero() || firstSeenUnix < history.SourceFirstSeen.Unix()) {
+			history.SourceFirstSeen = time.Unix(firstSeenUnix, 0).UTC()
+		}
+
 		var count int
 		if err := db.QueryRowContext(ctx, query, queryArgs...).Scan(&count); err != nil {
 			return FlowHistoryResult{}, fmt.Errorf("failed querying SQLite flow history: %w", err)
 		}
 		if count > 0 {
-			return FlowHistoryResult{Observed: true, HistoryAvailable: true}, nil
+			history.Observed = true
 		}
 	}
-	return FlowHistoryResult{HistoryAvailable: true}, nil
+	return history, nil
 }

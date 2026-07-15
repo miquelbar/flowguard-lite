@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,7 +127,12 @@ func TestWebhookEngine_TelegramDirect(t *testing.T) {
 	defer server.Close()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	engine := NewWebhookEngine(nil, "", "", "generic", nil, true, "token123", "chat456", logger)
+	repo := &MockRepository{
+		devices: map[string]storage.Device{
+			"192.168.1.50": {IP: "192.168.1.50", Label: "Living Room Apple TV", Hostname: "apple-tv.local"},
+		},
+	}
+	engine := NewWebhookEngine(repo, "", "", "generic", nil, true, "token123", "chat456", logger)
 	defer shutdownWebhookEngine(t, engine)
 	engine.client.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 		expectedURL := "https://api.telegram.org/bottoken123/sendMessage"
@@ -163,6 +169,10 @@ func TestWebhookEngine_TelegramDirect(t *testing.T) {
 		}
 		if _, ok := payload["parse_mode"]; ok {
 			t.Fatalf("expected Telegram payload to be plain text without parse_mode, got: %v", payload)
+		}
+		text, ok := payload["text"].(string)
+		if !ok || !strings.Contains(text, "Living Room Apple TV (192.168.1.50)") {
+			t.Fatalf("expected Telegram text to include device identity, got: %v", payload["text"])
 		}
 	case <-time.After(1 * time.Second):
 		t.Fatal("timeout waiting for Telegram dispatch")

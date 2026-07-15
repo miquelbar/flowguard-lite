@@ -115,8 +115,9 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 	tgChatID := w.tgChatID
 	w.mu.RUnlock()
 
-	messageText := fmt.Sprintf("🚨 *FlowGuard Lite Anomaly Alert*\n\n*IP Address:* %s\n*Type:* %s\n*Severity:* %s\n*Description:* %s\n*Time:* %s",
-		anomaly.IP,
+	deviceIdentity := w.deviceIdentity(ctx, anomaly.IP)
+	messageText := fmt.Sprintf("🚨 *FlowGuard Lite Anomaly Alert*\n\n*Device:* %s\n*Type:* %s\n*Severity:* %s\n*Description:* %s\n*Time:* %s",
+		deviceIdentity,
 		anomaly.Type,
 		anomaly.Severity,
 		anomaly.Description,
@@ -327,9 +328,10 @@ func (w *WebhookEngine) SendAnomalyAlert(ctx context.Context, anomaly *storage.A
 
 // SendTestAlert formats and dispatches a test alert directly to the specified rule's channel targets, bypassing cooldowns.
 func (w *WebhookEngine) SendTestAlert(ctx context.Context, rule *storage.NotificationRule, anomaly *storage.Anomaly) {
-	messageText := fmt.Sprintf("🚨 *FlowGuard Lite Test Alert*\n\n*Rule Name:* %s\n*IP Address:* %s\n*Type:* %s\n*Severity:* %s\n*Description:* %s\n*Time:* %s",
+	deviceIdentity := w.deviceIdentity(ctx, anomaly.IP)
+	messageText := fmt.Sprintf("🚨 *FlowGuard Lite Test Alert*\n\n*Rule Name:* %s\n*Device:* %s\n*Type:* %s\n*Severity:* %s\n*Description:* %s\n*Time:* %s",
 		rule.Name,
-		anomaly.IP,
+		deviceIdentity,
 		anomaly.Type,
 		anomaly.Severity,
 		anomaly.Description,
@@ -430,6 +432,26 @@ func (w *WebhookEngine) SendTestAlert(ctx context.Context, rule *storage.Notific
 			}
 		}
 	}
+}
+
+func (w *WebhookEngine) deviceIdentity(ctx context.Context, ip string) string {
+	if w.repo == nil {
+		return ip
+	}
+
+	device, err := w.repo.GetDevice(ctx, ip)
+	if err != nil || device == nil {
+		return ip
+	}
+
+	name := strings.TrimSpace(device.Label)
+	if name == "" {
+		name = strings.TrimSpace(device.Hostname)
+	}
+	if name == "" {
+		return ip
+	}
+	return fmt.Sprintf("%s (%s)", name, ip)
 }
 
 func cloneHeaders(headers map[string]string) map[string]string {

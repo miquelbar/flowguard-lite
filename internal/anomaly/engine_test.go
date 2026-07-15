@@ -118,13 +118,7 @@ func TestAnomalyEngineNewDestinationAndPort(t *testing.T) {
 	ctx := context.Background()
 	sourceIP := "192.168.1.101"
 	knownDestination := "198.51.100.10"
-	historical := time.Now().Add(-time.Hour).UTC()
-	if err := sqliteRepo.SaveAggregates(ctx, historical, []flow.FlowEvent{{
-		Timestamp: historical, SrcIP: sourceIP, DstIP: knownDestination,
-		DstPort: 53, Protocol: 17, Bytes: 512, Packets: 2,
-	}}); err != nil {
-		t.Fatalf("failed to seed historical aggregate: %v", err)
-	}
+	seedMatureNewDestinationHistory(t, ctx, sqliteRepo, sourceIP, knownDestination, 53, time.Now().UTC())
 
 	mockRepo := &MockDeviceRepository{}
 	engine := NewAnomalyEngine(
@@ -182,13 +176,7 @@ func TestAnomalyEngineNewDestinationAndPortUsesFlowRepositoryContract(t *testing
 	ctx := context.Background()
 	sourceIP := "192.168.1.111"
 	knownDestination := "198.51.100.20"
-	historical := time.Now().Add(-time.Hour).UTC()
-	if err := duckRepo.SaveAggregates(ctx, historical, []flow.FlowEvent{{
-		Timestamp: historical, SrcIP: sourceIP, DstIP: knownDestination,
-		DstPort: 53, Protocol: 17, Bytes: 512, Packets: 2,
-	}}); err != nil {
-		t.Fatalf("failed to seed DuckDB historical aggregate: %v", err)
-	}
+	seedMatureNewDestinationHistory(t, ctx, duckRepo, sourceIP, knownDestination, 53, time.Now().UTC())
 
 	mockRepo := &MockDeviceRepository{}
 	engine := NewAnomalyEngine(
@@ -227,13 +215,7 @@ func TestAnomalyEngineNewDestinationIgnoresCurrentPersistedBatch(t *testing.T) {
 
 	ctx := context.Background()
 	sourceIP := "192.168.1.112"
-	historical := time.Now().Add(-time.Hour).UTC()
-	if err := sqliteRepo.SaveAggregates(ctx, historical, []flow.FlowEvent{{
-		Timestamp: historical, SrcIP: sourceIP, DstIP: "198.51.100.112",
-		DstPort: 53, Protocol: 17, Bytes: 512, Packets: 2,
-	}}); err != nil {
-		t.Fatalf("failed to seed historical aggregate: %v", err)
-	}
+	seedMatureNewDestinationHistory(t, ctx, sqliteRepo, sourceIP, "198.51.100.112", 53, time.Now().UTC())
 
 	current := time.Now().UTC()
 	currentEvent := flow.FlowEvent{
@@ -260,6 +242,63 @@ func TestAnomalyEngineNewDestinationIgnoresCurrentPersistedBatch(t *testing.T) {
 		}
 	}
 	t.Fatalf("expected current persisted batch to be excluded from destination history check, got %+v", anomalies)
+}
+
+func TestAnomalyEngineNewDestinationWaitsForMatureSourceHistory(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	sqliteRepo, err := sqlitestore.NewRepository(t.TempDir(), logger)
+	if err != nil {
+		t.Fatalf("failed to create repository: %v", err)
+	}
+	defer sqliteRepo.Close()
+
+	ctx := context.Background()
+	sourceIP := "192.168.1.113"
+	historical := time.Now().Add(-time.Hour).UTC()
+	if err := sqliteRepo.SaveAggregates(ctx, historical, []flow.FlowEvent{{
+		Timestamp: historical, SrcIP: sourceIP, DstIP: "198.51.100.113",
+		DstPort: 53, Protocol: 17, Bytes: 512, Packets: 2,
+	}}); err != nil {
+		t.Fatalf("failed to seed immature historical aggregate: %v", err)
+	}
+
+	mockRepo := &MockDeviceRepository{}
+	engine := NewAnomalyEngine(
+		mockRepo,
+		logger,
+		baseline.NewBaselineEngine(sqliteRepo, logger),
+		[]string{"192.168.1.0/24"},
+	)
+
+	engine.AnalyzeBatch(ctx, sqliteRepo, []flow.FlowEvent{{
+		Timestamp: time.Now().UTC(), SrcIP: sourceIP, DstIP: "203.0.113.113",
+		DstPort: 8443, Protocol: 6, Bytes: 256, Packets: 1,
+	}})
+	time.Sleep(50 * time.Millisecond)
+
+	mockRepo.mu.Lock()
+	defer mockRepo.mu.Unlock()
+	if len(mockRepo.Anomalies) != 0 {
+		t.Fatalf("expected immature source history to suppress new destination/port alerts, got %+v", mockRepo.Anomalies)
+	}
+}
+
+type aggregateSaver interface {
+	SaveAggregates(context.Context, time.Time, []flow.FlowEvent) error
+}
+
+func seedMatureNewDestinationHistory(t *testing.T, ctx context.Context, repo aggregateSaver, sourceIP, destinationIP string, destinationPort int, now time.Time) {
+	t.Helper()
+
+	for i := 0; i < minNewDestinationHistoryBuckets; i++ {
+		ts := now.Add(time.Duration(i-minNewDestinationHistoryBuckets-1) * time.Minute).UTC()
+		if err := repo.SaveAggregates(ctx, ts, []flow.FlowEvent{{
+			Timestamp: ts, SrcIP: sourceIP, DstIP: destinationIP,
+			DstPort: destinationPort, Protocol: 17, Bytes: 512, Packets: 2,
+		}}); err != nil {
+			t.Fatalf("failed to seed mature historical aggregate %d: %v", i, err)
+		}
+	}
 }
 
 func TestAnomalyEnginePacketCountTrafficSpike(t *testing.T) {
@@ -289,7 +328,7 @@ func TestAnomalyEnginePacketCountTrafficSpike(t *testing.T) {
 	engine := NewAnomalyEngine(mockRepo, logger, baseEngine, []string{"192.168.1.0/24"})
 	engine.AnalyzeBatch(context.Background(), nil, []flow.FlowEvent{{
 		Timestamp: time.Now().UTC(), SrcIP: sourceIP, DstIP: "203.0.113.102",
-		DstPort: 443, Protocol: 6, Bytes: 1000, Packets: 1500,
+		DstPort: 443, Protocol: 6, Bytes: 1000, Packets: 3000,
 	}})
 
 	anomalies := waitForAnomalies(t, mockRepo, 1)

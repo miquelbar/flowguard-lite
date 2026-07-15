@@ -171,16 +171,17 @@ func (r *Repository) hasObservedFlowTuple(ctx context.Context, start, end time.T
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	var historyCount int
+	var history FlowHistoryResult
+	var firstSeenUnix int64
 	if err := r.db.QueryRowContext(ctx, `
-		SELECT COUNT(1)
+		SELECT COUNT(DISTINCT bucket_ts), COALESCE(MIN(bucket_ts), 0)
 		FROM flow_aggregates
-		WHERE bucket_ts >= ? AND bucket_ts <= ?
-	`, start.Unix(), end.Unix()).Scan(&historyCount); err != nil {
-		return FlowHistoryResult{}, fmt.Errorf("failed querying DuckDB history availability: %w", err)
+		WHERE src_ip = ? AND bucket_ts >= ? AND bucket_ts <= ?
+	`, args[0], start.Unix(), end.Unix()).Scan(&history.SourceBuckets, &firstSeenUnix); err != nil {
+		return FlowHistoryResult{}, fmt.Errorf("failed querying DuckDB source history: %w", err)
 	}
-	if historyCount == 0 {
-		return FlowHistoryResult{}, nil
+	if firstSeenUnix > 0 {
+		history.SourceFirstSeen = time.Unix(firstSeenUnix, 0).UTC()
 	}
 
 	queryArgs := append(args, start.Unix(), end.Unix())
@@ -188,5 +189,6 @@ func (r *Repository) hasObservedFlowTuple(ctx context.Context, start, end time.T
 	if err := r.db.QueryRowContext(ctx, query, queryArgs...).Scan(&count); err != nil {
 		return FlowHistoryResult{}, fmt.Errorf("failed querying DuckDB flow history: %w", err)
 	}
-	return FlowHistoryResult{Observed: count > 0, HistoryAvailable: true}, nil
+	history.Observed = count > 0
+	return history, nil
 }

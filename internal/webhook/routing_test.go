@@ -20,8 +20,19 @@ type MockRepository struct {
 	mu      sync.Mutex
 	rules   []storage.NotificationRule
 	logs    []storage.NotificationLog
+	devices map[string]storage.Device
 	ruleErr error
 	logErr  error
+}
+
+func (m *MockRepository) GetDevice(ctx context.Context, ip string) (*storage.Device, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	device, ok := m.devices[ip]
+	if !ok {
+		return nil, nil
+	}
+	return &device, nil
 }
 
 func (m *MockRepository) ListNotificationRules(ctx context.Context) ([]storage.NotificationRule, error) {

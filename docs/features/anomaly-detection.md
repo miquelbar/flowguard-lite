@@ -17,6 +17,10 @@ To identify abnormal behaviors, FlowGuard Lite builds device-level behavioral pr
 When an anomaly is flagged, the engine logs the exact math behind it:
 > *"Device transmitted 52,104 packets in 5 minutes, exceeding the baseline mean of 2,100 packets by 6.2 standard deviations."*
 
+### New destinations and ports
+
+`NEW_DESTINATION` and `NEW_PORT` use retained flow aggregates, not raw packet payloads, to identify external peers and destination ports a device has not used in the past 7 days. To avoid noisy first-run behavior after a clean install or database reset, these detectors only become active after the source device has at least 12 historical aggregate buckets. Until then FlowGuard keeps learning the device instead of alerting on every normal service it discovers.
+
 ---
 
 ## 2. Fan-out Scan Detection
@@ -38,13 +42,13 @@ Each alert states what happened, why it is unusual, the baseline or absolute thr
 
 The detector requires:
 
-*   at least 6 distinct observations;
-*   intervals between 30 seconds and 30 minutes;
+*   at least 12 distinct observations;
+*   intervals between 90 seconds and 30 minutes;
 *   maximum timing deviation within 20% of the mean interval, with a 20-second minimum tolerance for aggregated timestamps;
 *   no more than 20 packets or 64 KiB in an observation;
 *   an external unicast destination.
 
-Only the 12 most recent timestamps are retained for each tuple. State is capped at 8,192 tuples and entries inactive for two hours are pruned. Internal scheduled services, high-volume sessions, irregular traffic, and series with fewer than six observations do not trigger.
+Only the 18 most recent timestamps are retained for each tuple. State is capped at 8,192 tuples and entries inactive for two hours are pruned. Internal scheduled services, high-volume sessions, one-minute cloud keepalives, irregular traffic, and series with fewer than 12 observations do not trigger.
 
 The explanation reports the destination tuple, observation count, average period, measured jitter, expected behavior, confidence, and recommended process/DNS/certificate/scheduled-task checks. Existing deduplication and suppression policies apply.
 

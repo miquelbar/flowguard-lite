@@ -136,6 +136,21 @@ func TestBaselineEngine_IsAnomaly(t *testing.T) {
 	}
 }
 
+func TestBaselineEngineDefaultPacketThresholdIgnoresModerateBurst(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	engine := NewBaselineEngine(&MockDeviceRepository{}, logger)
+
+	ip := "192.168.1.20"
+	engine.cachedBaselines[ip] = &storage.DeviceBaseline{
+		IP: ip, MeanPackets: 185, StdDevPackets: 191,
+	}
+
+	anomaly, reason := engine.IsAnomaly(ip, 0, 1953, 0)
+	if anomaly {
+		t.Fatalf("expected default packet floor to suppress moderate packet burst, got reason %q", reason)
+	}
+}
+
 func TestBaselineEngine_CalculateBaselines(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "baseline_calc_test")
 	if err != nil {

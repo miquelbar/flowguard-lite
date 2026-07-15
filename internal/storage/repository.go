@@ -214,8 +214,9 @@ type DeviceBaselineSample struct {
 // FlowHistoryResult reports whether a retained aggregate history query was possible
 // and whether the specific source/destination or source/port tuple was observed.
 type FlowHistoryResult struct {
-	Observed         bool
-	HistoryAvailable bool
+	Observed        bool
+	SourceBuckets   int
+	SourceFirstSeen time.Time
 }
 
 // FlowRepository defines the interface for reading and writing flow aggregates.

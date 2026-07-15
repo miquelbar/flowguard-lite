@@ -18,11 +18,11 @@ const (
 	portFanoutMin               = 16
 	maxFanoutCardinality        = 4096
 	maxScanPacketsPerTarget     = 12
-	beaconMinObservations       = 6
-	beaconMaxObservations       = 12
+	beaconMinObservations       = 12
+	beaconMaxObservations       = 18
 	beaconMaxSeries             = 8192
 	beaconStateRetention        = 2 * time.Hour
-	beaconMinInterval           = 30 * time.Second
+	beaconMinInterval           = 90 * time.Second
 	beaconMaxInterval           = 30 * time.Minute
 	beaconJitterRatio           = 0.20
 	beaconJitterFloor           = 20 * time.Second

@@ -37,7 +37,7 @@ func (e *AnomalyEngine) checkBeaconing(ctx context.Context, batch []flow.FlowEve
 			beaconMinObservations, beaconJitterRatio*100, beaconJitterFloor,
 			observations, period.Round(time.Second), jitter*100,
 		)
-		e.triggerAlert(ctx, key.srcIP, "BEACONING", reason, "high")
+		e.triggerAlert(ctx, key.srcIP, "BEACONING", reason, "medium")
 	}
 }
 
