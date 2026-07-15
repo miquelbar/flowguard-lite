@@ -182,7 +182,7 @@ Start here:
 - [Exporter Setup: OPNsense and pfSense](docs/setup/opnsense.md)
 - [Integrations and Webhooks](docs/features/integrations.md)
 
-The `/docs` directory is Markdown-based and ready for GitHub Pages. On a new repository, enable Pages once in GitHub with `Settings > Pages > Source > GitHub Actions`; the `Deploy Docs to GitHub Pages` workflow then publishes the docs on pushes to `main`.
+The `/docs` directory is Markdown-based and published as a Jekyll GitHub Pages site. On a new repository, enable Pages once in GitHub with `Settings > Pages > Source > GitHub Actions`; the `Deploy Docs to GitHub Pages` workflow then builds the themed docs site on pushes to `main`.
 
 ## Deployment Notes
 

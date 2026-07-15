@@ -1,0 +1,119 @@
+---
+---
+
+@import "{{ site.theme }}";
+
+:root {
+  --fg-bg: #0d1117;
+  --fg-panel: #161b22;
+  --fg-border: #30363d;
+  --fg-text: #c9d1d9;
+  --fg-muted: #8b949e;
+  --fg-accent: #2f81f7;
+  --fg-green: #3fb950;
+}
+
+body {
+  color: var(--fg-text);
+  background: var(--fg-bg);
+}
+
+.page-header {
+  background: linear-gradient(135deg, #0d1117 0%, #12301f 52%, #1f6feb 120%);
+  border-bottom: 1px solid var(--fg-border);
+  padding: 3.75rem 1rem 3rem;
+}
+
+.project-name {
+  letter-spacing: 0;
+}
+
+.project-tagline {
+  color: rgba(255, 255, 255, 0.78);
+  opacity: 1;
+}
+
+.main-content {
+  max-width: 1040px;
+  color: var(--fg-text);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.main-content h1,
+.main-content h2,
+.main-content h3,
+.main-content h4 {
+  color: #f0f6fc;
+  font-weight: 700;
+}
+
+.main-content h2 {
+  margin-top: 2rem;
+  padding-bottom: 0.45rem;
+  border-bottom-color: var(--fg-border);
+}
+
+.main-content a {
+  color: #58a6ff;
+}
+
+.main-content hr {
+  background-color: var(--fg-border);
+}
+
+.main-content table {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.main-content table th,
+.main-content table td {
+  border-color: var(--fg-border);
+}
+
+.main-content table tr {
+  background-color: var(--fg-panel);
+  border-top-color: var(--fg-border);
+}
+
+.main-content table tr:nth-child(2n) {
+  background-color: #111820;
+}
+
+.main-content code {
+  color: #f0f6fc;
+  background-color: rgba(110, 118, 129, 0.28);
+}
+
+.main-content pre {
+  background-color: #010409;
+  border: 1px solid var(--fg-border);
+  border-radius: 8px;
+}
+
+.main-content pre code {
+  background-color: transparent;
+}
+
+.main-content blockquote {
+  color: var(--fg-muted);
+  border-left-color: var(--fg-accent);
+}
+
+.main-content img {
+  border: 1px solid var(--fg-border);
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.32);
+}
+
+.site-footer {
+  color: var(--fg-muted);
+  border-top-color: var(--fg-border);
+}
+
+.site-footer-owner,
+.site-footer-credits {
+  color: var(--fg-muted);
+}

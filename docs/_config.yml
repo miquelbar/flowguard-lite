@@ -1,0 +1,17 @@
+title: FlowGuard Lite
+description: Network anomaly detection for people who do not have a SOC.
+url: https://miquelbar.github.io
+baseurl: /flowguard-lite
+theme: jekyll-theme-cayman
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+
+plugins:
+  - jekyll-relative-links
+
+relative_links:
+  enabled: true
+  collections: true
