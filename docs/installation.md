@@ -100,6 +100,7 @@ Start the collector using your configuration file:
 ### Development Demo Data
 Non-production builds expose a `-seed` flag for local demos:
 ```bash
+cp config.example.yaml config-dev.yaml
 go run ./cmd/flowguard -config config-dev.yaml -seed
 ```
 

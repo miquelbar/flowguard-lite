@@ -103,6 +103,7 @@ make dev
 For local demo data:
 
 ```bash
+cp config.example.yaml config-dev.yaml
 go run ./cmd/flowguard -config config-dev.yaml -seed
 go run ./cmd/flowguard -config config-dev.yaml
 ```

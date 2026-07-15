@@ -44,7 +44,8 @@ lint:
 
 dev:
 	@echo "Running Go backend natively in development mode..."
-	go run -tags !production ./cmd/flowguard -config config.yaml
+	@test -f config-dev.yaml || (echo "config-dev.yaml is missing. Run: cp config.example.yaml config-dev.yaml" && exit 1)
+	go run -tags !production ./cmd/flowguard -config config-dev.yaml
 
 clean:
 	@echo "Cleaning native build artifacts..."

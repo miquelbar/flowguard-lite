@@ -1,0 +1,42 @@
+port: "8080"
+netflow_port: 2055
+sflow_port: 6343
+capture_interface: ""
+capture_bpf_filter: ip or ip6
+capture_promiscuous: false
+unifi_syslog_enabled: false
+unifi_syslog_port: 5514
+unifi_syslog_allowed_ips: []
+storage_dir: ./dev-data
+log_level: info
+environment: development
+local_subnets:
+    - 192.168.1.0/24
+ddos_threshold_pps: 5000
+ddos_threshold_bps: 10485760
+ddos_threshold_fps: 1000
+syn_flood_threshold_pps: 1000
+udp_flood_threshold_pps: 3000
+icmp_flood_threshold_pps: 500
+suricata_eve_path: ""
+slack_webhook_url: ""
+webhook_url: ""
+webhook_format: generic
+webhook_headers: {}
+telegram_enabled: false
+telegram_token: ""
+telegram_chat_id: ""
+storage_backend: sqlite
+first_run_completed: false
+admin_password_hash: ""
+session_secret: ""
+retention_days: 7
+disabled_anomaly_types: []
+muted_anomaly_subnets: []
+notify_allowed_subnets: []
+notify_suppressed_types: []
+new_destination_min_history_buckets: 12
+beacon_min_observations: 12
+beacon_min_interval_seconds: 90
+traffic_spike_min_packets: 2500
+traffic_spike_min_bytes: 1048576
