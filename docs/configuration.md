@@ -140,7 +140,7 @@ suricata_eve_path: ""
 ### `unifi_syslog_enabled`
 *   **Type:** Boolean
 *   **Default:** `false`
-*   **Description:** Enables the dedicated UniFi CyberSecure Activity Logging/SIEM syslog collector. This is a separate protocol from NetFlow/IPFIX and must not use the NetFlow port. The collector parses and counts bounded syslog messages; retained UniFi event evidence is handled by later M30 storage work.
+*   **Description:** Enables the dedicated UniFi CyberSecure Activity Logging/SIEM syslog collector. This is a separate protocol from NetFlow/IPFIX and must not use the NetFlow port. The collector parses bounded syslog messages, stores reduced retained UniFi evidence, and can create anomalies for high-confidence security detections and critical events.
 
 ### `unifi_syslog_port`
 *   **Type:** Integer

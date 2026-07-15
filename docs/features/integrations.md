@@ -44,7 +44,7 @@ Dispatches plain-text messages through the Telegram Bot API. FlowGuard intention
 
 ```json
 {
-  "chat_id": "693221",
+  "chat_id": "-1001234567890",
   "text": "FlowGuard Lite Test Alert\n\nIP Address: 192.168.1.99\nType: test_alert\nSeverity: info\nDescription: This is a FlowGuard Lite synchronous notification test alert."
 }
 ```

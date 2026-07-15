@@ -8,7 +8,7 @@ Is the network healthy right now?
 
 ## Security Posture Panels
 
-The first M26 implementation adds these security-focused panels:
+The Overview dashboard includes these security-focused panels:
 
 - active alerts count;
 - max device risk score;
@@ -25,7 +25,7 @@ The active time range is selected globally from the application header and appli
 
 ## Data Sources
 
-The Overview dashboard uses dedicated bounded APIs for M26.2/M26.3:
+The Overview dashboard uses dedicated bounded APIs:
 
 - `GET /api/security/summary`;
 - `GET /api/security/timeline`;
@@ -40,7 +40,7 @@ The view does not expose secret values. Settings are used only to show detector 
 
 ## Network Stats Panels
 
-M26.2 adds these network operations panels:
+The network operations area includes these panels:
 
 - selected time-window summary showing aggregate traffic, packets, flows, and bucket coverage for the global range;
 - protocol distribution donut, responsive to the selected time range;
@@ -61,9 +61,9 @@ The Overview view must remain lightweight:
 - no unbounded history requests;
 - no new charting dependency;
 - no heavyweight analytics stack;
-- aggregation should move to dedicated bounded endpoints in M26.3.
+- aggregation should use dedicated bounded endpoints.
 
-## Remaining M26 Work
+## Remaining Polish
 
 Remaining polish should focus on visual/manual verification:
 

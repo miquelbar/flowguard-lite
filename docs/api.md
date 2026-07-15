@@ -47,7 +47,7 @@ Retrieves daemon health status, collector statistics, and queue depth indicators
 }
 ```
 
-Collector source health uses bounded labels (`kind`, `id`) rather than per-client, per-exporter, or sender-provided labels. UniFi syslog source counters report parsed packet intake, drops, and parse errors; retained UniFi event evidence is added by later M30 storage work. Exporter IPs remain available through `/api/exporters`.
+Collector source health uses bounded labels (`kind`, `id`) rather than per-client, per-exporter, or sender-provided labels. UniFi syslog source counters report parsed packet intake, drops, and parse errors; retained UniFi event evidence is exposed through the UniFi security event endpoints. Exporter IPs remain available through `/api/exporters`.
 
 ### GET `/api/auth/status`
 Returns local access-control state.
@@ -214,7 +214,7 @@ Returns bounded aggregate traffic counters for network charts.
 ```
 
 ### GET `/api/traffic/records`
-Returns retained aggregate rows for analyst search/filter workflows. Each row is a bounded rollup from `flow_aggregates`, not a raw packet or indefinite raw flow record. Collector identity is reported separately from `exporter_ip` so NetFlow/sFlow, passive capture, and future SIEM sources can coexist without ambiguity.
+Returns retained aggregate rows for analyst search/filter workflows. Each row is a bounded rollup from `flow_aggregates`, not a raw packet or indefinite raw flow record. Collector identity is reported separately from `exporter_ip` so NetFlow/sFlow and passive capture sources can coexist without ambiguity.
 
 *   **Query Parameters:**
     *   `start` (Optional, RFC3339): Defaults to one hour before `end`.

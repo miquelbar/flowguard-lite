@@ -15,15 +15,15 @@ It acts as a lightweight flow collector and correlates router/firewall telemetry
 
 ### Exporter Setup Guides
 Configure your routers and firewalls to export supported telemetry:
-*   [**Ubiquiti UniFi Gateways**](setup/unifi.md) - IPFIX when available, SIEM/syslog planned, passive capture fallback.
+*   [**Ubiquiti UniFi Gateways**](setup/unifi.md) - IPFIX when available, SIEM/syslog Activity Logging ingest, passive capture fallback.
 *   [**MikroTik RouterOS**](setup/mikrotik.md)
 *   [**OPNsense & pfSense Firewalls**](setup/opnsense.md)
 
 ### Core Features
 *   [**Anomaly Detection & Risk Scoring**](features/anomaly-detection.md) - Deep dive into statistical baselines, DDoS thresholds, and device risk indexing.
-*   [**Overview Dashboard**](features/overview-dashboard.md) - Default security posture dashboard, attack timeline, risk distribution, and remaining M26 dashboard work.
+*   [**Overview Dashboard**](features/overview-dashboard.md) - Default security posture dashboard, attack timeline, risk distribution, and network operations panels.
 *   [**Analyst Workflows & UI Architecture**](features/analyst-workflows.md) - Target operator workflows, page model, Risk Index explanation requirements, and UI implementation order.
-*   [**Integrations & Webhooks**](features/integrations.md) - How to setup Suricata ingestion, configure Slack/Telegram webhooks, and block IPs.
+*   [**Integrations & Webhooks**](features/integrations.md) - How to set up Suricata ingestion, configure Slack/Telegram/webhook notifications, and export firewall rule templates.
 
 ### Reference & Development
 *   [**System Architecture**](architecture.md) - Internal design, collector worker pools, memory aggregation, and sharded storage engines.

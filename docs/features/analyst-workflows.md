@@ -2,7 +2,7 @@
 
 FlowGuard Lite is not a generic SIEM. The interface must help small-network operators answer practical investigation questions quickly, without requiring them to understand raw NetFlow, sFlow, or Suricata internals.
 
-This document defines the target UI information architecture for the post-M13 analyst experience.
+This document defines the target UI information architecture for the analyst experience.
 
 ---
 
@@ -166,7 +166,7 @@ Expected content:
 - policy changes;
 - alert triage changes;
 - notification test sends;
-- authentication events after M15;
+- authentication events;
 - search and pagination over bounded results.
 
 ### Settings
@@ -272,13 +272,13 @@ Prefer:
 
 ## Implementation Order
 
-1. M15: Access Control and Deployment Safety.
-2. M16: Network Overview with Time-Series Charts.
-3. M17: IP Profile Workspace.
-4. M18: Policies.
-5. M19: Notification Routing Rules.
-6. M20: Risk Index Explainability.
-7. M21: Settings Rebuild.
-8. M22: Usability and Release Hardening.
+1. Access control and deployment safety.
+2. Network overview with time-series charts.
+3. IP profile workspace.
+4. Policies.
+5. Notification routing rules.
+6. Risk index explainability.
+7. Settings rebuild.
+8. Usability and release hardening.
 
-M15 should happen before broader UI rollout because configuration, alerts, policies, and internal network metadata are sensitive.
+Access control should happen before broader UI rollout because configuration, alerts, policies, and internal network metadata are sensitive.

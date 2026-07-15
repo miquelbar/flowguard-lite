@@ -125,7 +125,7 @@ The Docker targets remain authoritative on machines without host Node.
 
 ## Current known review candidates
 
-No current frontend JavaScript module exceeds the 500-line strong split signal after the M29.1 feature split. These modules remain above 400 lines and should be reviewed in later M29 slices before adding behavior:
+No current frontend JavaScript module exceeds the 500-line strong split signal. These modules remain above 400 lines and should be reviewed before adding behavior:
 
 - `web/src/features/notifications/notificationsView.js`
 - `web/src/features/policies/policiesView.js`

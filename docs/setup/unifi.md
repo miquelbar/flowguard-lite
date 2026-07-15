@@ -21,7 +21,7 @@ FlowGuard Lite currently supports:
 - Optional passive packet capture when FlowGuard can observe the network interface directly.
 - Optional UniFi Activity Logging/SIEM syslog ingest on the configured UniFi syslog app port, disabled by default.
 
-UniFi SIEM/syslog events are parsed and counted by the collector. Reduced event storage and alert/evidence correlation are implemented in a later M30 slice, so these messages do not yet appear as retained UniFi evidence or anomalies.
+UniFi SIEM/syslog events are parsed, counted, and stored as reduced event records bounded by retention. High-confidence security detections and critical events can create FlowGuard anomalies, and device detail views can show related retained UniFi evidence.
 
 Do not configure UniFi `SIEM Server` port `514` to point at FlowGuard's NetFlow/IPFIX port `2055`. They are different protocols.
 
@@ -64,7 +64,7 @@ Typical contents can include:
 
 FlowGuard uses a dedicated UniFi SIEM/syslog collector for this source, separate from NetFlow/IPFIX. The default FlowGuard app port is `5514/udp` so the daemon does not need privileged port binding. If UniFi requires destination port `514/udp`, map host `514/udp` to the FlowGuard app port, for example with Docker port mapping.
 
-If you need UniFi to retain logs locally, keep UniFi's internal logging retention enabled where the UniFi UI allows it. FlowGuard's current syslog collector is an ingest/parse/health path; retained UniFi evidence storage comes later.
+If you need UniFi to retain logs locally, keep UniFi's internal logging retention enabled where the UniFi UI allows it. FlowGuard stores reduced UniFi evidence only; it does not persist raw syslog datagrams indefinitely.
 
 ## Option C: Passive Capture Fallback
 
@@ -92,7 +92,7 @@ SNMP can be useful for interface counters, link status, and device health. It is
 - It does not provide per-session source/destination/port records.
 - It does not provide UniFi Security Detection or Admin Activity event details.
 
-M31 tracks future SNMP discovery and metrics support.
+SNMP discovery and metrics support are future optional work.
 
 ## Validation Checklist
 
