@@ -10,6 +10,10 @@ import (
 )
 
 func (e *AnomalyEngine) checkBeaconing(ctx context.Context, batch []flow.FlowEvent) {
+	if len(batch) == 0 {
+		return
+	}
+	controls := e.detectionControlsSnapshot()
 	for _, event := range batch {
 		if event.Timestamp.IsZero() ||
 			!e.isLocalIP(event.SrcIP) ||
@@ -26,7 +30,6 @@ func (e *AnomalyEngine) checkBeaconing(ctx context.Context, batch []flow.FlowEve
 			srcIP: event.SrcIP, dstIP: event.DstIP,
 			dstPort: event.DstPort, protocol: event.Protocol,
 		}
-		controls := e.detectionControlsSnapshot()
 		period, jitter, observations, detected := e.observeBeacon(key, event.Timestamp.UTC(), controls)
 		if !detected {
 			continue
@@ -47,8 +50,10 @@ func (e *AnomalyEngine) observeBeacon(key beaconKey, timestamp time.Time, contro
 	defer e.beaconMu.Unlock()
 
 	if timestamp.After(e.beaconWatermark) {
+		if e.beaconWatermark.IsZero() || timestamp.Sub(e.beaconWatermark) >= 1*time.Minute {
+			e.pruneBeaconsLocked(timestamp.Add(-beaconStateRetention))
+		}
 		e.beaconWatermark = timestamp
-		e.pruneBeaconsLocked(timestamp.Add(-beaconStateRetention))
 	}
 
 	series, exists := e.beacons[key]

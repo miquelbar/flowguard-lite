@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -43,8 +44,10 @@ type UniFiSyslogEvent struct {
 	Message   string
 }
 
+var ipTokenRegex = regexp.MustCompile(`(?:[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})|(?:[0-9a-fA-F]{1,4}:[0-9a-fA-F:]+)|(?:::[0-9a-fA-F:]+)`)
+
 func (c *FlowCollector) listenUniFiSyslogLoop(conn *net.UDPConn, allowlist uniFiSyslogAllowlist) {
-	defer c.wg.Done()
+	defer c.listenersWG.Done()
 	buf := make([]byte, maxUniFiSyslogDatagramBytes+1)
 
 	for {
@@ -93,7 +96,10 @@ func (c *FlowCollector) unifiSyslogWorkerLoop() {
 		select {
 		case <-c.ctx.Done():
 			return
-		case msg := <-c.syslogChan:
+		case msg, ok := <-c.syslogChan:
+			if !ok {
+				return
+			}
 			if msg == nil {
 				continue
 			}
@@ -133,8 +139,11 @@ func (c *FlowCollector) unifiSyslogWorkerLoop() {
 					event.SourceGateway = msg.senderIP
 				}
 
-				if err := c.repo.SaveUniFiEvent(c.ctx, event); err != nil {
-					c.logger.Error("Failed to save UniFi SIEM event to database", slog.String("error", err.Error()))
+				dbCtx, dbCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				errSave := c.repo.SaveUniFiEvent(dbCtx, event)
+				dbCancel()
+				if errSave != nil {
+					c.logger.Error("Failed to save UniFi SIEM event to database", slog.String("error", errSave.Error()))
 				}
 
 				// Convert only high-confidence security detections/critical events into anomalies/alarms
@@ -148,8 +157,11 @@ func (c *FlowCollector) unifiSyslogWorkerLoop() {
 					}
 
 					// Upsert the device first to fulfill the foreign key constraint in SQLite anomalies table
-					if err := c.repo.UpsertDevice(c.ctx, targetIP, "", parsed.Timestamp); err != nil {
-						c.logger.Error("Failed to upsert device for UniFi anomaly", slog.String("ip", targetIP), slog.String("error", err.Error()))
+					dbCtx2, dbCancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+					errUpsert := c.repo.UpsertDevice(dbCtx2, targetIP, "", parsed.Timestamp)
+					dbCancel2()
+					if errUpsert != nil {
+						c.logger.Error("Failed to upsert device for UniFi anomaly", slog.String("ip", targetIP), slog.String("error", errUpsert.Error()))
 					}
 
 					anomalyType := "UNIFI_SECURITY"
@@ -167,8 +179,11 @@ func (c *FlowCollector) unifiSyslogWorkerLoop() {
 						UpdatedAt:   parsed.Timestamp,
 					}
 
-					if err := c.repo.SaveAnomaly(c.ctx, anomaly); err != nil {
-						c.logger.Error("Failed to save UniFi syslog anomaly to database", slog.String("error", err.Error()))
+					dbCtx3, dbCancel3 := context.WithTimeout(context.Background(), 5*time.Second)
+					errSaveAnomaly := c.repo.SaveAnomaly(dbCtx3, anomaly)
+					dbCancel3()
+					if errSaveAnomaly != nil {
+						c.logger.Error("Failed to save UniFi syslog anomaly to database", slog.String("error", errSaveAnomaly.Error()))
 					}
 				}
 			}
@@ -211,8 +226,7 @@ func ExtractUniFiCategory(msg string, syslogSev int) string {
 
 // ExtractIP searches for the first IPv4 or IPv6 address in the message text.
 func ExtractIP(msg string) string {
-	tokenRegex := regexp.MustCompile(`[0-9a-fA-F:\.]+`)
-	matches := tokenRegex.FindAllString(msg, -1)
+	matches := ipTokenRegex.FindAllString(msg, -1)
 	for _, match := range matches {
 		match = strings.Trim(match, ".:")
 		if ip := net.ParseIP(match); ip != nil {

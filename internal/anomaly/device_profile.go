@@ -105,13 +105,15 @@ func (e *AnomalyEngine) observeDeviceProfile(ip, signature string, timestamp tim
 	defer e.profileMu.Unlock()
 
 	if timestamp.After(e.profileWatermark) {
-		e.profileWatermark = timestamp
-		cutoff := timestamp.Add(-profileStateRetention)
-		for deviceIP, profile := range e.deviceProfiles {
-			if profile.lastSeen.Before(cutoff) {
-				delete(e.deviceProfiles, deviceIP)
+		if e.profileWatermark.IsZero() || timestamp.Sub(e.profileWatermark) >= 1*time.Minute {
+			cutoff := timestamp.Add(-profileStateRetention)
+			for deviceIP, profile := range e.deviceProfiles {
+				if profile.lastSeen.Before(cutoff) {
+					delete(e.deviceProfiles, deviceIP)
+				}
 			}
 		}
+		e.profileWatermark = timestamp
 	}
 
 	profile, exists := e.deviceProfiles[ip]

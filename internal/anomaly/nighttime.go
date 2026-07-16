@@ -46,13 +46,15 @@ func (e *AnomalyEngine) observeActivity(ip string, timestamp time.Time, isDaytim
 	defer e.activityMu.Unlock()
 
 	if timestamp.After(e.activityWatermark) {
-		e.activityWatermark = timestamp
-		cutoff := timestamp.Add(-nightStateRetention)
-		for deviceIP, profile := range e.activityProfiles {
-			if profile.lastSeen.Before(cutoff) {
-				delete(e.activityProfiles, deviceIP)
+		if e.activityWatermark.IsZero() || timestamp.Sub(e.activityWatermark) >= 1*time.Minute {
+			cutoff := timestamp.Add(-nightStateRetention)
+			for deviceIP, profile := range e.activityProfiles {
+				if profile.lastSeen.Before(cutoff) {
+					delete(e.activityProfiles, deviceIP)
+				}
 			}
 		}
+		e.activityWatermark = timestamp
 	}
 
 	profile, exists := e.activityProfiles[ip]

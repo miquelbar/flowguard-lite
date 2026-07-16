@@ -64,6 +64,7 @@ type FlowCollector struct {
 	rawPacketsChan chan *rawPacket
 	syslogChan     chan *syslogDatagram
 	wg             sync.WaitGroup
+	listenersWG    sync.WaitGroup
 	ctx            context.Context
 	cancel         context.CancelFunc
 
@@ -181,16 +182,17 @@ func (c *FlowCollector) Start() error {
 	}
 
 	if c.nfConn != nil {
-		c.wg.Add(1)
+		c.listenersWG.Add(1)
 		go c.listenLoop(c.nfConn, "netflow")
 	}
 	if c.sfConn != nil {
-		c.wg.Add(1)
+		c.listenersWG.Add(1)
 		go c.listenLoop(c.sfConn, "sflow")
 	}
 	if c.usConn != nil {
-		c.wg.Add(2)
+		c.listenersWG.Add(1)
 		go c.listenUniFiSyslogLoop(c.usConn, unifiAllowlist)
+		c.wg.Add(1)
 		go c.unifiSyslogWorkerLoop()
 	}
 
@@ -211,10 +213,14 @@ func (c *FlowCollector) Shutdown() {
 
 	c.closeListeners()
 
-	// Close worker channel
-	close(c.rawPacketsChan)
+	// Wait for listener goroutines to finish first
+	c.listenersWG.Wait()
 
-	// Wait for goroutines to finish
+	// Close worker channels
+	close(c.rawPacketsChan)
+	close(c.syslogChan)
+
+	// Wait for worker goroutines to finish
 	c.wg.Wait()
 	c.logger.Info("Flow Collector shut down successfully.")
 }
@@ -321,7 +327,7 @@ func (c *FlowCollector) GetExporters() []ExporterMetadata {
 
 // listenLoop reads UDP packets from the interface and places them in the buffered channel.
 func (c *FlowCollector) listenLoop(conn *net.UDPConn, packetType string) {
-	defer c.wg.Done()
+	defer c.listenersWG.Done()
 	buf := make([]byte, 9000) // Standard MTU is 1500, but some flows can have jumbo frames up to 9000
 
 	for {

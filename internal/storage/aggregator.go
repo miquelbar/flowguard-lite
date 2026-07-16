@@ -2,8 +2,8 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
 	"time"
 
@@ -123,8 +123,8 @@ func (a *FlowAggregator) Process(event *flow.FlowEvent) {
 	collectorID := flow.NormalizeCollectorID(event.CollectorID, collectorKind, event.ExporterIP)
 
 	// Aggregate flows matching collector source and unique traffic parameters.
-	key := fmt.Sprintf("%s|%s|%s|%s|%d|%d",
-		collectorKind, collectorID, event.SrcIP, event.DstIP, event.DstPort, event.Protocol)
+	key := collectorKind + "|" + collectorID + "|" + event.SrcIP + "|" + event.DstIP + "|" +
+		strconv.Itoa(event.DstPort) + "|" + strconv.Itoa(event.Protocol)
 
 	if existing, ok := a.buffer[key]; ok {
 		existing.Bytes += event.Bytes

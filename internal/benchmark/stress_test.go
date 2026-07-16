@@ -209,7 +209,7 @@ func TestStress_AnomalyCallbackOverhead(t *testing.T) {
 
 	t.Logf("Processed %d events through anomaly engine in %v", eventsCount, duration)
 
-	if duration > 200*time.Millisecond {
-		t.Errorf("Anomaly detection engine took too long: %v (target under 200ms)", duration)
+	if duration > 200*time.Millisecond*raceMultiplier {
+		t.Errorf("Anomaly detection engine took too long: %v (target under %v)", duration, 200*time.Millisecond*raceMultiplier)
 	}
 }

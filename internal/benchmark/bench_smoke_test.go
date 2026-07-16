@@ -34,8 +34,9 @@ func TestPerformanceRegressionSmoke(t *testing.T) {
 			agg.Process(&events[i%len(events)])
 		}
 		duration := time.Since(start)
-		if duration > 50*time.Millisecond {
-			t.Errorf("FlowAggregator Process was too slow: 10,000 flows took %s (max: 50ms)", duration)
+		limit := 50 * time.Millisecond * raceMultiplier
+		if duration > limit {
+			t.Errorf("FlowAggregator Process was too slow: 10,000 flows took %s (max: %v)", duration, limit)
 		}
 	})
 
@@ -55,8 +56,9 @@ func TestPerformanceRegressionSmoke(t *testing.T) {
 			}
 		}
 		duration := time.Since(start)
-		if duration > 100*time.Millisecond {
-			t.Errorf("NetFlow decoding was too slow: 5,000 packets took %s (max: 100ms)", duration)
+		limit := 100 * time.Millisecond * raceMultiplier
+		if duration > limit {
+			t.Errorf("NetFlow decoding was too slow: 5,000 packets took %s (max: %v)", duration, limit)
 		}
 	})
 
@@ -78,8 +80,9 @@ func TestPerformanceRegressionSmoke(t *testing.T) {
 			}
 		}
 		duration := time.Since(start)
-		if duration > 100*time.Millisecond {
-			t.Errorf("Syslog parsing was too slow: 5,000 lines took %s (max: 100ms)", duration)
+		limit := 100 * time.Millisecond * raceMultiplier
+		if duration > limit {
+			t.Errorf("Syslog parsing was too slow: 5,000 lines took %s (max: %v)", duration, limit)
 		}
 	})
 }

@@ -34,6 +34,8 @@ const (
 	NotificationChannelTelegram = "telegram"
 )
 
+var timeRegex = regexp.MustCompile(`^(?:[01]\d|2[0-3]):[0-5]\d$`)
+
 // Validate checks policy properties against safety rules to prevent unbounded queries or destructive loops.
 func (p *Policy) Validate() error {
 	if p.Name == "" {
@@ -78,7 +80,6 @@ func (p *Policy) Validate() error {
 		return fmt.Errorf("cooldown period must be between 0 and 30 days (2,592,000 seconds)")
 	}
 
-	timeRegex := regexp.MustCompile(`^(?:[01]\d|2[0-3]):[0-5]\d$`)
 	if p.QuietHoursStart != "" && !timeRegex.MatchString(p.QuietHoursStart) {
 		return fmt.Errorf("invalid quiet hours start format, must be HH:MM")
 	}

@@ -30,13 +30,15 @@ func (e *AnomalyEngine) observeInternalPeer(ip string, peers map[string]bool, ti
 	defer e.internalPeerMu.Unlock()
 
 	if timestamp.After(e.internalPeerWatermark) {
-		e.internalPeerWatermark = timestamp
-		cutoff := timestamp.Add(-internalPeerStateRetention)
-		for deviceIP, profile := range e.internalPeerProfiles {
-			if profile.lastSeen.Before(cutoff) {
-				delete(e.internalPeerProfiles, deviceIP)
+		if e.internalPeerWatermark.IsZero() || timestamp.Sub(e.internalPeerWatermark) >= 1*time.Minute {
+			cutoff := timestamp.Add(-internalPeerStateRetention)
+			for deviceIP, profile := range e.internalPeerProfiles {
+				if profile.lastSeen.Before(cutoff) {
+					delete(e.internalPeerProfiles, deviceIP)
+				}
 			}
 		}
+		e.internalPeerWatermark = timestamp
 	}
 
 	profile, exists := e.internalPeerProfiles[ip]
