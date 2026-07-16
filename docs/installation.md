@@ -30,7 +30,7 @@ version: '3.8'
 
 services:
   flowguard:
-    image: ghcr.io/miquelbar/flowguard-lite:edge
+    image: ghcr.io/miquelbar/flowguard-lite:v0.1.0-alpha
     container_name: flowguard
     restart: unless-stopped
     ports:
@@ -54,13 +54,17 @@ Run the following command to download and start the service in the background:
 docker compose up -d
 ```
 
-Release images are published to GitHub Container Registry. Use `edge` for the latest `main` build, or a version tag such as `v0.1.0-alpha` after creating a release tag:
+Release images are published to GitHub Container Registry. Use version tags for repeatable deployments:
+
+```bash
+docker pull ghcr.io/miquelbar/flowguard-lite:v0.1.0-alpha
+```
+
+Use `edge` only when you explicitly want the latest `main` build:
 
 ```bash
 docker pull ghcr.io/miquelbar/flowguard-lite:edge
 ```
-
-If GitHub creates the container package as private on first publish, mark it public from the package settings so unauthenticated `docker pull` works for users.
 
 ### 4. Verify Containers
 Verify that FlowGuard Lite is running and listening on the designated ports:

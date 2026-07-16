@@ -1,37 +1,96 @@
 # FlowGuard Lite
 
-FlowGuard Lite is a lightweight network visibility, anomaly detection, and DDoS detection product for homelabs, prosumer networks, small offices, clinics, shops, and small technical teams.
+[![CI](https://github.com/miquelbar/flowguard-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/miquelbar/flowguard-lite/actions/workflows/ci.yml)
+[![Docs](https://github.com/miquelbar/flowguard-lite/actions/workflows/deploy-docs.yml/badge.svg)](https://github.com/miquelbar/flowguard-lite/actions/workflows/deploy-docs.yml)
+[![Container](https://img.shields.io/badge/GHCR-flowguard--lite-2f81f7)](https://github.com/miquelbar/flowguard-lite/pkgs/container/flowguard-lite)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-It is built for people who need to understand suspicious network behavior without running a full SOC stack, Kafka, ClickHouse, Elasticsearch, or a heavyweight SIEM.
+**Network anomaly detection for people who do not have a SOC.**
 
-FlowGuard Lite receives router/firewall flow telemetry, optional passive capture metadata, optional Suricata events, and UniFi SIEM/syslog events. It builds device-level behavioral baselines, detects anomalies and flood patterns, and explains why a device looks suspicious.
+FlowGuard Lite is a lightweight network visibility and anomaly detection product for homelabs, prosumer networks, small offices, clinics, shops, and small technical teams. It ingests NetFlow/IPFIX/sFlow, optional passive capture metadata, optional Suricata events, and UniFi SIEM/syslog events, then builds device-level baselines and explains why a device looks suspicious.
 
-## What It Does
+No Kafka. No ClickHouse. No Elasticsearch. No full SOC stack.
 
-| Area | Current support |
-| --- | --- |
-| Flow telemetry | NetFlow v5/v9, IPFIX, sFlow |
-| Passive capture | Optional libpcap-based TCP/UDP metadata reduction |
-| UniFi | IPFIX where available, plus SIEM/syslog Activity Logging event ingestion |
-| IDS correlation | Optional Suricata `eve.json` ingestion |
-| Detection | Device baselines, new destination/port/internal peer, traffic spikes, beaconing, fan-out, nighttime activity, profile changes, DDoS flood patterns |
-| Evidence | Every anomaly includes an explanation and bounded evidence |
-| Storage | SQLite daily shards by default, bounded by retention; optional DuckDB read acceleration |
-| UI | Web console for Overview, Traffic, Devices, Alerts, Policies, Notifications, Audit, and Settings |
-| Notifications | Slack/Discord webhook, generic webhook, and Telegram channel targets |
-| Deployment | Docker Compose and native Go/Vite development workflows |
+## Try It
+
+Published multi-arch images are available on GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/miquelbar/flowguard-lite:v0.1.0-alpha
+```
+
+Minimal Docker Compose deployment:
+
+```yaml
+services:
+  flowguard:
+    image: ghcr.io/miquelbar/flowguard-lite:v0.1.0-alpha
+    container_name: flowguard
+    restart: unless-stopped
+    ports:
+      - "8080:8080"        # Web UI and REST API
+      - "2055:2055/udp"    # NetFlow v5/v9 and IPFIX
+      - "6343:6343/udp"    # sFlow
+      - "514:5514/udp"     # UniFi SIEM/syslog host port mapping
+    volumes:
+      - flowguard_data:/data
+
+volumes:
+  flowguard_data:
+```
+
+Then open:
+
+```text
+http://localhost:8080
+```
+
+For the newest `main` build:
+
+```bash
+docker pull ghcr.io/miquelbar/flowguard-lite:edge
+```
+
+## Visual Preview
+
+![FlowGuard Lite Overview dashboard with seeded demo data](docs/assets/screenshots/overview.png)
+
+The seeded console includes populated Overview, Traffic, Devices, Alerts, Policies, Notifications, Audit, and Settings views so reviewers are not greeted by empty tables.
+
+## Why Use It
+
+Small networks often have capable routers and firewalls but poor visibility into device behavior. FlowGuard Lite focuses on:
+
+- **Device-level explanations:** every anomaly explains what happened, why it is unusual, the baseline used, and the next check.
+- **Practical collectors:** NetFlow/IPFIX/sFlow, UniFi SIEM/syslog, passive capture, and optional Suricata evidence.
+- **Small hardware:** designed for Intel N100-class boxes and bounded local storage.
+- **Noise controls:** suppress noisy detector types, subnets, or notification targets without losing all evidence.
+- **Simple deployment:** one Docker container, SQLite daily shards by default, no external data platform.
+- **Operator workflow:** alerts, devices, policies, notifications, audit logs, Telegram/webhook tests, and configuration backup from the UI.
 
 FlowGuard Lite is alert-only. It can generate firewall rule templates, but it does not automatically block traffic.
 
-## Why This Exists
+## Current Support
 
-Small networks often have good routers and firewalls but poor visibility into device behavior. FlowGuard Lite focuses on:
+| Area | Support |
+| --- | --- |
+| Flow telemetry | NetFlow v5/v9, IPFIX, sFlow |
+| UniFi | Validated with UniFi NetFlow/IPFIX; supports SIEM/syslog Activity Logging events |
+| Passive capture | Optional libpcap TCP/UDP metadata reduction |
+| IDS evidence | Optional Suricata `eve.json` ingest |
+| Detection | New destination/port/internal peer, traffic spikes, beaconing, fan-out, nighttime activity, profile changes, DDoS flood patterns |
+| Notifications | Telegram, Slack/Discord-compatible webhook, generic webhook |
+| Storage | SQLite daily shards by default; optional DuckDB query acceleration |
+| Images | `ghcr.io/miquelbar/flowguard-lite:v0.1.0-alpha` and `:edge` |
 
-- device-centric explanations instead of opaque scoring;
-- bounded local storage instead of raw flow retention forever;
-- small hardware such as Intel N100-class boxes with 2 GB RAM allocated;
-- practical integrations for UniFi, MikroTik, OPNsense, pfSense, Suricata, Slack/Discord, Telegram, and generic webhooks;
-- a single-node deployment model that stays understandable.
+## Documentation
+
+- [Documentation site](https://miquelbar.github.io/flowguard-lite/)
+- [Installation Guide](docs/installation.md)
+- [Configuration Reference](docs/configuration.md)
+- [Capacity & Performance Guide](docs/capacity-guide.md)
+- [Exporter Setup: UniFi](docs/setup/unifi.md)
+- [Integrations and Webhooks](docs/features/integrations.md)
 
 ## Performance Snapshot
 
@@ -57,62 +116,12 @@ Recommended N100-class deployment ranges:
 
 Details: [Capacity & Performance Guide](docs/capacity-guide.md) and [Performance Baselines](docs/performance-baselines.md).
 
-## Quickstart
-
-### Docker Compose
-
-Published images are available from GitHub Container Registry:
+## Local Development
 
 ```bash
-docker pull ghcr.io/miquelbar/flowguard-lite:edge
-```
-
-If the first GHCR package is created as private, mark it public in the package settings before sharing the pull command.
-
-For a local source build instead:
-
-```bash
+make setup
 make docker-build
 make docker-up
-```
-
-Open:
-
-```txt
-http://localhost:8080
-```
-
-On first run, create the local admin password in the setup screen. The UI then guides you through local subnets, storage, collectors, detection thresholds, and notification targets.
-
-Default listener ports:
-
-| Port | Protocol | Purpose |
-| ---: | --- | --- |
-| 8080 | TCP | REST API and web UI |
-| 2055 | UDP | NetFlow v5/v9 and IPFIX |
-| 6343 | UDP | sFlow |
-| 5514 | UDP | UniFi SIEM/syslog app port, disabled by default |
-
-UniFi devices that send SIEM/syslog to standard port `514/udp` should map host `514` to the app port `5514`; the normal container does not need privileged mode.
-
-Minimal Compose example using GHCR:
-
-```yaml
-services:
-  flowguard:
-    image: ghcr.io/miquelbar/flowguard-lite:edge
-    container_name: flowguard
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-      - "2055:2055/udp"
-      - "6343:6343/udp"
-      - "514:5514/udp"
-    volumes:
-      - flowguard_data:/data
-
-volumes:
-  flowguard_data:
 ```
 
 Export the production image for offline installs:
@@ -120,14 +129,6 @@ Export the production image for offline installs:
 ```bash
 make docker-export
 docker load -i dist/flowguard-image.tar
-```
-
-### Native Development
-
-```bash
-make setup
-make build
-make dev
 ```
 
 For local demo data:
@@ -139,12 +140,6 @@ go run ./cmd/flowguard -config config-dev.yaml
 ```
 
 Then open `http://localhost:8080`.
-
-## Visual Preview
-
-![FlowGuard Lite Overview dashboard with seeded demo data](docs/assets/screenshots/overview.png)
-
-The seeded console includes populated Overview, Traffic, Devices, Alerts, Policies, Notifications, Audit, and Settings views so reviewers are not greeted by empty tables.
 
 ## Quality Gates
 
@@ -197,22 +192,6 @@ make benchmark-matrix
 ```
 
 Benchmark reports are written under `benchmark-results/`, which is intentionally ignored by Git.
-
-## Documentation
-
-Start here:
-
-- [Installation Guide](docs/installation.md)
-- [Configuration Reference](docs/configuration.md)
-- [Architecture](docs/architecture.md)
-- [REST API Reference](docs/api.md)
-- [Capacity & Performance Guide](docs/capacity-guide.md)
-- [Exporter Setup: UniFi](docs/setup/unifi.md)
-- [Exporter Setup: MikroTik](docs/setup/mikrotik.md)
-- [Exporter Setup: OPNsense and pfSense](docs/setup/opnsense.md)
-- [Integrations and Webhooks](docs/features/integrations.md)
-
-The `/docs` directory is Markdown-based and published as a Jekyll GitHub Pages site. On a new repository, enable Pages once in GitHub with `Settings > Pages > Source > GitHub Actions`; the `Deploy Docs to GitHub Pages` workflow then builds the themed docs site on pushes to `main`.
 
 ## Deployment Notes
 
