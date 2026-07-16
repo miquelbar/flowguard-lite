@@ -136,13 +136,16 @@ benchmark-run:
 
 docker-benchmark-run:
 	@echo "Running containerized benchmarks via Docker Compose..."
-	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-2g
+	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-1c-2g
 
 benchmark-matrix:
-	@echo "Running performance benchmarks across 2GB, 4GB, and 8GB RAM profiles..."
-	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-2g
-	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-4g
-	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-8g
+	@echo "Running performance benchmarks across 1 CPU and 2 CPU configurations for 2GB, 4GB, and 8GB RAM profiles..."
+	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-1c-2g
+	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-1c-4g
+	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-1c-8g
+	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-2c-2g
+	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-2c-4g
+	docker compose -f deploy/docker-compose.benchmark.yml run --rm benchmark-2c-8g
 
 benchmark-smoke:
 	@echo "Running lightweight performance smoke test..."

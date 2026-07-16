@@ -94,17 +94,16 @@ FlowGuard Lite is alert-only. It can generate firewall rule templates, but it do
 
 ## Performance Snapshot
 
-FlowGuard Lite has a repeatable benchmark harness and published capacity guide. The current measured baseline on N100-class hardware with 2 GB RAM is:
+FlowGuard Lite has a repeatable benchmark harness and published capacity guide. The current measured baseline in a constrained Docker container (1 CPU Core, 2 GB RAM Limit) is:
 
 | Path | Measured result |
 | --- | ---: |
-| Flow aggregation | 4.53M flows/sec in Docker |
-| NetFlow v9 decode | 1.72M packets/sec in Docker |
-| UniFi syslog parse/classify | 511K lines/sec in Docker |
-| Anomaly engine evaluation | 78.5K flows/sec in Docker |
-| SQLite 1,000-flow batch write | 6.16 ms native baseline |
-| Overview summary API | 48.4 us |
-| Traffic records API | 325.1 us |
+| Flow aggregation | 8.13M flows/sec in Docker |
+| NetFlow v9 decode | 1.16M packets/sec in Docker |
+| UniFi syslog parse/classify | 576K lines/sec in Docker |
+| SQLite 1,000-flow batch write | 9.06 ms in Docker |
+| Overview summary API | 51.7 us |
+| Traffic records API | 356.2 us |
 
 Recommended N100-class deployment ranges:
 

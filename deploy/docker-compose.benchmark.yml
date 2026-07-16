@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  benchmark-2g:
+  benchmark-1c-2g:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.benchmark
@@ -11,12 +11,13 @@ services:
     deploy:
       resources:
         limits:
+          cpus: '1.0'
           memory: 2g
     environment:
       - FLOWGUARD_BENCH_MEM_LIMIT=2GB
-    command: go run cmd/benchrunner/main.go -suffix=2g
+    command: go run cmd/benchrunner/main.go -suffix=1c-2g
 
-  benchmark-4g:
+  benchmark-1c-4g:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.benchmark
@@ -26,12 +27,13 @@ services:
     deploy:
       resources:
         limits:
+          cpus: '1.0'
           memory: 4g
     environment:
       - FLOWGUARD_BENCH_MEM_LIMIT=4GB
-    command: go run cmd/benchrunner/main.go -suffix=4g
+    command: go run cmd/benchrunner/main.go -suffix=1c-4g
 
-  benchmark-8g:
+  benchmark-1c-8g:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.benchmark
@@ -41,7 +43,56 @@ services:
     deploy:
       resources:
         limits:
+          cpus: '1.0'
           memory: 8g
     environment:
       - FLOWGUARD_BENCH_MEM_LIMIT=8GB
-    command: go run cmd/benchrunner/main.go -suffix=8g
+    command: go run cmd/benchrunner/main.go -suffix=1c-8g
+
+  benchmark-2c-2g:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.benchmark
+    volumes:
+      - ..:/work
+    working_dir: /work
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2g
+    environment:
+      - FLOWGUARD_BENCH_MEM_LIMIT=2GB
+    command: go run cmd/benchrunner/main.go -suffix=2c-2g
+
+  benchmark-2c-4g:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.benchmark
+    volumes:
+      - ..:/work
+    working_dir: /work
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4g
+    environment:
+      - FLOWGUARD_BENCH_MEM_LIMIT=4GB
+    command: go run cmd/benchrunner/main.go -suffix=2c-4g
+
+  benchmark-2c-8g:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.benchmark
+    volumes:
+      - ..:/work
+    working_dir: /work
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 8g
+    environment:
+      - FLOWGUARD_BENCH_MEM_LIMIT=8GB
+    command: go run cmd/benchrunner/main.go -suffix=2c-8g
