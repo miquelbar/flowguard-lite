@@ -61,6 +61,16 @@ Details: [Capacity & Performance Guide](docs/capacity-guide.md) and [Performance
 
 ### Docker Compose
 
+Published images are available from GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/miquelbar/flowguard-lite:edge
+```
+
+If the first GHCR package is created as private, mark it public in the package settings before sharing the pull command.
+
+For a local source build instead:
+
 ```bash
 make docker-build
 make docker-up
@@ -84,6 +94,26 @@ Default listener ports:
 | 5514 | UDP | UniFi SIEM/syslog app port, disabled by default |
 
 UniFi devices that send SIEM/syslog to standard port `514/udp` should map host `514` to the app port `5514`; the normal container does not need privileged mode.
+
+Minimal Compose example using GHCR:
+
+```yaml
+services:
+  flowguard:
+    image: ghcr.io/miquelbar/flowguard-lite:edge
+    container_name: flowguard
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "2055:2055/udp"
+      - "6343:6343/udp"
+      - "514:5514/udp"
+    volumes:
+      - flowguard_data:/data
+
+volumes:
+  flowguard_data:
+```
 
 Export the production image for offline installs:
 

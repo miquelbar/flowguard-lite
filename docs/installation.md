@@ -30,13 +30,14 @@ version: '3.8'
 
 services:
   flowguard:
-    image: flowguard:latest
+    image: ghcr.io/miquelbar/flowguard-lite:edge
     container_name: flowguard
     restart: unless-stopped
     ports:
       - "8080:8080"        # REST API & Web UI Dashboard
       - "2055:2055/udp"    # NetFlow v5/v9 & IPFIX collector port
       - "6343:6343/udp"    # sFlow collector port
+      - "514:5514/udp"     # Optional UniFi SIEM/syslog host port mapping
     volumes:
       - flowguard_data:/data
     environment:
@@ -52,6 +53,14 @@ Run the following command to download and start the service in the background:
 ```bash
 docker compose up -d
 ```
+
+Release images are published to GitHub Container Registry. Use `edge` for the latest `main` build, or a version tag such as `v0.1.0-alpha` after creating a release tag:
+
+```bash
+docker pull ghcr.io/miquelbar/flowguard-lite:edge
+```
+
+If GitHub creates the container package as private on first publish, mark it public from the package settings so unauthenticated `docker pull` works for users.
 
 ### 4. Verify Containers
 Verify that FlowGuard Lite is running and listening on the designated ports:
@@ -75,7 +84,7 @@ If you prefer to run the binary directly on your system without virtualization, 
 ### 1. Clone and Prepare the Workspace
 ```bash
 git clone https://github.com/miquelbar/flowguard-lite.git
-cd flowguard
+cd flowguard-lite
 ```
 
 ### 2. Configure Git Exclusions
