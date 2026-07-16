@@ -7,7 +7,7 @@ FlowGuard Lite is designed to run efficiently on small hardware. This guide cove
 ## System Requirements
 
 *   **Processor:** Intel N100, Raspberry Pi 4/5, or equivalent x86_64 / arm64 CPU.
-*   **Memory:** 500 MB minimum (runs comfortably under 2 MB for typical environments).
+*   **Memory:** 500 MB minimum (runs comfortably under 2 GB for typical environments).
 *   **Storage:** Local SSD or NVMe for database shards. Bounded by configured retention policies.
 *   **Operating System:** Linux (Kernel 5.4+ recommended), macOS, or Windows (via WSL2).
 

@@ -31,3 +31,27 @@ Configure your routers and firewalls to export supported telemetry:
 *   [**REST API Reference**](api.md) - Endpoints, request/response models, and example payloads.
 *   [**Performance Baselines**](performance-baselines.md) - Standard metrics, publishable profiles, N100 hardware targets, and pass/fail thresholds.
 *   [**Capacity & Performance Guide**](capacity-guide.md) - Ingestion limits, tested hardware profiles, overload mechanics, and router-specific tradeoffs.
+
+## Benchmark and Quality Gates
+
+The benchmark suite is part of the release gate, not a separate spreadsheet. Use these commands to reproduce the published performance evidence:
+
+```bash
+make benchmark-smoke
+make benchmark-run
+make docker-benchmark-run
+make benchmark-matrix
+make pre-release-gate
+```
+
+What they cover:
+
+| Command | Purpose |
+| --- | --- |
+| `make benchmark-smoke` | Fast regression check for processing rate and parser performance. |
+| `make benchmark-run` | Native benchmark report generation under `benchmark-results/`. |
+| `make docker-benchmark-run` | Containerized 2 GB benchmark profile. |
+| `make benchmark-matrix` | Docker benchmark profiles for 2 GB, 4 GB, and 8 GB memory limits. |
+| `make pre-release-gate` | Product Go tests, frontend build/lint, Cypress smoke, benchmark smoke, and whitespace checks. |
+
+Published capacity numbers are documented in the [Capacity & Performance Guide](capacity-guide.md).

@@ -16,7 +16,38 @@ FlowGuard Lite was benchmarked on the target **Intel N100** processor profile (a
 
 ---
 
-## 2. Ingestion & Aggregation Benchmark Results
+## 2. Reproducing the Benchmark Tests
+
+Run the benchmark smoke test before every release candidate:
+
+```bash
+make benchmark-smoke
+```
+
+Generate local native benchmark reports:
+
+```bash
+make benchmark-run
+```
+
+Generate Docker benchmark reports using the same harness as the published capacity matrix:
+
+```bash
+make docker-benchmark-run
+make benchmark-matrix
+```
+
+The benchmark runner writes Markdown and JSON reports under `benchmark-results/`. That directory is intentionally ignored by Git so repeated runs do not pollute commits.
+
+The full pre-release gate includes product tests, frontend checks, Cypress smoke coverage, benchmark smoke, and whitespace validation:
+
+```bash
+make pre-release-gate
+```
+
+---
+
+## 3. Ingestion & Aggregation Benchmark Results
 
 The following metrics represent the maximum throughput and processing limits measured during standard stress tests:
 
@@ -29,7 +60,7 @@ The following metrics represent the maximum throughput and processing limits mea
 
 ---
 
-## 3. Database & REST API Performance
+## 4. Database & REST API Performance
 
 ### SQLite vs. DuckDB Write & Read Latencies
 FlowGuard Lite uses sharded SQLite daily databases as its default storage engine, with support for DuckDB query acceleration.
@@ -51,7 +82,7 @@ FlowGuard Lite uses sharded SQLite daily databases as its default storage engine
 
 ---
 
-## 4. Recommended Capacity Ranges
+## 5. Recommended Capacity Ranges
 
 Based on the performance baselines, we recommend the following deployment sizes for N100 class hardware:
 
@@ -63,7 +94,7 @@ Based on the performance baselines, we recommend the following deployment sizes 
 
 ---
 
-## 5. Behavior Under Overload
+## 6. Behavior Under Overload
 
 When traffic levels exceed the capacity of the host CPU or network interface, FlowGuard Lite triggers the following safety mechanisms to preserve system stability:
 
@@ -77,7 +108,7 @@ When traffic levels exceed the capacity of the host CPU or network interface, Fl
 
 ---
 
-## 6. Exporter & Gateway Specific Tradeoffs
+## 7. Exporter & Gateway Specific Tradeoffs
 
 ### Ubiquiti UniFi IPFIX Hardware-Acceleration Tradeoff
 When enabling NetFlow/IPFIX on Ubiquiti UniFi Gateways (such as USG-3P, UDM-Pro, or UXG-Lite):
@@ -91,7 +122,7 @@ When enabling NetFlow/IPFIX on Ubiquiti UniFi Gateways (such as USG-3P, UDM-Pro,
 
 ---
 
-## 7. Comparative Performance Matrix by Memory Allocation
+## 8. Comparative Performance Matrix by Memory Allocation
 
 To measure memory scaling and verify that memory constraints do not cause allocator thrashing or garbage collection pressure, the benchmark suite was executed in Docker containers configured with hard memory ceilings:
 
@@ -108,4 +139,3 @@ To measure memory scaling and verify that memory constraints do not cause alloca
 ### Memory Scaling & GC Behavior Insights
 *   **Predictable Execution Footprint**: FlowGuard Lite maintains a steady latency and throughput profile across 2 GB, 4 GB, and 8 GB configurations. The low-overhead memory architecture (bounded buffer queues, batched memory aggregations, and reuse of normalized structs) keeps Go's GC pause times minimal and avoids runtime allocations.
 *   **High Performance at 2 GB**: The application runs at 100% capacity within the standard 2 GB allocation target. There is no memory degradation or cache thrashing, validating the single-node homelab/small-office resource limits.
-

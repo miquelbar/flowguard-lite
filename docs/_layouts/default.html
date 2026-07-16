@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="{{ site.lang | default: 'en-US' }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="{{ page.description | default: site.description | escape }}">
+    <title>{% if page.title %}{{ page.title }} | {% endif %}{{ site.title }}</title>
+    <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+  </head>
+  <body>
+    <div class="docs-shell">
+      <aside class="docs-sidebar" aria-label="Documentation navigation">
+        <a class="docs-brand" href="{{ '/' | relative_url }}">
+          <span class="docs-brand-mark">FG</span>
+          <span>
+            <strong>FlowGuard Lite</strong>
+            <small>Small-network anomaly detection</small>
+          </span>
+        </a>
+
+        <nav class="docs-nav">
+          <div class="docs-nav-section">
+            <p>Start</p>
+            <a href="{{ '/' | relative_url }}">Overview</a>
+            <a href="{{ '/installation.html' | relative_url }}">Installation</a>
+            <a href="{{ '/configuration.html' | relative_url }}">Configuration</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <p>Collectors</p>
+            <a href="{{ '/setup/unifi.html' | relative_url }}">UniFi</a>
+            <a href="{{ '/setup/mikrotik.html' | relative_url }}">MikroTik</a>
+            <a href="{{ '/setup/opnsense.html' | relative_url }}">OPNsense / pfSense</a>
+            <a href="{{ '/features/passive-capture.html' | relative_url }}">Passive Capture</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <p>Features</p>
+            <a href="{{ '/features/anomaly-detection.html' | relative_url }}">Anomaly Detection</a>
+            <a href="{{ '/features/overview-dashboard.html' | relative_url }}">Overview Dashboard</a>
+            <a href="{{ '/features/analyst-workflows.html' | relative_url }}">Analyst Workflows</a>
+            <a href="{{ '/features/integrations.html' | relative_url }}">Integrations</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <p>Reference</p>
+            <a href="{{ '/architecture.html' | relative_url }}">Architecture</a>
+            <a href="{{ '/api.html' | relative_url }}">REST API</a>
+            <a href="{{ '/capacity-guide.html' | relative_url }}">Capacity Guide</a>
+            <a href="{{ '/performance-baselines.html' | relative_url }}">Performance Baselines</a>
+            <a href="{{ '/frontend-architecture.html' | relative_url }}">Frontend Architecture</a>
+          </div>
+        </nav>
+      </aside>
+
+      <div class="docs-main">
+        <header class="docs-header">
+          <div>
+            <p class="docs-kicker">Network anomaly detection for people who do not have a SOC</p>
+            <h1>{{ page.title | default: site.title }}</h1>
+          </div>
+          <a class="docs-github-link" href="https://github.com/miquelbar/flowguard-lite">GitHub</a>
+        </header>
+
+        <main class="docs-content" id="content">
+          {{ content }}
+        </main>
+
+        <footer class="docs-footer">
+          <span>FlowGuard Lite</span>
+          <span>Built for homelabs, prosumer networks, and small offices.</span>
+        </footer>
+      </div>
+    </div>
+  </body>
+</html>
