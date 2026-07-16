@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -192,6 +194,13 @@ func TestParseQueryParams_Invalid(t *testing.T) {
 }
 
 func TestHandleUI(t *testing.T) {
+	// Skip if UI assets are not compiled (e.g. in CI native test job)
+	uiDir := filepath.Join("..", "ui", "assets", "dist")
+	if _, err := os.Stat(filepath.Join(uiDir, "index.html")); os.IsNotExist(err) {
+		t.Skip("compiled UI assets not found, skipping UI handler test")
+		return
+	}
+
 	cfg := config.DefaultConfig()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server := NewAPIServer(cfg, logger, nil, nil, nil, nil, nil, nil, nil, nil, "")

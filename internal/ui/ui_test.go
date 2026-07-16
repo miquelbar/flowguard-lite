@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -16,6 +17,11 @@ func TestJavaScriptSyntax(t *testing.T) {
 	}
 
 	jsFile := filepath.Join("assets", "dist", "app.js")
+	if _, err := os.Stat(jsFile); os.IsNotExist(err) {
+		t.Skipf("app.js not found at %s, skipping JS syntax check", jsFile)
+		return
+	}
+
 	cmd := exec.Command(nodePath, "--check", jsFile)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
