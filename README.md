@@ -14,7 +14,7 @@ FlowGuard Lite is a lightweight network visibility and anomaly detection product
 Published multi-arch images are available on GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/miquelbar/flowguard-lite:v0.1.0-alpha
+docker pull ghcr.io/miquelbar/flowguard-lite:edge
 ```
 
 Minimal Docker Compose deployment:
@@ -22,7 +22,7 @@ Minimal Docker Compose deployment:
 ```yaml
 services:
   flowguard:
-    image: ghcr.io/miquelbar/flowguard-lite:v0.1.0-alpha
+    image: ghcr.io/miquelbar/flowguard-lite:edge
     container_name: flowguard
     restart: unless-stopped
     ports:
