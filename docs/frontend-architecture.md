@@ -96,7 +96,7 @@ For the full pre-release gate, run:
 make pre-release-gate
 ```
 
-That gate runs product Go tests, the frontend gate, whitespace checks, and local private-workflow ignore checks.
+That gate runs backend Go tests, the frontend gate, whitespace checks, and local private-workflow ignore checks.
 
 Host-native convenience targets exist for local development when Node is installed:
 

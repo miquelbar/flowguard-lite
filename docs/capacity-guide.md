@@ -1,18 +1,20 @@
 # Capacity & Performance Guide
 
-This guide outlines the measured capacity, benchmark results, deployment recommendations, and behavior under overload for FlowGuard Lite.
+This guide outlines preliminary capacity estimates, synthetic microbenchmark results, and behavior under overload for FlowGuard Lite.
 
 ---
 
 ## 1. Tested Hardware Profile
 
-FlowGuard Lite was benchmarked on the target **Intel N100** processor profile (and virtualized equivalents) under both native execution and unprivileged Docker containers:
+FlowGuard Lite was tested using synthetic microbenchmarks on the following hardware profile (and virtualized equivalents) under both native execution and unprivileged Docker containers:
 
 *   **CPU**: Intel N100 (4 Cores, 4 Threads, base 0.8 GHz, burst 3.4 GHz, 6W TDP).
 *   **Memory Limit**: Bounded to **2 GB RAM** allocated space.
 *   **Storage**: Local PCIe Gen3 NVMe SSD.
 *   **OS**: Linux (Debian Bookworm) / macOS (Darwin).
 *   **Go Version**: go1.25.x.
+
+These tests represent isolated microbenchmarks and are not guaranteed to directly correlate to identical results in all real-world deployment networks.
 
 ---
 
@@ -39,17 +41,12 @@ make benchmark-matrix
 
 The benchmark runner writes Markdown and JSON reports under `benchmark-results/`. That directory is intentionally ignored by Git so repeated runs do not pollute commits.
 
-The full pre-release gate includes product tests, frontend checks, Cypress smoke coverage, benchmark smoke, and whitespace validation:
-
-```bash
-make pre-release-gate
-```
-
 ---
 
 ## 3. Ingestion & Aggregation Benchmark Results
 
-The following metrics represent the maximum throughput and processing limits measured during standard stress tests:
+> [!NOTE]
+> The following metrics represent maximum throughput processing limits measured during synthetic stress tests under controlled CPU/RAM parameters. They are not direct projections of performance under live network conditions.
 
 | Component / Path | Native Throughput | Docker Containerized | Measured Latency / Rate |
 | --- | --- | --- | --- |
@@ -82,15 +79,30 @@ FlowGuard Lite uses sharded SQLite daily databases as its default storage engine
 
 ---
 
-## 5. Recommended Capacity Ranges
+## 5. Preliminary Capacity Estimates Based on Synthetic Benchmarks
 
-Based on the performance baselines, we recommend the following deployment sizes for N100 class hardware:
+> [!NOTE]
+> These capacity estimates are preliminary and derived from synthetic microbenchmark profiles. They should not be taken as commercial deployment recommendations or guarantees for specific real-world environments.
+>
+> Actual deployment performance depends heavily on:
+> * **Telemetry Volume:** Number of raw packets and decoded flows per second.
+> * **Sampling Rate:** The exporter's sampling rate (e.g. 1:1 vs 1:100) greatly impacts incoming packet rates.
+> * **Cardinality:** The number of unique local devices and external peer IP/port combinations.
+> * **Retention Period:** Number of days database shards are kept (pruning occurs daily).
+> * **Query Load:** The frequency and complexity of dashboard queries and API requests.
+> * **Aggregation Frequency:** The interval at which in-memory flows are flushed to disk.
+> * **Hardware Specs:** Disk write speeds, filesystem locks, CPU core counts, and storage medium (NVMe/SSD vs. HDD).
+> * **Active Collectors:** Number of collector listeners enabled simultaneously (e.g., NetFlow, sFlow, syslog, passive capture).
 
-| Deployment Size | Active Devices | Average Flow Rate | Recommended Storage Backend |
+### Synthetic Workload Profiles
+
+The table below describes how the system handled simulated workload profiles under synthetic benchmarks:
+
+| Workload Profile | Simulated Active Devices | Simulated Flow Rate | Recommended Storage Backend |
 | --- | --- | --- | --- |
-| **Home Lab / Prosumer** | 1 - 50 | 10 - 50 flows/sec | SQLite (Daily Shards) |
-| **Small Office / Clinic** | 50 - 150 | 50 - 150 flows/sec | SQLite (Daily Shards) |
-| **Technical Lab** | 150 - 250 | 150 - 350 flows/sec | SQLite (with optional DuckDB read caching) |
+| **Profile B (Home Lab / Prosumer)** | 1 - 50 | 10 - 50 flows/sec | SQLite (Daily Shards) |
+| **Profile C (Busy Office / Clinic Equivalent)** | 50 - 150 | 50 - 150 flows/sec | SQLite (Daily Shards) |
+| **Profile D (Technical Lab / High-Flow)** | 150 - 250 | 150 - 350 flows/sec | SQLite (with optional DuckDB read caching) |
 
 ---
 
@@ -102,7 +114,7 @@ When traffic levels exceed the capacity of the host CPU or network interface, Fl
     *   The collectors utilize bounded internal channels (Go queues). If the aggregation queue fills up completely, incoming UDP packets are discarded at the network socket layer.
     *   This prevents heap memory allocations from growing out of control, protecting the daemon from Out-Of-Memory (OOM) kills.
 2.  **UI Health Indicators**:
-    *   The system monitors and exposes drop rates. The Overview Dashboard displays real-time indicators showing the percentage of collector packets dropped, alerting the analyst to scale up hardware or narrow the exporter's sampling rate.
+    *   The system monitors and exposes drop rates. The Overview Dashboard displays real-time indicators showing the percentage of collector packets dropped, alerting the operator to scale up hardware or narrow the exporter's sampling rate.
 3.  **Read/Write Lock Contention**:
     *   Under maximum write load, SQLite's transactional write locks can cause minor read contention. API query times may degrade from <1ms to ~150-250ms, but transactions remain ACID-compliant without data corruption.
 
@@ -114,7 +126,7 @@ When traffic levels exceed the capacity of the host CPU or network interface, Fl
 When enabling NetFlow/IPFIX on Ubiquiti UniFi Gateways (such as USG-3P, UDM-Pro, or UXG-Lite):
 *   **Hardware Offloading (NAT offload)** is typically disabled by the gateway OS when flow tracking is active.
 *   On older hardware (like the USG-3P), this can degrade the gateway's throughput capacity (e.g. from 1 Gbps to ~250 Mbps).
-*   *Recommendation*: For high-throughput environments where NAT offload must remain enabled, configure FlowGuard Lite to use **Passive Network Capture** (via a SPAN/Mirror port) or collect **UniFi SIEM/syslog events** instead of enabling NetFlow/IPFIX directly on the gateway.
+*   *Recommendation*: For high-throughput environments where NAT offload must remain enabled, configure FlowGuard Lite to use **Passive Network Capture** (via a SPAN/Mirror port) instead of enabling NetFlow/IPFIX directly on the gateway. Note that while UniFi syslog SIEM event ingestion is supported, in practice it receives very few security events and does not provide session-level traffic flows, so it is not a substitute for flow telemetry.
 
 ### SNMP & Auxiliary Metrics
 *   SNMP polling, if enabled, operates on a low-frequency schedule (e.g. every 60 seconds) to fetch interface status and interface counters.
@@ -149,4 +161,4 @@ To measure memory and CPU scaling and verify that limits do not cause allocator 
 ### Memory Scaling & CPU Insights
 *   **Predictable Execution Footprint**: FlowGuard Lite maintains a steady latency and throughput profile across all configurations. The low-overhead memory architecture (bounded buffer queues, batched memory aggregations, and reuse of normalized structs) keeps Go's GC pause times minimal and avoids runtime allocations.
 *   **CPU Utilization Efficiency**: Stepping up from 1 CPU to 2 CPUs yields ~15-20% throughput acceleration on compute-bound decoding (NetFlow decode drops from ~860 ns to ~720 ns) and parsing loops (Syslog parsing drops from ~1.73 µs to ~1.65 µs), demonstrating clean scaling behavior.
-*   **High Performance at 2 GB**: The application runs at 100% capacity within the standard 2 GB allocation target. There is no memory degradation or cache thrashing, validating the single-node homelab/small-office resource limits.
+*   **High Performance at 2 GB**: The application runs at 100% capacity within the standard 2 GB allocation target. There is no memory degradation or cache thrashing, validating the single-node homelab resource limits.

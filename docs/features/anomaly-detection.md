@@ -1,6 +1,6 @@
-# Anomaly Detection & Threat Risk Scoring
+# Anomaly Detection & Risk Heuristics
 
-FlowGuard Lite uses statistical modeling rather than opaque machine learning to detect anomalies. This ensures that every alert is explainable.
+FlowGuard Lite uses statistical modeling rather than opaque machine learning to detect anomalies. This is an experimental framework of heuristics designed for home networks and homelabs.
 
 Detection sensitivity and notification noise are configurable from Settings. Operators can disable specific anomaly types, mute anomaly creation for selected CIDR subnets, keep storing anomalies while suppressing selected notification types, or restrict Slack/Telegram/webhook dispatch to selected VLAN/subnet CIDRs.
 
@@ -137,7 +137,10 @@ Use destination suppression for known benign services such as backup repositorie
 
 ---
 
-## 9. Volumetric DDoS Detection
+## 9. Volumetric DDoS Heuristics (Experimental)
+
+> [!WARNING]
+> These flood detection features are experimental statistical heuristics. They are not a replacement for dedicated DDoS mitigation services or firewall traffic shaping.
 
 Volumetric floods (DDoS) are evaluated by checking absolute throughput:
 
@@ -148,16 +151,16 @@ Volumetric floods (DDoS) are evaluated by checking absolute throughput:
 
 ---
 
-## 10. Threat Risk Scoring
+## 10. Experimental Threat Risk Scoring
 
-The Risk Engine assigns each device an index score from `0` to `100` representing its compromise risk level.
+The Risk Engine assigns each device an index score from `0` to `100` representing an experimental risk level based on heuristic correlation.
 
 ### Risk Level Ranges
 *   **Low Risk:** `0 - 39`
 *   **Medium Risk:** `40 - 74`
 *   **High Risk:** `75 - 100`
 
-### Scoring Formula
+### Scoring Heuristics
 The risk score is calculated by combining:
 1.  **Anomaly Events:** Detections flagged by behavioral baselines.
 2.  **Suricata IDS Events:** External signature-based rule matches.
@@ -167,9 +170,9 @@ $$\text{Risk Score} = \text{Capping}\left(\sum \text{Base Scores} + \text{Correl
 
 ---
 
-## 11. Exponential Risk Decay
+## 11. Heuristic Risk Decay
 
-Threat scores decay over time so that historically compromised devices return to normal if no new suspicious behaviors are observed.
+Threat scores decay over time so that historically flagged devices return to normal if no new suspicious behaviors are observed.
 
 The decay formula applies exponential decay:
 

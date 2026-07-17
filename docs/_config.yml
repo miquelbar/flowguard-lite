@@ -1,5 +1,5 @@
 title: FlowGuard Lite
-description: Network anomaly detection for people who do not have a SOC.
+description: Experimental self-hosted NetFlow/IPFIX visibility and anomaly-detection tool.
 url: https://miquelbar.github.io
 baseurl: /flowguard-lite
 theme: jekyll-theme-cayman

@@ -5,9 +5,11 @@
 [![Container](https://img.shields.io/badge/GHCR-flowguard--lite-2f81f7)](https://github.com/miquelbar/flowguard-lite/pkgs/container/flowguard-lite)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Network anomaly detection for people who do not have a SOC.**
+FlowGuard Lite is an experimental, self-hosted NetFlow/IPFIX visibility tool that I built while exploring what my UniFi gateway could reveal about the devices on my home network.
 
-FlowGuard Lite is a lightweight network visibility and anomaly detection product for homelabs, prosumer networks, small offices, clinics, shops, and small technical teams. It ingests NetFlow/IPFIX/sFlow, optional passive capture metadata, optional Suricata events, and UniFi SIEM/syslog events, then builds device-level baselines and explains why a device looks suspicious.
+It stores flow data locally, groups activity by device and experiments with detecting changes from normal behaviour.
+
+The project is currently alpha and has primarily been tested on one UniFi home network. Several additional collectors and integrations are implemented, but some still need broader real-world validation.
 
 ## Try It
 
@@ -43,12 +45,6 @@ Then open:
 http://localhost:8080
 ```
 
-For the newest `main` build:
-
-```bash
-docker pull ghcr.io/miquelbar/flowguard-lite:edge
-```
-
 ## Visual Preview
 
 ![FlowGuard Lite Overview dashboard with seeded demo data](docs/assets/screenshots/overview.png)
@@ -60,7 +56,7 @@ The seeded console includes populated Overview, Traffic, Devices, Alerts, Polici
 Small networks often have capable routers and firewalls but poor visibility into device behavior. FlowGuard Lite focuses on:
 
 - **Device-level explanations:** every anomaly explains what happened, why it is unusual, the baseline used, and the next check.
-- **Practical collectors:** NetFlow/IPFIX/sFlow, UniFi SIEM/syslog, passive capture, and optional Suricata evidence.
+- **Practical collectors:** NetFlow/IPFIX, UniFi SIEM/syslog, passive capture, and optional Suricata evidence.
 - **Small hardware:** designed for Intel N100-class boxes and bounded local storage.
 - **Noise controls:** suppress noisy detector types, subnets, or notification targets without losing all evidence.
 - **Simple deployment:** one Docker container, SQLite daily shards by default, no external data platform.
@@ -68,18 +64,26 @@ Small networks often have capable routers and firewalls but poor visibility into
 
 FlowGuard Lite is alert-only. It can generate firewall rule templates, but it does not automatically block traffic.
 
-## Current Support
+## Feature Validation Status
 
-| Area | Support |
-| --- | --- |
-| Flow telemetry | NetFlow v5/v9, IPFIX, sFlow |
-| UniFi | Validated with UniFi NetFlow/IPFIX; supports SIEM/syslog Activity Logging events |
-| Passive capture | Optional libpcap TCP/UDP metadata reduction |
-| IDS evidence | Optional Suricata `eve.json` ingest |
-| Detection | New destination/port/internal peer, traffic spikes, beaconing, fan-out, nighttime activity, profile changes, DDoS flood patterns |
-| Notifications | Telegram, Slack/Discord-compatible webhook, generic webhook |
-| Storage | SQLite daily shards by default; optional DuckDB query acceleration |
-| Images | `ghcr.io/miquelbar/flowguard-lite:v0.1.0-alpha` and `:edge` |
+To align expectations, the features in this repository are divided into what has been tested in real use by the author and what is implemented but has limited real-world validation.
+
+### Tested in Real Use
+
+- **Ingestion:** UniFi NetFlow/IPFIX telemetry.
+- **Environment:** The author's own UniFi home network.
+- **Deployment:** Docker-based containerized setup.
+- **Storage:** SQLite daily shards for local aggregation and retention.
+
+### Implemented but with Limited Real-World Validation
+
+- **sFlow:** sFlow decoder and collector listener are implemented, but have not been tested under heavy production sFlow environments.
+- **Passive packet capture:** Optional libpcap-based raw socket packet capture and flow reduction, but not tested extensively in external high-traffic physical networks.
+- **UniFi SIEM/syslog ingestion:** Support for ingesting Activity Logging events is implemented. In the author's current setup, very few useful security events are generated, making NetFlow/IPFIX the primary and best-tested data source.
+- **Suricata integration:** Support for tailing and correlating `eve.json` threat category records.
+- **DDoS/volumetric detection:** Volumetric heuristics (BPS, PPS, FPS thresholds) are implemented but require further tuning and real-world validation.
+- **DuckDB storage:** Columnar read-acceleration storage engine is implemented but SQLite remains the default.
+- **Other integrations:** Slack/Discord-compatible webhooks, Telegram bot alerts, and firewall rule templates exporters.
 
 ## Documentation
 
@@ -90,28 +94,19 @@ FlowGuard Lite is alert-only. It can generate firewall rule templates, but it do
 - [Exporter Setup: UniFi](docs/setup/unifi.md)
 - [Integrations and Webhooks](docs/features/integrations.md)
 
-## Performance Snapshot
+## Performance & Capacity Estimates
 
-FlowGuard Lite has a repeatable benchmark harness and published capacity guide. The current measured baseline in a constrained Docker container (1 CPU Core, 2 GB RAM Limit) is:
+FlowGuard Lite includes a synthetic benchmark suite. Measured metrics and capacity estimates are based on synthetic microbenchmarks run under controlled environments (e.g., a 1 CPU Core, 2 GB RAM Docker container).
 
-| Path | Measured result |
-| --- | ---: |
-| Flow aggregation | 8.13M flows/sec in Docker |
-| NetFlow v9 decode | 1.16M packets/sec in Docker |
-| UniFi syslog parse/classify | 576K lines/sec in Docker |
-| SQLite 1,000-flow batch write | 9.06 ms in Docker |
-| Overview summary API | 51.7 us |
-| Traffic records API | 356.2 us |
+Actual capacity and system resource consumption depend on:
+- Number of active flows and telemetry packets per second
+- Configured exporter sampling rate
+- Active IP cardinality and internal vs. external destinations
+- Configured retention window and aggregate flush frequency
+- Host processor, disk I/O, and file system throughput
+- Number of active collectors
 
-Recommended N100-class deployment ranges:
-
-| Deployment | Active devices | Average flow rate | Recommended backend |
-| --- | ---: | ---: | --- |
-| Home lab / prosumer | 1-50 | 10-50 flows/sec | SQLite daily shards |
-| Small office / clinic | 50-150 | 50-150 flows/sec | SQLite daily shards |
-| Technical lab | 150-250 | 150-350 flows/sec | SQLite, optional DuckDB reads |
-
-Details: [Capacity & Performance Guide](docs/capacity-guide.md) and [Performance Baselines](docs/performance-baselines.md).
+For preliminary capacity estimations and performance specs, please refer to the [Capacity & Performance Guide](docs/capacity-guide.md) and [Performance Baselines](docs/performance-baselines.md).
 
 ## Local Development
 
@@ -140,7 +135,7 @@ Then open `http://localhost:8080`.
 
 ## Quality Gates
 
-Run the product Go tests:
+Run the backend Go package tests:
 
 ```bash
 make test
@@ -165,7 +160,7 @@ Run the full pre-release gate:
 make pre-release-gate
 ```
 
-The pre-release gate runs product Go tests, Dockerized Vite build/lint, Cypress smoke/workflow tests, the benchmark smoke test, and whitespace checks.
+The pre-release gate runs backend Go tests, Dockerized Vite build/lint, Cypress smoke/workflow tests, the benchmark smoke test, and whitespace checks.
 
 ## Benchmarks
 
@@ -200,4 +195,4 @@ Benchmark reports are written under `benchmark-results/`, which is intentionally
 
 ## Project Status
 
-FlowGuard Lite is in pre-release hardening. The core collector, storage, detection, UI, notifications, documentation, and performance benchmark paths are implemented and covered by automated gates. Remaining work should stay focused on release readiness, real-device validation, and public packaging.
+Experimental alpha. Primarily tested on one UniFi home network. External testing and feedback are needed. The core flow collection, storage, baseline heuristics, operator UI, and notification channels are implemented as prototypes, but require broader real-world validation.

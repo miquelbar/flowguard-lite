@@ -54,17 +54,12 @@ Run the following command to download and start the service in the background:
 docker compose up -d
 ```
 
-Release images are published to GitHub Container Registry. Use version tags for repeatable deployments:
-
-```bash
-docker pull ghcr.io/miquelbar/flowguard-lite:v0.1.0-alpha
-```
-
-Use `edge` only when you explicitly want the latest `main` build:
+Release images are published to GitHub Container Registry:
 
 ```bash
 docker pull ghcr.io/miquelbar/flowguard-lite:edge
 ```
+
 
 ### 4. Verify Containers
 Verify that FlowGuard Lite is running and listening on the designated ports:
@@ -128,7 +123,7 @@ The reset is bounded rather than globally transactional: SQLite metadata reset i
 Open your browser and navigate to `http://localhost:8080`.
 *   If this is the first run, FlowGuard Lite prompts you to create the local admin password before protected API data is available.
 *   The setup wizard then guides you through local subnet range and storage preferences.
-*   Once configured, the analyst console unlocks.
+*   Once configured, the operator console unlocks.
 
 ## Frontend Regression Checks
 

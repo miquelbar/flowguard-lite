@@ -146,9 +146,9 @@ Lists internal devices ranked by their calculated threat risk scores (`0 - 100`)
 ### Overview dashboard data composition
 The default Overview dashboard uses bounded summary and stats endpoints.
 
-*   **Security posture:** `GET /api/security/summary` and `GET /api/security/timeline`.
+*   **Visibility status:** `GET /api/security/summary` and `GET /api/security/timeline`.
 *   **Network stats:** `GET /api/stats/protocols`, `GET /api/stats/top-devices`, `GET /api/stats/heatmap`, plus `GET /api/traffic/timeseries`.
-*   **Flow explorer:** `GET /api/traffic/records` returns retained aggregate rows for bounded analyst filtering. It does not expose raw packets or unbounded raw flow storage.
+*   **Flow explorer:** `GET /api/traffic/records` returns retained aggregate rows for bounded operator filtering. It does not expose raw packets or unbounded raw flow storage.
 *   **Security:** Secret settings are not displayed in the dashboard; only configuration presence is shown.
 
 ### GET `/api/security/summary`
@@ -214,7 +214,7 @@ Returns bounded aggregate traffic counters for network charts.
 ```
 
 ### GET `/api/traffic/records`
-Returns retained aggregate rows for analyst search/filter workflows. Each row is a bounded rollup from `flow_aggregates`, not a raw packet or indefinite raw flow record. Collector identity is reported separately from `exporter_ip` so NetFlow/sFlow and passive capture sources can coexist without ambiguity.
+Returns retained aggregate rows for operator search/filter workflows. Each row is a bounded rollup from `flow_aggregates`, not a raw packet or indefinite raw flow record. Collector identity is reported separately from `exporter_ip` so NetFlow/sFlow and passive capture sources can coexist without ambiguity.
 
 *   **Query Parameters:**
     *   `start` (Optional, RFC3339): Defaults to one hour before `end`.

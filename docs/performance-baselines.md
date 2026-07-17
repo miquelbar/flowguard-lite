@@ -55,17 +55,17 @@ Tests must utilize these standardized profiles to evaluate capacity and establis
 - **Incoming traffic**: 0 PPS
 - **Goal**: Establish background daemon memory, CPU idle usage, and telemetry channel stability.
 
-### Profile B: Small Office / Home Lab
+### Profile B: Home Lab / Prosumer
 - **Devices**: 25 active local devices.
 - **Incoming Traffic**: ~1,000 flow records per minute (~15-20 flows/sec).
 - **Syslog Events**: ~10 events per hour.
 - **Goal**: Verify typical consumer/homelab behavior under negligible CPU/RAM load.
 
-### Profile C: Busy Small Office
+### Profile C: Busy Home Network
 - **Devices**: 100 active local devices.
 - **Incoming Traffic**: ~5,000 flow records per minute (~80-100 flows/sec).
 - **Syslog Events**: ~100 events per hour.
-- **Goal**: Validate small business or clinic deployment stability.
+- **Goal**: Validate typical busy network profile stability under telemetry load.
 
 ### Profile D: High-Flow Lab (Extreme/Stress)
 - **Devices**: 200 active local devices.
@@ -79,7 +79,7 @@ Tests must utilize these standardized profiles to evaluate capacity and establis
 - **Goal**: Verify collector queues handle overload gracefully, trigger DDoS alarms with explainable evidence, and drop excess frames without crashing the application.
 
 ### Profile F: Query-under-Ingest Load
-- **Description**: Active flow ingestion at 5,000 flows/min (Profile C) while simulating 5 concurrent API requests/sec (simulating multiple active dashboard analyst sessions).
+- **Description**: Active flow ingestion at 5,000 flows/min (Profile C) while simulating 5 concurrent API requests/sec (simulating multiple active dashboard operator sessions).
 - **Goal**: Verify SQLite read/write lock contention and DuckDB read performance under ingestion load.
 
 ---
@@ -91,8 +91,8 @@ FlowGuard Lite must satisfy the following thresholds under test profiles to be c
 | Profile | Max CPU (N100 Core %) | Max RSS Memory | Packet Loss / Queue Drops | API Latency (p95) |
 |---|---|---|---|---|
 | **Profile A (Idle)** | < 1% | < 50 MB | 0% | < 10ms |
-| **Profile B (Small Office)** | < 5% | < 150 MB | 0% | < 50ms |
-| **Profile C (Busy Office)** | < 10% | < 250 MB | 0% | < 100ms |
+| **Profile B (Home Lab)** | < 5% | < 150 MB | 0% | < 50ms |
+| **Profile C (Busy Home Network)** | < 10% | < 250 MB | 0% | < 100ms |
 | **Profile D (High-Flow Lab)** | < 25% | < 500 MB | < 0.1% | < 250ms |
 | **Profile E (DDoS Burst)** | < 50% | < 500 MB | Allowed (controlled drop) | < 500ms |
 | **Profile F (Query/Ingest)** | < 20% | < 350 MB | 0% | < 150ms |

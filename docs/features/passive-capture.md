@@ -1,6 +1,10 @@
 # Passive Network Capture
 
+> [!NOTE]
+> Passive Network Capture is an experimental, optional feature with limited validation in real-world environments.
+
 FlowGuard Lite can reduce packets observed on a local interface into the same bounded flow metadata used by its NetFlow and sFlow collectors. Passive capture is optional and disabled when `capture_interface` is empty.
+
 
 FlowGuard does not persist packet payloads or PCAP files. It requests a 256-byte header snapshot, applies the configured BPF filter in libpcap, aggregates TCP/UDP packets by 5-tuple, and forwards only counters and metadata through the existing detection pipeline.
 

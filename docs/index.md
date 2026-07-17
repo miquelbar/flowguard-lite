@@ -1,8 +1,8 @@
 # FlowGuard Lite Documentation
 
-🛡️ Welcome to the FlowGuard Lite documentation site. FlowGuard Lite is a lightweight, low-footprint network visibility, anomaly detection, and DDoS detection product designed for homelabs, prosumer networks, small offices, and technical teams.
+🛡️ Welcome to the FlowGuard Lite documentation site. FlowGuard Lite is an experimental, self-hosted network visibility and anomaly-detection tool primarily tested on a UniFi home network.
 
-It acts as a lightweight flow collector and correlates router/firewall telemetry (NetFlow, IPFIX, sFlow, or passive capture) with optional Suricata IDS events to build device-centric behavioral baselines and explain security anomalies. UniFi gateways may expose IPFIX, SIEM/syslog, SNMP, or only internal Traffic Flows depending on model and firmware; those paths are documented separately.
+It acts as a lightweight flow collector and correlates router/firewall telemetry (NetFlow, IPFIX, sFlow, or passive capture) with optional Suricata IDS events to build device-centric behavioral baselines and explain anomalies. UniFi gateways may expose IPFIX, SIEM/syslog, SNMP, or only internal Traffic Flows depending on model and firmware; those paths are documented separately.
 
 ---
 
@@ -20,9 +20,9 @@ Configure your routers and firewalls to export supported telemetry:
 *   [**OPNsense & pfSense Firewalls**](setup/opnsense.md)
 
 ### Core Features
-*   [**Anomaly Detection & Risk Scoring**](features/anomaly-detection.md) - Deep dive into statistical baselines, DDoS thresholds, and device risk indexing.
-*   [**Overview Dashboard**](features/overview-dashboard.md) - Default security posture dashboard, attack timeline, risk distribution, and network operations panels.
-*   [**Analyst Workflows & UI Architecture**](features/analyst-workflows.md) - Target operator workflows, page model, Risk Index explanation requirements, and UI implementation order.
+*   [**Anomaly Detection & Risk Heuristics**](features/anomaly-detection.md) - Deep dive into statistical baselines, DDoS thresholds, and device risk indexing.
+*   [**Overview Dashboard**](features/overview-dashboard.md) - Default visibility dashboard, event timeline, risk distribution, and network operations panels.
+*   [**Operator Workflows & UI Architecture**](features/analyst-workflows.md) - Target operator workflows, page model, Risk Index explanation requirements, and UI implementation order.
 *   [**Integrations & Webhooks**](features/integrations.md) - How to set up Suricata ingestion, configure Slack/Telegram/webhook notifications, and export firewall rule templates.
 
 ### Reference & Development
@@ -34,7 +34,7 @@ Configure your routers and firewalls to export supported telemetry:
 
 ## Benchmark and Quality Gates
 
-The benchmark suite is part of the release gate, not a separate spreadsheet. Use these commands to reproduce the published performance evidence:
+The benchmark suite is part of the validation gate. Use these commands to reproduce the preliminary performance estimates:
 
 ```bash
 make benchmark-smoke
@@ -52,6 +52,6 @@ What they cover:
 | `make benchmark-run` | Native benchmark report generation under `benchmark-results/`. |
 | `make docker-benchmark-run` | Containerized 2 GB benchmark profile. |
 | `make benchmark-matrix` | Docker benchmark profiles for 2 GB, 4 GB, and 8 GB memory limits. |
-| `make pre-release-gate` | Product Go tests, frontend build/lint, Cypress smoke, benchmark smoke, and whitespace checks. |
+| `make pre-release-gate` | Backend Go tests, frontend build/lint, Cypress smoke, benchmark smoke, and whitespace checks. |
 
-Published capacity numbers are documented in the [Capacity & Performance Guide](capacity-guide.md).
+Preliminary capacity numbers are documented in the [Capacity & Performance Guide](capacity-guide.md).

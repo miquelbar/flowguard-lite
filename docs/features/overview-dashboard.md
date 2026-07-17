@@ -1,21 +1,21 @@
 # Overview Dashboard
 
-The Overview dashboard is the default landing view for FlowGuard Lite. It combines security posture and network operations signals so a small-network operator can answer:
+The Overview dashboard is the default landing view for FlowGuard Lite. It combines visibility status and network operations signals so a home-network operator can answer:
 
 ```text
 Is the network healthy right now?
 ```
 
-## Security Posture Panels
+## Status and Event Panels
 
-The Overview dashboard includes these security-focused panels:
+The Overview dashboard includes these status panels:
 
 - active alerts count;
 - max device risk score;
 - elevated-risk device count;
 - high/critical active alert count;
 - active alerts grouped by severity;
-- recent alert clusters on an hourly attack timeline;
+- recent alert clusters on an hourly timeline;
 - top local IPs with active alert evidence;
 - recent high-severity alerts with links into alert detail and IP profile workflows;
 - device risk distribution;
@@ -51,7 +51,7 @@ The network operations area includes these panels:
 - collector health gauge with current packet, drop, decode error, and queue counters;
 - collector drops, decode errors, and queue-depth sparklines backed by a bounded in-memory sample ring.
 
-The Traffic workspace includes a Flow Explorer for analyst-style filtering over retained aggregate rows. This is intentionally not Kibana/Elastic and does not expose raw packet payloads or indefinite raw-flow storage; it searches the bounded `flow_aggregates` rollups by IP, protocol, destination port, and global time range.
+The Traffic workspace includes a Flow Explorer for operator-style filtering over retained aggregate rows. This is intentionally not Kibana/Elastic and does not expose raw packet payloads or indefinite raw-flow storage; it searches the bounded `flow_aggregates` rollups by IP, protocol, destination port, and global time range.
 
 ## Performance Constraints
 

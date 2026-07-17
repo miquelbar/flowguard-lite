@@ -48,7 +48,7 @@ unifi_syslog_allowed_ips: []
 # Directory where database shards, evidence, and logs will be written
 storage_dir: "/data"
 
-# Storage backend engine: "sqlite" (default shards) or "duckdb" (single file analytics)
+# Storage backend engine: "sqlite" (default shards) or "duckdb" (experimental single file analytics)
 storage_backend: "sqlite"
 
 # List of local CIDR subnets representing internal devices.
@@ -106,7 +106,7 @@ beacon_min_interval_seconds: 90
 traffic_spike_min_packets: 2500
 traffic_spike_min_bytes: 1048576
 
-# Global Volumetric DDoS triggers
+# Global Volumetric DDoS heuristic triggers (experimental)
 ddos_threshold_pps: 5000
 ddos_threshold_bps: 10485760
 ddos_threshold_fps: 1000
@@ -140,7 +140,7 @@ suricata_eve_path: ""
 ### `unifi_syslog_enabled`
 *   **Type:** Boolean
 *   **Default:** `false`
-*   **Description:** Enables the dedicated UniFi CyberSecure Activity Logging/SIEM syslog collector. This is a separate protocol from NetFlow/IPFIX and must not use the NetFlow port. The collector parses bounded syslog messages, stores reduced retained UniFi evidence, and can create anomalies for high-confidence security detections and critical events.
+*   **Description:** Enables the dedicated UniFi CyberSecure Activity Logging/SIEM syslog collector. This is a separate protocol from NetFlow/IPFIX and must not use the NetFlow port. The collector parses bounded syslog messages, stores reduced retained UniFi evidence, and can create anomalies for high-confidence security detections and critical events. Note that this integration is experimental and has limited real-world utility.
 
 ### `unifi_syslog_port`
 *   **Type:** Integer
@@ -178,7 +178,7 @@ These values are also available in **Settings → Collectors Setup → Passive N
 *   **Type:** String
 *   **Allowed Values:** `"sqlite"`, `"duckdb"`
 *   **Default:** `"sqlite"`
-*   **Description:** Database engine. Choose `sqlite` for standard low-CPU homelab usage, or `duckdb` for heavy multi-day analytical queries.
+*   **Description:** Database engine. Choose `sqlite` for standard low-CPU homelab usage, or `duckdb` (experimental) for heavy multi-day analytical queries.
 
 ### `local_subnets`
 *   **Type:** Array of Strings

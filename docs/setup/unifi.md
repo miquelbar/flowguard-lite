@@ -6,7 +6,7 @@ UniFi Network currently exposes multiple traffic and logging surfaces. They are 
 
 - **Traffic Flows** in `Insights > Flows` are UniFi's internal flow view.
 - **NetFlow (IPFIX)** is the external flow export path, when your UniFi version and gateway expose it.
-- **Activity Logging (Syslog) > SIEM Server** is a syslog/SIEM event export path, commonly using UDP port `514`.
+- **Activity Logging (Syslog) > SIEM Server** is an experimental syslog/SIEM event export path, commonly using UDP port `514`.
 - **SNMP** is status/counter monitoring. It does not provide flow sessions or SIEM security events.
 
 Reference: Ubiquiti documents Traffic Flows, IPFIX export, and SIEM export separately in its Traffic Flows and Traffic Logging guide:
@@ -16,12 +16,12 @@ Reference: Ubiquiti documents Traffic Flows, IPFIX export, and SIEM export separ
 
 FlowGuard Lite currently supports:
 
-- NetFlow/IPFIX on UDP `2055`.
-- sFlow on UDP `6343`.
-- Optional passive packet capture when FlowGuard can observe the network interface directly.
-- Optional UniFi Activity Logging/SIEM syslog ingest on the configured UniFi syslog app port, disabled by default.
+- NetFlow/IPFIX on UDP `2055` (Primary and best-tested flow data source).
+- sFlow on UDP `6343` (Experimental collector).
+- Optional passive packet capture when FlowGuard can observe the network interface directly (Experimental).
+- Optional UniFi Activity Logging/SIEM syslog ingest on the configured UniFi syslog app port, disabled by default. (Experimental support; note that in practice very few useful events are typically received from this source, so it is not a primary visibility option).
 
-UniFi SIEM/syslog events are parsed, counted, and stored as reduced event records bounded by retention. High-confidence security detections and critical events can create FlowGuard anomalies, and device detail views can show related retained UniFi evidence.
+UniFi SIEM/syslog events are parsed, counted, and stored as reduced event records bounded by retention. High-confidence security detections and critical events can create FlowGuard anomalies, and device detail views can show related retained UniFi evidence. This integration has limited real-world validation.
 
 Do not configure UniFi `SIEM Server` port `514` to point at FlowGuard's NetFlow/IPFIX port `2055`. They are different protocols.
 
@@ -40,7 +40,7 @@ Use this path only if UniFi shows an explicit **NetFlow (IPFIX)** export option.
 
 If this option is not visible, do not assume that `Insights > Flows` means external IPFIX export is available.
 
-## Option B: UniFi Activity Logging / SIEM Server
+## Option B: UniFi Activity Logging / SIEM Server (Experimental)
 
 Some UniFi gateways, including Cloud Gateway Fiber / UCG Fiber deployments, may show:
 
@@ -48,7 +48,7 @@ Some UniFi gateways, including Cloud Gateway Fiber / UCG Fiber deployments, may 
 Settings > CyberSecure > Traffic Logging > Activity Logging (Syslog) > SIEM Server
 ```
 
-This screen asks for a server address and usually defaults to port `514`. That is syslog/SIEM event export, not NetFlow/IPFIX.
+This screen asks for a server address and usually defaults to port `514`. That is syslog/SIEM event export, not NetFlow/IPFIX. Support for this source is experimental. In practice, very few useful security events are typically generated and exported by the UniFi gateway.
 
 Typical contents can include:
 
@@ -66,7 +66,7 @@ FlowGuard uses a dedicated UniFi SIEM/syslog collector for this source, separate
 
 If you need UniFi to retain logs locally, keep UniFi's internal logging retention enabled where the UniFi UI allows it. FlowGuard stores reduced UniFi evidence only; it does not persist raw syslog datagrams indefinitely.
 
-## Option C: Passive Capture Fallback
+## Option C: Passive Capture Fallback (Experimental)
 
 If UniFi does not expose external IPFIX and FlowGuard needs flow-style analytics, use FlowGuard's passive capture deployment where FlowGuard can observe the traffic path.
 
@@ -92,7 +92,7 @@ SNMP can be useful for interface counters, link status, and device health. It is
 - It does not provide per-session source/destination/port records.
 - It does not provide UniFi Security Detection or Admin Activity event details.
 
-SNMP discovery and metrics support are future optional work.
+SNMP discovery and metrics support are future optional work with no real-world validation.
 
 ## Validation Checklist
 

@@ -1,10 +1,13 @@
 # External Integrations & Webhooks
 
-FlowGuard Lite interfaces with external security tools and chat programs to provide real-time alerting and responses.
+FlowGuard Lite interfaces with external security tools and chat applications to provide alerting and response templates. Note that these integrations are experimental prototypes with limited real-world validation.
 
 ---
 
-## 1. Suricata IDS Alert Ingestion
+## 1. Suricata IDS Alert Ingestion (Experimental)
+
+> [!NOTE]
+> Suricata ingestion is an experimental capability.
 
 FlowGuard Lite can ingest alerts from a Suricata intrusion detection system:
 
@@ -14,9 +17,10 @@ FlowGuard Lite can ingest alerts from a Suricata intrusion detection system:
 
 ---
 
-## 2. Outbound Alert Webhooks
+## 2. Outbound Alert Webhooks (Experimental)
 
-When an anomaly is detected, FlowGuard Lite dispatches notifications.
+When an anomaly is detected, FlowGuard Lite dispatches notifications. These notification channels are experimental.
+
 Configure Slack/Discord, Generic Webhook, and Telegram independently under Settings. Notification rules then choose one or more channel targets.
 
 ### Supported Webhook Formats
@@ -76,9 +80,9 @@ Header values are treated as secrets in runtime logging. FlowGuard Lite logs onl
 
 ---
 
-## 3. Firewall Block Exporters
+## 3. Firewall Block Exporters (Experimental)
 
-FlowGuard Lite does not block traffic automatically. Instead, it generates copyable, target-specific firewall rules templates.
+FlowGuard Lite does not block traffic automatically. Instead, it generates copyable, target-specific firewall rules templates. These exporters are experimental heuristics.
 
 ### Supported Platforms
 

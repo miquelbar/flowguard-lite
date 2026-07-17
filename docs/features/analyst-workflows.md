@@ -1,8 +1,8 @@
-# Analyst Workflows and UI Information Architecture
+# Operator Workflows and UI Information Architecture
 
 FlowGuard Lite is not a generic SIEM. The interface must help small-network operators answer practical investigation questions quickly, without requiring them to understand raw NetFlow, sFlow, or Suricata internals.
 
-This document defines the target UI information architecture for the analyst experience.
+This document defines the target UI information architecture for the operator experience.
 
 ---
 
@@ -15,8 +15,8 @@ The UI must prioritize:
 - traffic health over decorative dashboards;
 - IP-centered investigation over isolated tables;
 - explainable risk over opaque scores;
-- bounded time ranges over unbounded searches;
-- explicit notifications and recommendations over automatic blocking.
+- Bounded time ranges over unbounded searches;
+- Explicit notifications and recommendations over automatic blocking.
 
 ---
 
@@ -24,7 +24,7 @@ The UI must prioritize:
 
 ### Overview
 
-Analyst question:
+Operator question:
 
 ```text
 Is the network healthy right now?
@@ -42,7 +42,7 @@ Expected content:
 
 ### Network
 
-Analyst question:
+Operator question:
 
 ```text
 What changed in traffic patterns?
@@ -65,7 +65,7 @@ Implementation constraints:
 
 ### IP Profiles
 
-Analyst question:
+Operator question:
 
 ```text
 What is this IP doing, and why should I care?
@@ -94,7 +94,7 @@ Required drill-down entry points:
 
 ### Alerts
 
-Analyst question:
+Operator question:
 
 ```text
 Which events need review, and what evidence supports them?
@@ -112,7 +112,7 @@ Expected content:
 
 ### Policies
 
-Analyst question:
+Operator question:
 
 ```text
 Which rules affect this IP, subnet, alert type, or severity?
@@ -135,7 +135,7 @@ Policies must not trigger automatic destructive blocking.
 
 ### Notifications
 
-Analyst question:
+Operator question:
 
 ```text
 Which alerts will be sent, and to which channel?
@@ -154,7 +154,7 @@ Credentials belong in Notifications/Integrations; routing behavior belongs in no
 
 ### Audit
 
-Analyst question:
+Operator question:
 
 ```text
 Who changed what, and what actions were taken?
@@ -171,7 +171,7 @@ Expected content:
 
 ### Settings
 
-Analyst question:
+Operator question:
 
 ```text
 How is this FlowGuard node configured?
@@ -200,7 +200,7 @@ Settings must clearly show:
 
 ## Existing Gaps to Reconcile
 
-The product roadmap already includes several capabilities that are not yet properly represented in the UI:
+The development roadmap already includes several capabilities that are not yet properly represented in the UI:
 
 - device detail links to flows, anomalies, and Suricata evidence;
 - device detail view with a dynamic flow timeline;
@@ -209,7 +209,7 @@ The product roadmap already includes several capabilities that are not yet prope
 - thresholds configuration UI;
 - risk score explanation and evidence.
 
-These gaps must be treated as product debt, not as optional polish.
+These gaps must be treated as development debt, not as optional polish.
 
 ---
 
@@ -246,7 +246,7 @@ Medium risk because a high DDoS alert 30 minutes ago contributes 39/40 after dec
 
 ## Visual Direction
 
-The UI should feel like a lightweight network appliance for homelabs, small offices, clinics, shops, and small technical teams.
+The UI is designed to feel like a simple network visibility page for homelabs and small self-hosted networks.
 
 Avoid:
 
@@ -279,6 +279,6 @@ Prefer:
 5. Notification routing rules.
 6. Risk index explainability.
 7. Settings rebuild.
-8. Usability and release hardening.
+8. Usability improvements.
 
 Access control should happen before broader UI rollout because configuration, alerts, policies, and internal network metadata are sensitive.

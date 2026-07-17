@@ -66,9 +66,11 @@ FlowGuard Lite uses the Repository Pattern, keeping core logic database-agnostic
 *   **Benefits:** Deleting expired data is as simple as deleting an old file, avoiding heavy `VACUUM` locks or CPU overhead.
 *   **Retention Engine:** Runs nightly, removing database files older than the configured retention days limit.
 
-### DuckDB Analytic Engine (Optional Acceleration)
+### DuckDB Engine (Experimental)
 *   **Columnar Store:** Processes queries over millions of rows in milliseconds.
 *   **Dynamic Linking:** Links natively to the DuckDB C++ library via CGO bindings.
+*   **Status:** DuckDB query acceleration support is experimental and has limited real-world validation.
+
 
 ---
 
