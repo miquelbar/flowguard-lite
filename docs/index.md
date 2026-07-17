@@ -1,8 +1,26 @@
 # FlowGuard Lite Documentation
 
-🛡️ Welcome to the FlowGuard Lite documentation site. FlowGuard Lite is an experimental, self-hosted network visibility and anomaly-detection tool primarily tested on a UniFi home network.
+🛡️ Welcome to the FlowGuard Lite documentation site.
+
+FlowGuard Lite is experimental alpha software, primarily tested on one UniFi home network.
+
+> [!WARNING]
+> *   FlowGuard Lite is an early-stage project and **may contain bugs**.
+> *   All security detections are **experimental heuristics**, not guaranteed indicators of compromise.
+> *   It **does not replace an IDS, SIEM, or SOC**, and should not be considered a guarantee of attack detection.
+> *   Additional integrations have varying and limited levels of validation.
 
 It acts as a lightweight flow collector and correlates router/firewall telemetry (NetFlow, IPFIX, sFlow, or passive capture) with optional Suricata IDS events to build device-centric behavioral baselines and explain anomalies. UniFi gateways may expose IPFIX, SIEM/syslog, SNMP, or only internal Traffic Flows depending on model and firmware; those paths are documented separately.
+
+## Feature Validation Status
+
+The features in this repository are divided into three validation tiers:
+
+| Category | Features Included |
+| --- | --- |
+| **Tested in real use by the author** | * **NetFlow/IPFIX Ingestion** (from UniFi Gateway)<br>* **Docker Compose Deployment**<br>* **SQLite daily shards** (storage & retention)<br>* **Home network environment** |
+| **Implemented with limited validation** | * **sFlow Ingestion** (collector listener & decoder)<br>* **Passive Network Capture** (via SPAN/Mirror port)<br>* **Suricata IDS Integration** (correlating `eve.json` records)<br>* **DuckDB Storage Engine** (for query acceleration)<br>* **DDoS/Volumetric Heuristics** (BPS, PPS, FPS thresholds)<br>* **Slack & Telegram Webhook notifications** |
+| **Experimental or unverified** | * **UniFi Syslog/SIEM Ingest** (highly experimental and secondary; note that NetFlow/IPFIX is the primary and best tested source)<br>* **SNMP Auxiliary Metrics** (future/optional tracking only) |
 
 ---
 

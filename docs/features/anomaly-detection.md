@@ -153,20 +153,26 @@ Volumetric floods (DDoS) are evaluated by checking absolute throughput:
 
 ## 10. Experimental Threat Risk Scoring
 
-The Risk Engine assigns each device an index score from `0` to `100` representing an experimental risk level based on heuristic correlation.
+> [!WARNING]
+> The Risk Index is an experimental heuristic. It is not a probability that a device has been compromised.
+
+The Risk Engine assigns each device an index score from `0` to `100` representing an experimental risk level based on heuristic correlation of active anomalies over the last **7 days** (the active risk window).
 
 ### Risk Level Ranges
-*   **Low Risk:** `0 - 39`
-*   **Medium Risk:** `40 - 74`
-*   **High Risk:** `75 - 100`
+*   **Low Risk:** `0 - 29` (default/no score or below medium threshold)
+*   **Medium Risk:** `30 - 69`
+*   **High Risk:** `70 - 100`
 
 ### Scoring Heuristics
 The risk score is calculated by combining:
-1.  **Anomaly Events:** Detections flagged by behavioral baselines.
+1.  **Anomaly Events:** Detections flagged by behavioral baselines. Each active anomaly has a base weight based on its severity:
+    *   **High Severity:** `40.0`
+    *   **Medium Severity:** `20.0`
+    *   **Low Severity:** `10.0`
 2.  **Suricata IDS Events:** External signature-based rule matches.
-3.  **Correlation Booster:** If a device triggers both a baseline anomaly and a Suricata IDS signature match within the same hour, a **Booster Modifier** increases the risk score.
+3.  **Correlation Booster:** If a device triggers both a baseline anomaly and a Suricata IDS signature match within the same hour, a **Correlation Booster** of `+20.0` is added to the score.
 
-$$\text{Risk Score} = \text{Capping}\left(\sum \text{Base Scores} + \text{Correlation Booster}, 100\right)$$
+$$\text{Risk Score} = \text{Capping}\left(\sum \text{Decayed Contributions} + \text{Correlation Boost}, 100\right)$$
 
 ---
 
@@ -174,12 +180,10 @@ $$\text{Risk Score} = \text{Capping}\left(\sum \text{Base Scores} + \text{Correl
 
 Threat scores decay over time so that historically flagged devices return to normal if no new suspicious behaviors are observed.
 
-The decay formula applies exponential decay:
+The decay formula applies **linear decay over 24 hours** with a floor of **15% (0.15)** for unresolved active alerts:
 
-$$S(t) = S_0 \times e^{-\lambda t}$$
+$$\text{Decay Factor} = \max\left(1.0 - \frac{\text{Age Hours}}{24}, 0.15\right)$$
 
-Where:
-*   $S(t)$ is the decayed score at time $t$.
-*   $S_0$ is the initial risk score.
-*   $\lambda$ is the decay constant.
-*   $t$ is the elapsed time since the last suspicious event.
+The contribution of each alert is computed as:
+
+$$\text{Decayed Contribution} = \text{Base Weight} \times \text{Decay Factor}$$

@@ -5,11 +5,17 @@
 [![Container](https://img.shields.io/badge/GHCR-flowguard--lite-2f81f7)](https://github.com/miquelbar/flowguard-lite/pkgs/container/flowguard-lite)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-FlowGuard Lite is an experimental, self-hosted NetFlow/IPFIX visibility and anomaly-detection tool, primarily tested on a UniFi home network.
+FlowGuard Lite is experimental alpha software, primarily tested on one UniFi home network.
+
+> [!WARNING]
+> *   FlowGuard Lite is an early-stage project and **may contain bugs**.
+> *   All security detections are **experimental heuristics**, not guaranteed indicators of compromise.
+> *   It **does not replace an IDS, SIEM, or SOC**, and should not be considered a guarantee of attack detection.
+> *   Additional integrations (sFlow, syslog, passive capture, DuckDB, Suricata, DDoS, notifications) have varying and limited levels of validation.
 
 It stores flow data locally, groups activity by device, and experiments with detecting changes from normal behaviour.
 
-The project is currently alpha and has primarily been tested on one UniFi home network. Several additional collectors and integrations are implemented, but some still need broader real-world validation.
+This experimental alpha project has primarily been tested on one UniFi home network. Several additional collectors and integrations are implemented, but some still need broader real-world validation.
 
 ## Try It
 
@@ -66,24 +72,13 @@ FlowGuard Lite is alert-only. It can generate firewall rule templates, but it do
 
 ## Feature Validation Status
 
-To align expectations, the features in this repository are divided into what has been tested in real use by the author and what is implemented but has limited real-world validation.
+The features in this repository are divided into three validation tiers:
 
-### Tested in Real Use
-
-- **Ingestion:** UniFi NetFlow/IPFIX telemetry.
-- **Environment:** The author's own UniFi home network.
-- **Deployment:** Docker-based containerized setup.
-- **Storage:** SQLite daily shards for local aggregation and retention.
-
-### Implemented but with Limited Real-World Validation
-
-- **sFlow:** sFlow decoder and collector listener are implemented, but have not been tested under heavy production sFlow environments.
-- **Passive packet capture:** Optional libpcap-based raw socket packet capture and flow reduction, but not tested extensively in external high-traffic physical networks.
-- **UniFi SIEM/syslog ingestion:** Support for ingesting Activity Logging events is implemented. In the author's current setup, very few useful security events are generated, making NetFlow/IPFIX the primary and best-tested data source.
-- **Suricata integration:** Support for tailing and correlating `eve.json` threat category records.
-- **DDoS/volumetric detection:** Volumetric heuristics (BPS, PPS, FPS thresholds) are implemented but require further tuning and real-world validation.
-- **DuckDB storage:** Columnar read-acceleration storage engine is implemented but SQLite remains the default.
-- **Other integrations:** Slack/Discord-compatible webhooks, Telegram bot alerts, and firewall rule templates exporters.
+| Category | Features Included |
+| --- | --- |
+| **Tested in real use by the author** | * **NetFlow/IPFIX Ingestion** (from UniFi Gateway)<br>* **Docker Compose Deployment**<br>* **SQLite daily shards** (storage & retention)<br>* **Home network environment** |
+| **Implemented with limited validation** | * **sFlow Ingestion** (collector listener & decoder)<br>* **Passive Network Capture** (via SPAN/Mirror port)<br>* **Suricata IDS Integration** (correlating `eve.json` records)<br>* **DuckDB Storage Engine** (for query acceleration)<br>* **DDoS/Volumetric Heuristics** (BPS, PPS, FPS thresholds)<br>* **Slack & Telegram Webhook notifications** |
+| **Experimental or unverified** | * **UniFi Syslog/SIEM Ingest** (highly experimental and secondary; note that NetFlow/IPFIX is the primary and best tested source)<br>* **SNMP Auxiliary Metrics** (future/optional tracking only) |
 
 ## Documentation
 
@@ -116,7 +111,7 @@ make docker-build
 make docker-up
 ```
 
-Export the production image for offline installs:
+Export the built image for offline installs:
 
 ```bash
 make docker-export

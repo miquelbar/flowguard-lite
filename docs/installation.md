@@ -6,10 +6,18 @@ FlowGuard Lite is designed to run efficiently on small hardware. This guide cove
 
 ## System Requirements
 
-*   **Processor:** Intel N100, Raspberry Pi 4/5, or equivalent x86_64 / arm64 CPU.
-*   **Memory:** 500 MB minimum (runs comfortably under 2 GB for typical environments).
+### Platform Verification Matrix
+
+| Category | Description |
+| --- | --- |
+| **Tested by the author** | * **Hardware:** Intel N100 (x86_64), Apple M3 Pro (ARM64 host)<br>* **OS:** macOS (Apple Silicon), Linux (Ubuntu)<br>* **Backend:** SQLite<br>* **Deployment:** Docker-based deployment (Compose) |
+| **Expected to work, but not yet tested** | * **Hardware:** Raspberry Pi 4/5 (ARM64)<br>* **OS:** Debian/Fedora (Linux ARM64)<br>* **Backend:** DuckDB<br>* **Deployment:** Host-native Go/Node compilation |
+| **Unknown or unverified** | * **OS:** Windows (native or via WSL2)<br>* **Other:** Native Windows Go/Node execution |
+
+### Resource Requirements
+*   **Processor:** x86_64 / arm64 CPU.
+*   **Memory:** 500 MB (Initial estimate, not a measured minimum. Runs comfortably under 2 GB for typical environments).
 *   **Storage:** Local SSD or NVMe for database shards. Bounded by configured retention policies.
-*   **Operating System:** Linux (Kernel 5.4+ recommended), macOS, or Windows (via WSL2).
 
 ---
 
@@ -106,7 +114,7 @@ Start the collector using your configuration file:
 ```
 
 ### Development Demo Data
-Non-production builds expose a `-seed` flag for local demos:
+Standard daemon executions expose a `-seed` flag for local demos:
 ```bash
 cp config.example.yaml config-dev.yaml
 go run ./cmd/flowguard -config config-dev.yaml -seed

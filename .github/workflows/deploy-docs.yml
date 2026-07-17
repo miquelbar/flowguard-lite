@@ -37,6 +37,9 @@ jobs:
           source: ./docs
           destination: ./_site
 
+      - name: Verify Documentation Claims
+        run: ./scripts/check-doc-claims.sh
+
       - name: Upload Documentation Artifact
         uses: actions/upload-pages-artifact@v3
         with:

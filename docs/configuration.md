@@ -150,7 +150,7 @@ suricata_eve_path: ""
 ### `unifi_syslog_allowed_ips`
 *   **Type:** Array of strings
 *   **Default:** `[]`
-*   **Description:** Optional allowlist of UniFi gateway sender IPs or CIDR ranges. Values are bounded and validated as IP addresses or CIDRs. Empty means any sender can reach the configured UDP port, so production deployments should prefer a gateway IP/CIDR allowlist and firewall rules.
+*   **Description:** Optional allowlist of UniFi gateway sender IPs or CIDR ranges. Values are bounded and validated as IP addresses or CIDRs. Empty means any sender can reach the configured UDP port, so active deployments should prefer a gateway IP/CIDR allowlist and firewall rules.
 
 ### `capture_interface`
 *   **Type:** String

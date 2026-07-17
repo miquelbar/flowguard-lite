@@ -165,7 +165,8 @@ a:hover {
 }
 
 .docs-content {
-  width: min(100%, 1040px);
+  width: 100%;
+  max-width: 1040px;
   padding: 2rem 3rem 3rem;
   color: var(--fg-text);
   font-size: 1rem;
@@ -270,7 +271,8 @@ a:hover {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  width: min(100%, 1040px);
+  width: 100%;
+  max-width: 1040px;
   padding: 1.25rem 3rem 2rem;
   color: var(--fg-muted);
   border-top: 1px solid var(--fg-border);

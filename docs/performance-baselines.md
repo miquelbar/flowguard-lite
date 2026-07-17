@@ -1,11 +1,14 @@
 # Performance Baselines & Benchmark Contract
 
-This document defines the metrics contract, test profiles, and resource limits for FlowGuard Lite. Benchmark results must be measured using these criteria on standard target hardware.
+This document defines the metrics contract, test profiles, and resource limits for FlowGuard Lite.
+
+> [!NOTE]
+> These are synthetic microbenchmarks used to detect regressions. They are not real-world capacity guarantees.
 
 ## Target Platform & Hardware Profile
 FlowGuard Lite is designed to run efficiently on small/low-power hardware:
 - **CPU**: Intel N100 (or equivalent low-power x86-64 / ARM64 processor).
-- **RAM**: 2 GB allocated/available to FlowGuard Lite (the application itself must operate within a 500 MB heap ceiling under typical workloads).
+- **RAM**: 2 GB allocated/available to FlowGuard Lite (the application's 500 MB heap ceiling is an initial estimate, not a measured minimum).
 - **Storage**: Local SSD or NVMe drive (for sharded SQLite and DuckDB writes).
 - **Runtime Environment**: Docker-based containerized setup or host-native execution.
 
@@ -84,9 +87,9 @@ Tests must utilize these standardized profiles to evaluate capacity and establis
 
 ---
 
-## 3. Pass/Fail Thresholds & Supported Range Criteria
+## 3. Pass/Fail Thresholds & Regression Gate Criteria
 
-FlowGuard Lite must satisfy the following thresholds under test profiles to be certified for release:
+FlowGuard Lite must satisfy the following thresholds under test profiles to pass the internal benchmark gates:
 
 | Profile | Max CPU (N100 Core %) | Max RSS Memory | Packet Loss / Queue Drops | API Latency (p95) |
 |---|---|---|---|---|

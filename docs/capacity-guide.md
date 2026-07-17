@@ -2,6 +2,9 @@
 
 This guide outlines preliminary capacity estimates, synthetic microbenchmark results, and behavior under overload for FlowGuard Lite.
 
+> [!NOTE]
+> Synthetic microbenchmarks used to detect regressions. They are not real-world capacity guarantees.
+
 ---
 
 ## 1. Tested Hardware Profile
@@ -9,12 +12,12 @@ This guide outlines preliminary capacity estimates, synthetic microbenchmark res
 FlowGuard Lite was tested using synthetic microbenchmarks on the following hardware profile (and virtualized equivalents) under both native execution and unprivileged Docker containers:
 
 *   **CPU**: Intel N100 (4 Cores, 4 Threads, base 0.8 GHz, burst 3.4 GHz, 6W TDP).
-*   **Memory Limit**: Bounded to **2 GB RAM** allocated space.
+*   **Memory Limit**: Bounded to **2 GB RAM** allocated space (the application's 500 MB heap ceiling is an initial estimate, not a measured minimum).
 *   **Storage**: Local PCIe Gen3 NVMe SSD.
 *   **OS**: Linux (Debian Bookworm) / macOS (Darwin).
 *   **Go Version**: go1.25.x.
 
-These tests represent isolated microbenchmarks and are not guaranteed to directly correlate to identical results in all real-world deployment networks.
+These tests represent isolated microbenchmarks and are not real-world capacity guarantees.
 
 ---
 
@@ -84,7 +87,7 @@ FlowGuard Lite uses sharded SQLite daily databases as its default storage engine
 ## 5. Preliminary Capacity Estimates Based on Synthetic Benchmarks
 
 > [!NOTE]
-> These capacity estimates are preliminary, derived from synthetic microbenchmark profiles, and are intended for self-hosted home networks and homelabs. They should not be taken as commercial deployment recommendations or sizing guarantees.
+> These capacity estimates are preliminary, derived from synthetic microbenchmark profiles, and are intended for self-hosted home networks and homelabs. They should not be taken as sizing recommendations or guarantees for real-world deployments.
 >
 > Actual deployment performance depends heavily on:
 > * **Telemetry Volume:** Number of raw packets and decoded flows per second.
@@ -125,10 +128,11 @@ When traffic levels exceed the capacity of the host CPU or network interface, Fl
 ## 7. Exporter & Gateway Specific Tradeoffs
 
 ### Ubiquiti UniFi IPFIX Hardware-Acceleration Tradeoff
-When enabling NetFlow/IPFIX on Ubiquiti UniFi Gateways (such as USG-3P, UDM-Pro, or UXG-Lite):
-*   **Hardware Offloading (NAT offload)** is typically disabled by the gateway OS when flow tracking is active.
-*   On older hardware (like the USG-3P), this can degrade the gateway's throughput capacity (e.g. from 1 Gbps to ~250 Mbps).
-*   *Recommendation*: For high-throughput environments where NAT offload must remain enabled, configure FlowGuard Lite to use **Passive Network Capture** (via a SPAN/Mirror port) instead of enabling NetFlow/IPFIX directly on the gateway. Note that while UniFi syslog SIEM event ingestion is supported, in practice it receives very few security events and does not provide session-level traffic flows, so it is not a substitute for flow telemetry.
+### Gateway Telemetry Performance Tradeoffs
+> [!WARNING]
+> Flow export may affect forwarding performance on some gateway models or firmware versions. Measure the impact on your own gateway before enabling it on a high-throughput connection.
+
+For high-throughput environments where gateway performance is impacted, configure FlowGuard Lite to use **Passive Network Capture** (via a SPAN/Mirror port) instead of enabling NetFlow/IPFIX directly on the gateway. Note that while UniFi syslog SIEM event ingestion is supported, in practice it receives very few security events and does not provide session-level traffic flows, so it is not a substitute for flow telemetry.
 
 ### SNMP & Auxiliary Metrics
 *   SNMP polling, if enabled, operates on a low-frequency schedule (e.g. every 60 seconds) to fetch interface status and interface counters.

@@ -59,6 +59,8 @@ product-test:
 frontend-gate: docker-ui-test docker-ui-smoke
 
 pre-release-gate: product-test frontend-gate benchmark-smoke
+	@echo "Running documentation claims check..."
+	./scripts/check-doc-claims.sh
 	@echo "Running repository whitespace check..."
 	git diff --check
 

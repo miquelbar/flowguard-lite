@@ -39,3 +39,8 @@
 
 # Benchmark results
 /benchmark-results/
+
+# Jekyll build outputs
+/_site/
+.jekyll-cache/
+/docs/.jekyll-cache/

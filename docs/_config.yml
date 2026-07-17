@@ -11,6 +11,7 @@ kramdown:
 
 plugins:
   - jekyll-relative-links
+  - jekyll-optional-front-matter
 
 relative_links:
   enabled: true

@@ -217,16 +217,16 @@ These gaps must be treated as development debt, not as optional polish.
 
 The Risk Index must be explainable wherever it appears.
 
-Current scoring behavior:
+Current scoring behavior is defined in detail in the canonical [Experimental Threat Risk Scoring](anomaly-detection.md#10-experimental-threat-risk-scoring) section:
 
 - `high` alert base weight: 40;
 - `medium` alert base weight: 20;
 - `low` alert base weight: 10;
-- score decays linearly across 24 hours;
-- Suricata plus flow anomaly correlation within 1 hour adds `+20`;
+- score decays linearly across 24 hours with a 15% floor;
+- Suricata plus flow anomaly correlation within 1 hour adds `+20` booster;
 - score caps at 100;
-- `medium >= 30`;
-- `high >= 70`.
+- `medium` classification threshold starts from 30;
+- `high` classification threshold starts from 70.
 
 UI requirements:
 
