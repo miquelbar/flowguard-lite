@@ -30,7 +30,7 @@ version: '3.8'
 
 services:
   flowguard:
-    image: ghcr.io/miquelbar/flowguard-lite:v0.1.0-alpha
+    image: ghcr.io/miquelbar/flowguard-lite:edge
     container_name: flowguard
     restart: unless-stopped
     ports:
