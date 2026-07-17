@@ -9,8 +9,6 @@
 
 FlowGuard Lite is a lightweight network visibility and anomaly detection product for homelabs, prosumer networks, small offices, clinics, shops, and small technical teams. It ingests NetFlow/IPFIX/sFlow, optional passive capture metadata, optional Suricata events, and UniFi SIEM/syslog events, then builds device-level baselines and explains why a device looks suspicious.
 
-No Kafka. No ClickHouse. No Elasticsearch. No full SOC stack.
-
 ## Try It
 
 Published multi-arch images are available on GitHub Container Registry:
