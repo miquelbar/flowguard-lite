@@ -1,5 +1,5 @@
 export const viewTitles = {
-    overview: ["Overview", "Security posture, active attack signals, and coverage"],
+    overview: ["Overview", "Network health, active threat signals, and collector status"],
     dashboard: ["Traffic", "Flow telemetry, risk signals, and local device activity"],
     devices: ["Devices", "Local inventory, labels, and learned baselines"],
     anomalies: ["Alerts", "Behavior changes that need review"],

@@ -61,13 +61,13 @@ Tests must utilize these standardized profiles to evaluate capacity and establis
 - **Syslog Events**: ~10 events per hour.
 - **Goal**: Verify typical consumer/homelab behavior under negligible CPU/RAM load.
 
-### Profile C: Busy Home Network
+### Profile C: Busy Home / Small Network
 - **Devices**: 100 active local devices.
 - **Incoming Traffic**: ~5,000 flow records per minute (~80-100 flows/sec).
 - **Syslog Events**: ~100 events per hour.
 - **Goal**: Validate typical busy network profile stability under telemetry load.
 
-### Profile D: High-Flow Lab (Extreme/Stress)
+### Profile D: High-Flow Lab / Intensive Self-Hosted
 - **Devices**: 200 active local devices.
 - **Incoming Traffic**: ~20,000 flow records per minute (~300-350 flows/sec).
 - **Syslog Events**: ~1,000 events per hour.

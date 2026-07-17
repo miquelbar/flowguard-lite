@@ -46,13 +46,15 @@ The benchmark runner writes Markdown and JSON reports under `benchmark-results/`
 ## 3. Ingestion & Aggregation Benchmark Results
 
 > [!NOTE]
-> The following metrics represent maximum throughput processing limits measured during synthetic stress tests under controlled CPU/RAM parameters. They are not direct projections of performance under live network conditions.
+> The following metrics represent maximum throughput processing limits measured during synthetic microbenchmarks run under a controlled containerized environment (e.g., 1 CPU Core, 2 GB RAM limit, commit `a4b209b` on 2026-07-16, executing `go test -bench=. ./internal/benchmark`).
+>
+> These are synthetic microbenchmarks testing isolated processing logic and do not directly project live network deployment performance or real-world device counts, as throughput depends heavily on packet structures, sampling rates, and CPU scheduling.
 
-| Component / Path | Native Throughput | Docker Containerized | Measured Latency / Rate |
+| Component / Path | Native Throughput | Docker Containerized (1 CPU Core, 2 GB RAM) | Measured Latency / Rate |
 | --- | --- | --- | --- |
-| **`FlowAggregator` Throughput** | 4.87M flows/sec | 4.53M flows/sec | 240 ns per flow |
-| **NetFlow v9 Packet Decode** | 1.80M pkts/sec | 1.72M pkts/sec | 690 ns per packet |
-| **UniFi Syslog Parse / Classify** | 540K lines/sec | 511K lines/sec | 2.22 µs per line |
+| **`FlowAggregator` Throughput** | 8.13M flows/sec | 4.53M flows/sec | 240 ns per flow |
+| **NetFlow v9 Packet Decode** | 1.50M pkts/sec | 1.16M pkts/sec | 860 ns per packet |
+| **UniFi Syslog Parse / Classify** | 615K lines/sec | 576K lines/sec | 1.73 µs per line |
 | **`anomaly.Engine` Evaluation** | 86.0K flows/sec | 78.5K flows/sec | 58.2ms per 5,000-flow batch |
 
 ---
@@ -82,11 +84,11 @@ FlowGuard Lite uses sharded SQLite daily databases as its default storage engine
 ## 5. Preliminary Capacity Estimates Based on Synthetic Benchmarks
 
 > [!NOTE]
-> These capacity estimates are preliminary and derived from synthetic microbenchmark profiles. They should not be taken as commercial deployment recommendations or guarantees for specific real-world environments.
+> These capacity estimates are preliminary, derived from synthetic microbenchmark profiles, and are intended for self-hosted home networks and homelabs. They should not be taken as commercial deployment recommendations or sizing guarantees.
 >
 > Actual deployment performance depends heavily on:
 > * **Telemetry Volume:** Number of raw packets and decoded flows per second.
-> * **Sampling Rate:** The exporter's sampling rate (e.g. 1:1 vs 1:100) greatly impacts incoming packet rates.
+> * **Sampling Rate:** The exporter's sampling rate (e.g., 1:1 vs. 1:100) greatly impacts incoming packet rates.
 > * **Cardinality:** The number of unique local devices and external peer IP/port combinations.
 > * **Retention Period:** Number of days database shards are kept (pruning occurs daily).
 > * **Query Load:** The frequency and complexity of dashboard queries and API requests.
@@ -101,8 +103,8 @@ The table below describes how the system handled simulated workload profiles und
 | Workload Profile | Simulated Active Devices | Simulated Flow Rate | Recommended Storage Backend |
 | --- | --- | --- | --- |
 | **Profile B (Home Lab / Prosumer)** | 1 - 50 | 10 - 50 flows/sec | SQLite (Daily Shards) |
-| **Profile C (Busy Office / Clinic Equivalent)** | 50 - 150 | 50 - 150 flows/sec | SQLite (Daily Shards) |
-| **Profile D (Technical Lab / High-Flow)** | 150 - 250 | 150 - 350 flows/sec | SQLite (with optional DuckDB read caching) |
+| **Profile C (Busy Home / Small Network)** | 50 - 150 | 50 - 150 flows/sec | SQLite (Daily Shards) |
+| **Profile D (High-Flow Lab / Intensive Self-Hosted)** | 150 - 250 | 150 - 350 flows/sec | SQLite (with optional DuckDB read caching) |
 
 ---
 

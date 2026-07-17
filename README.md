@@ -5,9 +5,9 @@
 [![Container](https://img.shields.io/badge/GHCR-flowguard--lite-2f81f7)](https://github.com/miquelbar/flowguard-lite/pkgs/container/flowguard-lite)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-FlowGuard Lite is an experimental, self-hosted NetFlow/IPFIX visibility tool that I built while exploring what my UniFi gateway could reveal about the devices on my home network.
+FlowGuard Lite is an experimental, self-hosted NetFlow/IPFIX visibility and anomaly-detection tool, primarily tested on a UniFi home network.
 
-It stores flow data locally, groups activity by device and experiments with detecting changes from normal behaviour.
+It stores flow data locally, groups activity by device, and experiments with detecting changes from normal behaviour.
 
 The project is currently alpha and has primarily been tested on one UniFi home network. Several additional collectors and integrations are implemented, but some still need broader real-world validation.
 
